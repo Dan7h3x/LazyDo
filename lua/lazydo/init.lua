@@ -307,14 +307,7 @@ function LazyDo.new(config)
   return self
 end
 
--- Setup function
-function LazyDo.setup(opts)
-  local instance = LazyDo.new(opts)
-  api.nvim_create_user_command("LazyDo", function()
-    instance:create_window()
-  end, {})
-  return instance
-end
+
 
 -- Load tasks from file
 function LazyDo:load_tasks()
@@ -916,3 +909,104 @@ function LazyDo:show_tooltip(text, row, col)
     end
   end, 2000)
 end
+
+local function safe_file_operation(operation, ...)
+  local ok, result = pcall(operation, ...)
+  if not ok then
+    vim.notify(
+      string.format("LazyDo: File operation failed - %s", result),
+      vim.log.levels.ERROR
+    )
+    return nil
+  end
+  return result
+end
+
+local function validate_config(config)
+  local schema = {
+    width = "number",
+    height = "number",
+    min_width = "number",
+    min_height = "number",
+    border = "string",
+    indent = "string",
+    icons = "table",
+    colors = "table",
+    box = "table",
+    fold = "table",
+    ui = "table",
+    effects = "table",
+  }
+
+  for key, expected_type in pairs(schema) do
+    if type(config[key]) ~= expected_type then
+      error(string.format(
+        "LazyDo: Invalid configuration - expected %s for %s, got %s",
+        expected_type,
+        key,
+        type(config[key])
+      ))
+    end
+  end
+end
+
+function LazyDo:cleanup()
+  if self.buf and vim.api.nvim_buf_is_valid(self.buf) then
+    vim.api.nvim_buf_delete(self.buf, { force = true })
+  end
+  if self.tooltip_ns then
+    vim.api.nvim_buf_clear_namespace(0, self.tooltip_ns, 0, -1)
+  end
+end
+
+vim.api.nvim_create_autocmd("VimLeavePre", {
+  callback = function()
+    if LazyDo.instance then
+      LazyDo.instance:cleanup()
+    end
+  end,
+})
+
+function LazyDo:ensure_valid_window()
+  if not self.win or not vim.api.nvim_win_is_valid(self.win) then
+    self:create_window()
+    return false
+  end
+  return true
+end
+
+-- Use this before window operations
+function LazyDo:some_window_operation()
+  if not self:ensure_valid_window() then
+    return
+  end
+  -- Proceed with operation
+end
+
+
+function LazyDo.setup(opts)
+  if not opts then
+    opts = {}
+  end
+  
+  -- Create new instance with error handling
+  local ok, instance = pcall(LazyDo.new, opts)
+  if not ok then
+    vim.notify("Failed to create LazyDo instance: " .. tostring(instance), vim.log.levels.ERROR)
+    return
+  end
+  
+  LazyDo.instance = instance
+end
+
+function LazyDo.open()
+  if not LazyDo.instance then
+    vim.notify("LazyDo not initialized. Call setup() first.", vim.log.levels.ERROR)
+    return
+  end
+  
+  LazyDo.instance:create_window()
+end
+
+-- Return the module
+return LazyDo
