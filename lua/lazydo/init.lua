@@ -552,42 +552,54 @@ function LazyDo:create_header(width)
   return header
 end
 
----Creates the footer section
+---Creates the footer section with comprehensive keymap hints
 ---@param width number
 ---@return table
 function LazyDo:create_footer(width)
-  local footer = {
-      lines = {},
-      highlights = {}
-  }
+    local footer = {
+        lines = {},
+        highlights = {}
+    }
 
-  -- Add separator
-  table.insert(footer.lines, string.rep("─", width))
-  table.insert(footer.highlights, {
-      "LazyDoBorder",
-      #footer.lines - 1,
-      0,
-      width
-  })
+    -- Add separator
+    table.insert(footer.lines, string.rep("─", width))
+    table.insert(footer.highlights, {
+        "LazyDoBorder",
+        #footer.lines - 1,
+        0,
+        width
+    })
 
-  -- Add statistics
-  local total = #self.tasks
-  local done = #vim.tbl_filter(function(t) return t.status == "DONE" end, self.tasks)
-  local stats = string.format(
-      " Total: %d | Done: %d | Pending: %d ",
-      total,
-      done,
-      total - done
-  )
-  local stats_padding = math.floor((width - #stats) / 2)
-  table.insert(footer.lines, string.rep(" ", stats_padding) .. stats)
+    -- Add statistics
+    local total = #self.tasks
+    local done = #vim.tbl_filter(function(t) return t.status == "DONE" end, self.tasks)
+    local stats = string.format(
+        " Total: %d | Done: %d | Pending: %d ",
+        total,
+        done,
+        total - done
+    )
+    local stats_padding = math.floor((width - #stats) / 2)
+    table.insert(footer.lines, string.rep(" ", stats_padding) .. stats)
+    table.insert(footer.highlights, {"LazyDoStats", #footer.lines - 1, stats_padding, stats_padding + #stats})
 
-  -- Add keybindings help
-  local help = " [a]dd | [d]elete | [e]dit | [s]ave | [q]uit "
-  local help_padding = math.floor((width - #help) / 2)
-  table.insert(footer.lines, string.rep(" ", help_padding) .. help)
+    -- Add keymap hints in sections
+    local keymap_sections = {
+        "Navigation: [j/k]Move [gg/G]First/Last",
+        "Tasks: [a]Add [d]Del [e]Edit [⏎/SPC]Toggle",
+        "Subtasks: [S]Manage [C-a]Add [C-e]Edit [C-d]Del [C-t]Toggle",
+        "Notes: [n]Edit [za]Fold [zo/zc]Open/Close",
+        "Sort: [sp]Priority [sd]Date [ss]Status [f]Filter",
+        "General: [s]Save [q]Quit"
+    }
 
-  return footer
+    for _, section in ipairs(keymap_sections) do
+        local padding = math.floor((width - #section) / 2)
+        table.insert(footer.lines, string.rep(" ", padding) .. section)
+        table.insert(footer.highlights, {"LazyDoHelp", #footer.lines - 1, padding, padding + #section})
+    end
+
+    return footer
 end
 
 ---Creates content for a single task with subtasks and notes
@@ -709,50 +721,55 @@ end
 ---Sets up all keymaps for the LazyDo window
 ---@param self LazyDo
 function LazyDo:setup_keymaps()
-  -- Helper function for mapping keys
-  ---@param mode string
-  ---@param key string
-  ---@param action function
-  ---@param desc string
-  local function map(mode, key, action, desc)
-      vim.keymap.set(mode, key, action, {
-          buffer = self.buf,
-          silent = true,
-          nowait = true,
-          desc = desc
-      })
-  end
+    local function map(mode, key, action, desc)
+        vim.keymap.set(mode, key, action, {
+            buffer = self.buf,
+            silent = true,
+            nowait = true,
+            desc = desc
+        })
+    end
 
-  -- Navigation
-  map('n', 'j', function() self:navigate_tasks('down') end, "Next task")
-  map('n', 'k', function() self:navigate_tasks('up') end, "Previous task")
-  map('n', 'gg', function() self:navigate_tasks('first') end, "First task")
-  map('n', 'G', function() self:navigate_tasks('last') end, "Last task")
+    -- Task navigation
+    map('n', 'j', function() self:navigate_tasks('down') end, "Next task")
+    map('n', 'k', function() self:navigate_tasks('up') end, "Previous task")
+    map('n', 'gg', function() self:navigate_tasks('first') end, "First task")
+    map('n', 'G', function() self:navigate_tasks('last') end, "Last task")
 
-  -- Task management
-  map('n', 'a', function() self:add_task() end, "Add task")
-  map('n', 'd', function() self:delete_task() end, "Delete task")
-  map('n', 'e', function() self:edit_task() end, "Edit task")
-  map('n', '<CR>', function() self:toggle_task() end, "Toggle task status")
-  map('n', '<Space>', function() self:toggle_task() end, "Toggle task status")
+    -- Task management
+    map('n', 'a', function() self:add_task() end, "Add task")
+    map('n', 'd', function() self:delete_task() end, "Delete task")
+    map('n', 'e', function() self:edit_task() end, "Edit task")
+    map('n', '<CR>', function() self:toggle_task() end, "Toggle task status")
+    map('n', '<Space>', function() self:toggle_task() end, "Toggle task status")
 
-  -- Folding
-  map('n', 'za', function() self:toggle_fold() end, "Toggle fold")
-  map('n', 'zo', function() self:open_fold() end, "Open fold")
-  map('n', 'zc', function() self:close_fold() end, "Close fold")
-  map('n', 'zR', function() self:open_all_folds() end, "Open all folds")
-  map('n', 'zM', function() self:close_all_folds() end, "Close all folds")
+    -- Subtask management
+    map('n', 'S', function() self:manage_subtasks() end, "Manage subtasks")
+    map('n', '<C-a>', function() self:add_subtask() end, "Add subtask")
+    map('n', '<C-e>', function() self:edit_subtask() end, "Edit subtask")
+    map('n', '<C-d>', function() self:delete_subtask() end, "Delete subtask")
+    map('n', '<C-t>', function() self:toggle_subtask() end, "Toggle subtask")
 
-  -- Sorting and filtering
-  map('n', 'sp', function() self:sort_by_priority() end, "Sort by priority")
-  map('n', 'sd', function() self:sort_by_due_date() end, "Sort by due date")
-  map('n', 'ss', function() self:sort_by_status() end, "Sort by status")
-  map('n', 'f', function() self:filter_tasks() end, "Filter tasks")
+    -- Notes management
+    map('n', 'n', function() self:manage_notes() end, "Manage notes")
 
-  -- Save and quit
-  map('n', 's', function() self:save_tasks() end, "Save tasks")
-  map('n', 'q', function() self:close_window() end, "Close window")
-  map('n', '<Esc>', function() self:close_window() end, "Close window")
+    -- Folding
+    map('n', 'za', function() self:toggle_fold() end, "Toggle fold")
+    map('n', 'zo', function() self:open_fold() end, "Open fold")
+    map('n', 'zc', function() self:close_fold() end, "Close fold")
+    map('n', 'zR', function() self:open_all_folds() end, "Open all folds")
+    map('n', 'zM', function() self:close_all_folds() end, "Close all folds")
+
+    -- Sorting and filtering
+    map('n', 'sp', function() self:sort_by_priority() end, "Sort by priority")
+    map('n', 'sd', function() self:sort_by_due_date() end, "Sort by due date")
+    map('n', 'ss', function() self:sort_by_status() end, "Sort by status")
+    map('n', 'f', function() self:filter_tasks() end, "Filter tasks")
+
+    -- Save and quit
+    map('n', 's', function() self:save_tasks() end, "Save tasks")
+    map('n', 'q', function() self:close_window() end, "Close window")
+    map('n', '<Esc>', function() self:close_window() end, "Close window")
 end
 
 ---Navigates between tasks
