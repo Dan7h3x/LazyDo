@@ -196,7 +196,7 @@ function LazyDo:create_task_content(task, width, is_selected)
 	end
 end
 
----Renders task in markdown style
+---Renders task in markdown style with defined colors and no background
 ---@param task Task
 ---@param width number
 ---@param is_selected boolean
@@ -246,7 +246,7 @@ function LazyDo:render_task_markdown(task, width, is_selected)
 	return lines, highlights
 end
 
----Renders task in box style
+---Renders task in box style with defined colors and no background
 ---@param task Task
 ---@param width number
 ---@param is_selected boolean
@@ -284,70 +284,7 @@ function LazyDo:render_task_box(task, width, is_selected)
 	return lines, highlights
 end
 
--- Define conventional highlight colors
-function LazyDo:setup_conventional_highlight_colors()
-	local colors = {
-		-- Task status colors
-		task_done = "#98c379", -- Green
-		task_pending = "#e06c75", -- Red
-		task_high_priority = "#ff6c6b", -- Bright Red
-		task_medium_priority = "#e5c07b", -- Yellow
-		task_low_priority = "#61afef", -- Blue
-		task_no_priority = "#abb2bf", -- Grey
 
-		-- Due date colors
-		due_date_normal = "#61afef", -- Blue
-		due_date_overdue = "#e06c75", -- Red
-		due_date_today = "#e5c07b", -- Yellow
-
-		-- UI colors
-		ui_border = "#3e4451", -- Dark Grey
-		ui_title = "#c678dd", -- Purple
-		ui_header = "#51afef", -- Light Blue
-		ui_stats = "#5c6370", -- Grey
-		ui_help = "#56b6c2", -- Cyan
-	}
-
-	-- Set up highlights using the defined colors
-	local highlights = {
-		-- Task status
-		LazyDoTaskDone = { fg = colors.task_done },
-		LazyDoTaskPending = { fg = colors.task_pending },
-
-		-- Priority
-		LazyDoPriorityHIGH = { fg = colors.task_high_priority },
-		LazyDoPriorityMEDIUM = { fg = colors.task_medium_priority },
-		LazyDoPriorityLOW = { fg = colors.task_low_priority },
-		LazyDoPriorityNONE = { fg = colors.task_no_priority },
-
-		-- Due dates
-		LazyDoDueDate = { fg = colors.due_date_normal },
-		LazyDoDueOverdue = { fg = colors.due_date_overdue },
-		LazyDoDueToday = { fg = colors.due_date_today },
-
-		-- Notes and subtasks
-		LazyDoNote = { fg = colors.task_no_priority },
-		LazyDoSubtask = { fg = colors.task_no_priority },
-		LazyDoSubtaskDone = { fg = colors.task_done },
-		LazyDoSubtaskPending = { fg = colors.task_pending },
-
-		-- UI elements
-		LazyDoHeader = { fg = colors.ui_header, bold = true },
-		LazyDoBorder = { fg = colors.ui_border },
-		LazyDoTitle = { fg = colors.ui_title },
-		LazyDoStats = { fg = colors.ui_stats },
-		LazyDoHelp = { fg = colors.ui_help, italic = true },
-	}
-
-	for name, attrs in pairs(highlights) do
-		api.nvim_set_hl(0, name, attrs)
-	end
-end
-
----Sets up highlight groups using conventional colors
-function LazyDo:setup_highlights()
-	LazyDo:setup_conventional_highlight_colors()  -- Call the new setup function
-end
 
 ---Updates due date highlight based on status
 ---@param due_date string
@@ -546,9 +483,14 @@ function LazyDo:toggle_task()
 		return
 	end
 
+	-- Toggle the task status
 	task.status = task.status == "DONE" and "PENDING" or "DONE"
 	self:save_tasks()
+	
+	-- Refresh the buffer without changing the cursor position
+	local cursor_pos = api.nvim_win_get_cursor(self.win)[1]  -- Get current cursor line
 	self:refresh_buffer()
+	api.nvim_win_set_cursor(self.win, { cursor_pos, 0 })  -- Restore cursor position
 end
 
 ---Deletes the task at cursor position
@@ -829,7 +771,10 @@ function LazyDo:setup_keymaps()
 
 	-- Subtask management
 	map("n", "S", function()
-		self:manage_subtasks()
+		local task = self:get_current_task()
+		if task then
+			self:manage_subtasks(task)
+		end
 	end, "Manage subtasks")
 	map("n", "<C-a>", function()
 		self:add_subtask()
@@ -895,6 +840,11 @@ function LazyDo:setup_keymaps()
 	map("n", "<C-t>", function()
 		self:add_template_task()
 	end, "Insert template task")
+
+	-- Add keymap for filtering tasks by tag
+	map("n", "ft", function()
+		self:filter_tasks_by_tag()
+	end, "Filter tasks by tag")
 end
 
 ---Navigates between tasks
@@ -1193,16 +1143,11 @@ function LazyDo:add_subtask(task)
 		end
 
 		task.subtasks = task.subtasks or {}
-		table.insert(task.subtasks, {
-			id = string.format("subtask_%d_%d", os.time(), math.random(1000, 9999)),
-			title = input,
-			status = "PENDING",
-			created_at = os.time(),
-		})
+		table.insert(task.subtasks, create_subtask(input))
 
 		self:save_tasks()
-		self:render()
-		notify("Subtask added", vim.log.levels.INFO)
+		self:refresh_buffer()
+		notify("Subtask added successfully")
 	end)
 end
 
@@ -1215,11 +1160,7 @@ function LazyDo:edit_subtask(task)
 	end
 
 	local subtask_choices = vim.tbl_map(function(st)
-		return string.format(
-			"%s %s",
-			st.status == "DONE" and self.config.icons.task_done or self.config.icons.task_pending,
-			st.title
-		)
+		return string.format("%s %s", st.status == "DONE" and "✔️" or "❌", st.title)
 	end, task.subtasks)
 
 	vim.ui.select(subtask_choices, {
@@ -1233,14 +1174,12 @@ function LazyDo:edit_subtask(task)
 			prompt = "Edit subtask:",
 			default = task.subtasks[idx].title,
 		}, function(new_title)
-			if not new_title or new_title == "" then
-				return
+			if new_title and new_title ~= "" then
+				task.subtasks[idx].title = new_title
+				self:save_tasks()
+				self:refresh_buffer()
+				notify("Subtask updated", vim.log.levels.INFO)
 			end
-
-			task.subtasks[idx].title = new_title
-			self:save_tasks()
-			self:render()
-			notify("Subtask updated", vim.log.levels.INFO)
 		end)
 	end)
 end
@@ -1254,11 +1193,7 @@ function LazyDo:delete_subtask(task)
 	end
 
 	local subtask_choices = vim.tbl_map(function(st)
-		return string.format(
-			"%s %s",
-			st.status == "DONE" and self.config.icons.task_done or self.config.icons.task_pending,
-			st.title
-		)
+		return string.format("%s %s", st.status == "DONE" and "✔️" or "❌", st.title)
 	end, task.subtasks)
 
 	vim.ui.select(subtask_choices, {
@@ -1272,7 +1207,7 @@ function LazyDo:delete_subtask(task)
 			if confirm == "Yes" then
 				table.remove(task.subtasks, idx)
 				self:save_tasks()
-				self:render()
+				self:refresh_buffer()
 				notify("Subtask deleted", vim.log.levels.INFO)
 			end
 		end)
@@ -1288,11 +1223,7 @@ function LazyDo:toggle_subtask(task)
 	end
 
 	local subtask_choices = vim.tbl_map(function(st)
-		return string.format(
-			"%s %s",
-			st.status == "DONE" and self.config.icons.task_done or self.config.icons.task_pending,
-			st.title
-		)
+		return string.format("%s %s", st.status == "DONE" and "✔️" or "❌", st.title)
 	end, task.subtasks)
 
 	vim.ui.select(subtask_choices, {
@@ -1304,7 +1235,7 @@ function LazyDo:toggle_subtask(task)
 
 		task.subtasks[idx].status = task.subtasks[idx].status == "DONE" and "PENDING" or "DONE"
 		self:save_tasks()
-		self:render()
+		self:refresh_buffer()
 		notify("Subtask status toggled", vim.log.levels.INFO)
 	end)
 end
@@ -1318,11 +1249,7 @@ function LazyDo:reorder_subtasks(task)
 	end
 
 	local subtask_choices = vim.tbl_map(function(st)
-		return string.format(
-			"%s %s",
-			st.status == "DONE" and self.config.icons.task_done or self.config.icons.task_pending,
-			st.title
-		)
+		return string.format("%s %s", st.status == "DONE" and "✔️" or "❌", st.title)
 	end, task.subtasks)
 
 	vim.ui.select(subtask_choices, {
@@ -1342,13 +1269,13 @@ function LazyDo:reorder_subtasks(task)
 				task.subtasks[idx] = task.subtasks[idx - 1]
 				task.subtasks[idx - 1] = temp
 				self:save_tasks()
-				self:render()
+				self:refresh_buffer()
 			elseif direction == "Move down" and idx < #task.subtasks then
 				local temp = task.subtasks[idx]
 				task.subtasks[idx] = task.subtasks[idx + 1]
 				task.subtasks[idx + 1] = temp
 				self:save_tasks()
-				self:render()
+				self:refresh_buffer()
 			end
 		end)
 	end)
