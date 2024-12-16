@@ -507,7 +507,7 @@ end
 function LazyDo:edit_task_due_date(task)
 	local today = os.date("%Y-%m-%d")
 	vim.ui.input({
-		prompt = "Due date (YYYY-MM-DD): ",
+		prompt = "Due date (YYYY-MM-DD) [Today: " .. today .. "]: ",
 		default = task.due_date or today,
 		completion = "customlist,v:lua.require'lazydo'.complete_date",
 	}, function(new_date)
@@ -894,6 +894,11 @@ function LazyDo:setup_keymaps()
 	map("n", "<Esc>", function()
 		self:close_window()
 	end, "Close window")
+
+	-- Add keymap for inserting a template task
+	map("n", "<C-t>", function()
+		self:add_template_task()
+	end, "Insert template task")
 end
 
 ---Navigates between tasks
@@ -1580,7 +1585,7 @@ function LazyDo.complete_date(arg)
 end
 
 -- Define highlighting for icons and corresponding text
-local function setup_icon_highlights()
+function LazyDo:setup_icon_highlights()
 	local colors = DEFAULT_COLORS.task
 	local highlights = {
 		LazyDoIconPending = { fg = colors.pending },
@@ -1616,6 +1621,35 @@ function LazyDo:search_tasks()
 			end,
 		},
 	})
+end
+
+--- Creates a template task with complete sections
+---@return Task
+function LazyDo:template_task()
+	return Task.new("New Task Title", "Add your notes here.", os.date("%Y-%m-%d")):set_priority("NONE"):set_tags({})
+end
+
+--- Sets the priority for the task
+---@param priority string
+function Task:set_priority(priority)
+	self.priority = priority
+	return self
+end
+
+--- Sets the tags for the task
+---@param tags table
+function Task:set_tags(tags)
+	self.tags = tags
+	return self
+end
+
+--- Adds a new task using the template
+function LazyDo:add_template_task()
+	local new_task = self:template_task()
+	table.insert(self.tasks, new_task)
+	self:save_tasks()
+	self:refresh_buffer()
+	notify("Template task added successfully")
 end
 
 return LazyDo
