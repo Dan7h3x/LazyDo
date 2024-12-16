@@ -1008,5 +1008,84 @@ function LazyDo.open()
   LazyDo.instance:create_window()
 end
 
+function LazyDo:setup_keymaps()
+  local function map(mode, key, action)
+    vim.keymap.set(mode, key, action, {
+      buffer = self.buf,
+      silent = true,
+      nowait = true,
+    })
+  end
+
+  -- Basic navigation
+  map('n', 'j', function() self:navigate('down') end)
+  map('n', 'k', function() self:navigate('up') end)
+  map('n', '<CR>', function() self:toggle_task() end)
+  
+  -- Task management
+  map('n', 'a', function() self:add_task() end)
+  map('n', 'd', function() self:delete_task() end)
+  map('n', 'e', function() self:edit_task() end)
+  map('n', '<space>', function() self:toggle_task() end)
+  
+  -- Folding
+  map('n', 'za', function() self:toggle_fold() end)
+  map('n', 'zo', function() self:open_fold() end)
+  map('n', 'zc', function() self:close_fold() end)
+  
+  -- Window control
+  map('n', 'q', function() 
+    if self.win and vim.api.nvim_win_is_valid(self.win) then
+      vim.api.nvim_win_close(self.win, true)
+    end
+  end)
+  map('n', '<Esc>', function()
+    if self.win and vim.api.nvim_win_is_valid(self.win) then
+      vim.api.nvim_win_close(self.win, true)
+    end
+  end)
+
+  -- Save
+  map('n', 's', function() self:save_tasks() end)
+end
+
+function LazyDo:navigate(direction)
+  if #self.tasks == 0 then return end
+  
+  local current = self.selected_task_index or 1
+  if direction == 'down' then
+    current = math.min(current + 1, #self.tasks)
+  else
+    current = math.max(current - 1, 1)
+  end
+  
+  self.selected_task_index = current
+  self:render()
+end
+
+function LazyDo:toggle_fold()
+  local task_info = self:get_task_at_cursor()
+  if task_info then
+    task_info.task.folded = not task_info.task.folded
+    self:render()
+  end
+end
+
+function LazyDo:open_fold()
+  local task_info = self:get_task_at_cursor()
+  if task_info then
+    task_info.task.folded = false
+    self:render()
+  end
+end
+
+function LazyDo:close_fold()
+  local task_info = self:get_task_at_cursor()
+  if task_info then
+    task_info.task.folded = true
+    self:render()
+  end
+end
+
 -- Return the module
 return LazyDo
