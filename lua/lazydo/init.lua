@@ -28,21 +28,63 @@ local notify = vim.notify
 local Task = {}
 Task.__index = Task
 
--- UI Constants for box drawing
-local BOX_STYLES = {
-    modern = {
-        top_left = "╭", top_right = "╮",
-        bottom_left = "╰", bottom_right = "╯",
-        horizontal = "─", vertical = "│"
+-- Style and color configurations
+local DEFAULT_STYLES = {
+    box = {
+        modern = {
+            top_left = "╭", top_right = "╮",
+            bottom_left = "╰", bottom_right = "╯",
+            horizontal = "─", vertical = "│"
+        },
+        minimal = {
+            top_left = "┌", top_right = "┐",
+            bottom_left = "└", bottom_right = "┘",
+            horizontal = "─", vertical = "│"
+        },
+        double = {
+            top_left = "╔", top_right = "╗",
+            bottom_left = "╚", bottom_right = "╝",
+            horizontal = "═", vertical = "║"
+        },
+        markdown = {
+            top_left = "", top_right = "",
+            bottom_left = "", bottom_right = "",
+            horizontal = "-", vertical = ""
+        }
     },
-    minimal = {
-        top_left = "┌", top_right = "┐",
-        bottom_left = "└", bottom_right = "┘",
-        horizontal = "─", vertical = "│"
+    render = {
+        box = "box",     -- Traditional box style
+        markdown = "md"  -- Markdown style
     }
 }
 
--- Default configuration with meaningful names
+-- Default color scheme (Tokyonight dark)
+local DEFAULT_COLORS = {
+    task = {
+        done = "#9ece6a",      -- Green
+        pending = "#e0af68",   -- Yellow
+        high_priority = "#f7768e", -- Red
+        medium_priority = "#e0af68", -- Yellow
+        low_priority = "#9ece6a",   -- Green
+        no_priority = "#565f89",    -- Gray
+    },
+    due_date = {
+        normal = "#7aa2f7",    -- Blue
+        overdue = "#f7768e",   -- Red
+        today = "#e0af68",     -- Yellow
+    },
+    notes = "#7dcfff",         -- Cyan
+    subtask = "#bb9af7",       -- Purple
+    ui = {
+        border = "#3b4261",
+        title = "#c0caf5",
+        header = "#7aa2f7",
+        stats = "#565f89",
+        help = "#565f89"
+    }
+}
+
+-- Updated configuration with style and color options
 local DEFAULT_CONFIG = {
     window = {
         width_ratio = 0.8,
@@ -52,10 +94,14 @@ local DEFAULT_CONFIG = {
         border = "rounded"
     },
     appearance = {
-        box_style = "modern",
+        style = "box",         -- "box" or "md"
+        box_style = "modern",  -- "modern", "minimal", "double"
         padding = 1,
-        indent = "    "
+        indent = "    ",
+        highlight_current = true,
+        show_icons = true
     },
+    colors = DEFAULT_COLORS,   -- User can override colors
     icons = {
         task_pending = "◆",
         task_done = "✓",
@@ -120,58 +166,109 @@ local function is_valid_instance(self)
     return true
 end
 
--- Color definitions and highlight setup
-local COLORS = {
-    -- Tokyonight dark colors
-    red = "#f7768e",
-    green = "#9ece6a",
-    blue = "#7aa2f7",
-    yellow = "#e0af68",
-    purple = "#bb9af7",
-    cyan = "#7dcfff",
-    orange = "#ff9e64",
-    gray = "#565f89",
-    bg = "#24283b",
-    fg = "#c0caf5",
-    comment = "#565f89",
-    border = "#3b4261"
-}
+---Creates content for a task based on selected style
+---@param task Task
+---@param width number
+---@param is_selected boolean
+---@return table lines
+---@return table highlights
+function LazyDo:create_task_content(task, width, is_selected)
+    if self.config.appearance.style == "md" then
+        return self:render_task_markdown(task, width, is_selected)
+    else
+        return self:render_task_box(task, width, is_selected)
+    end
+end
 
----Sets up highlight groups for LazyDo
+---Renders task in markdown style
+---@param task Task
+---@param width number
+---@param is_selected boolean
+---@return table lines
+---@return table highlights
+function LazyDo:render_task_markdown(task, width, is_selected)
+    local lines = {}
+    local highlights = {}
+    local indent = self.config.appearance.indent
+
+    -- Task header with checkbox and priority
+    local status_mark = task.status == "DONE" and "x" or " "
+    local priority_icon = self.config.icons.priority[task.priority]
+    local header = string.format("- [%s] %s %s", status_mark, priority_icon, task.title)
+    table.insert(lines, header)
+    
+    -- Add header highlights
+    local status_hl = task.status == "DONE" and "LazyDoTaskDone" or "LazyDoTaskPending"
+    table.insert(highlights, {status_hl, #lines - 1, 0, 5})
+    table.insert(highlights, {"LazyDoPriority" .. (task.priority or "NONE"), #lines - 1, 6, 7})
+
+    -- Due date
+    if task.due_date and task.due_date ~= "" then
+        local due_line = string.format("%s📅 Due: %s", indent, task.due_date)
+        table.insert(lines, due_line)
+        table.insert(highlights, {get_due_date_highlight(task.due_date), #lines - 1, #indent, -1})
+    end
+
+    -- Subtasks
+    if task.subtasks and #task.subtasks > 0 then
+        for _, subtask in ipairs(task.subtasks) do
+            local subtask_mark = subtask.status == "DONE" and "x" or " "
+            local subtask_line = string.format("%s- [%s] %s", indent, subtask_mark, subtask.title)
+            table.insert(lines, subtask_line)
+            
+            local subtask_hl = subtask.status == "DONE" and "LazyDoSubtaskDone" or "LazyDoSubtaskPending"
+            table.insert(highlights, {subtask_hl, #lines - 1, #indent, -1})
+        end
+    end
+
+    -- Notes
+    if not task.folded and task.notes and task.notes ~= "" then
+        table.insert(lines, string.format("%s📝 Notes:", indent))
+        for _, note_line in ipairs(vim.split(task.notes, "\n")) do
+            table.insert(lines, string.format("%s%s%s", indent, indent, note_line))
+            table.insert(highlights, {"LazyDoNote", #lines - 1, 0, -1})
+        end
+    end
+
+    -- Add empty line for spacing
+    table.insert(lines, "")
+
+    return lines, highlights
+end
+
+---Sets up highlight groups using configured colors
 function LazyDo:setup_highlights()
+    local colors = self.config.colors
     local highlights = {
-        -- Task status highlights
-        LazyDoTaskPending = { fg = COLORS.yellow },
-        LazyDoTaskDone = { fg = COLORS.green },
+        -- Task status
+        LazyDoTaskPending = { fg = colors.task.pending },
+        LazyDoTaskDone = { fg = colors.task.done },
         
-        -- Priority highlights
-        LazyDoPriorityHIGH = { fg = COLORS.red },
-        LazyDoPriorityMEDIUM = { fg = COLORS.yellow },
-        LazyDoPriorityLOW = { fg = COLORS.green },
-        LazyDoPriorityNONE = { fg = COLORS.gray },
+        -- Priority
+        LazyDoPriorityHIGH = { fg = colors.task.high_priority },
+        LazyDoPriorityMEDIUM = { fg = colors.task.medium_priority },
+        LazyDoPriorityLOW = { fg = colors.task.low_priority },
+        LazyDoPriorityNONE = { fg = colors.task.no_priority },
         
-        -- Due date highlights
-        LazyDoDueDate = { fg = COLORS.blue },
-        LazyDoDueOverdue = { fg = COLORS.red },
-        LazyDoDueToday = { fg = COLORS.yellow },
+        -- Due dates
+        LazyDoDueDate = { fg = colors.due_date.normal },
+        LazyDoDueOverdue = { fg = colors.due_date.overdue },
+        LazyDoDueToday = { fg = colors.due_date.today },
         
-        -- Notes highlights
-        LazyDoNote = { fg = COLORS.cyan },
-        
-        -- Subtask highlights
-        LazyDoSubtask = { fg = COLORS.purple },
-        LazyDoSubtaskDone = { fg = COLORS.green },
-        LazyDoSubtaskPending = { fg = COLORS.yellow },
+        -- Notes and subtasks
+        LazyDoNote = { fg = colors.notes },
+        LazyDoSubtask = { fg = colors.subtask },
+        LazyDoSubtaskDone = { fg = colors.task.done },
+        LazyDoSubtaskPending = { fg = colors.task.pending },
         
         -- UI elements
-        LazyDoHeader = { fg = COLORS.blue, bold = true },
-        LazyDoBorder = { fg = COLORS.border },
-        LazyDoTitle = { fg = COLORS.fg },
-        LazyDoStats = { fg = COLORS.comment },
-        LazyDoHelp = { fg = COLORS.comment, italic = true }
+        LazyDoHeader = { fg = colors.ui.header, bold = true },
+        LazyDoBorder = { fg = colors.ui.border },
+        LazyDoTitle = { fg = colors.ui.title },
+        LazyDoStats = { fg = colors.ui.stats },
+        LazyDoHelp = { fg = colors.ui.help, italic = true }
     }
 
-    -- Apply highlights
     for name, attrs in pairs(highlights) do
         api.nvim_set_hl(0, name, attrs)
     end
@@ -602,120 +699,6 @@ function LazyDo:create_footer(width)
     return footer
 end
 
----Creates content for a single task with subtasks and notes
----@param task Task
----@param width number
----@param is_selected boolean
----@return table, table Lines and highlights for the task
-function LazyDo:create_task_content(task, width, is_selected)
-    local lines = {}
-    local highlights = {}
-    local box = BOX_STYLES[self.config.appearance.box_style]
-    local padding = string.rep(" ", self.config.appearance.padding)
-
-    -- Top border
-    table.insert(lines, string.format("%s%s%s",
-        box.top_left,
-        string.rep(box.horizontal, width - 2),
-        box.top_right
-    ))
-    table.insert(highlights, {"LazyDoBorder", #lines - 1, 0, width})
-
-    -- Title line with status and priority
-    local status_icon = task.status == "DONE" and self.config.icons.task_done or self.config.icons.task_pending
-    local priority_icon = self.config.icons.priority[task.priority]
-    local title_line = string.format("%s%s%s %s %s",
-        box.vertical,
-        padding,
-        status_icon,
-        priority_icon,
-        task.title
-    )
-    table.insert(lines, title_line .. string.rep(" ", width - #title_line - 1) .. box.vertical)
-    
-    -- Title line highlights
-    local line_idx = #lines - 1
-    local status_hl = task.status == "DONE" and "LazyDoTaskDone" or "LazyDoTaskPending"
-    table.insert(highlights, {status_hl, line_idx, #box.vertical + #padding, #box.vertical + #padding + 1})
-    table.insert(highlights, {"LazyDoPriority", line_idx, #box.vertical + #padding + 2, #box.vertical + #padding + 3})
-    table.insert(highlights, {"LazyDoTitle", line_idx, #box.vertical + #padding + 4, -2})
-
-    -- Due date line with dynamic highlighting
-    if task.due_date and task.due_date ~= "" then
-        local due_line = string.format("%s%s%s Due: %s",
-            box.vertical,
-            padding,
-            self.config.icons.due_date,
-            task.due_date
-        )
-        table.insert(lines, due_line .. string.rep(" ", width - #due_line - 1) .. box.vertical)
-        table.insert(highlights, {
-            get_due_date_highlight(task.due_date),
-            #lines - 1,
-            #box.vertical + #padding,
-            -2
-        })
-    end
-
-    -- Subtasks with enhanced highlighting
-    if task.subtasks and #task.subtasks > 0 then
-        for _, subtask in ipairs(task.subtasks) do
-            local subtask_icon = subtask.status == "DONE" 
-                and self.config.icons.task_done 
-                or self.config.icons.task_pending
-            local subtask_line = string.format("%s%s%s %s %s",
-                box.vertical,
-                padding,
-                self.config.icons.subtask,
-                subtask_icon,
-                subtask.title
-            )
-            table.insert(lines, subtask_line .. string.rep(" ", width - #subtask_line - 1) .. box.vertical)
-            
-            -- Enhanced subtask highlights
-            local subtask_hl = subtask.status == "DONE" 
-                and "LazyDoSubtaskDone" 
-                and "LazyDoSubtaskPending"
-            table.insert(highlights, {
-                subtask_hl,
-                #lines - 1,
-                #box.vertical + #padding + 2,
-                -2
-            })
-        end
-    end
-
-    -- Notes with cyan highlighting
-    if not task.folded and task.notes and task.notes ~= "" then
-        for _, note_line in ipairs(vim.split(task.notes, "\n")) do
-            local formatted_line = string.format("%s%s%s %s",
-                box.vertical,
-                padding,
-                self.config.icons.note,
-                note_line
-            )
-            table.insert(lines, formatted_line .. string.rep(" ", width - #formatted_line - 1) .. box.vertical)
-            table.insert(highlights, {
-                "LazyDoNote",
-                #lines - 1,
-                #box.vertical + #padding,
-                -2
-            })
-        end
-    end
-
-    -- Bottom border
-    table.insert(lines, string.format("%s%s%s",
-        box.bottom_left,
-        string.rep(box.horizontal, width - 2),
-        box.bottom_right
-    ))
-    table.insert(highlights, {"LazyDoBorder", #lines - 1, 0, width})
-
-    return lines, highlights
-end
-
-
 -- Keymaps and User Interactions
 
 ---Sets up all keymaps for the LazyDo window
@@ -981,81 +964,213 @@ local function create_subtask(title)
   }
 end
 
----Manages subtasks for a task
----@param task Task
-function LazyDo:manage_subtasks(task)
-  local actions = {
-      "Add subtask",
-      "Edit subtask",
-      "Delete subtask",
-      "Toggle subtask status",
-      "Reorder subtasks"
-  }
-
-  vim.ui.select(actions, {
-      prompt = "Manage subtasks:",
-  }, function(choice)
-      if not choice then return end
-
-      if choice == "Add subtask" then
-          self:add_subtask(task)
-      elseif choice == "Edit subtask" then
-          self:edit_subtask(task)
-      elseif choice == "Delete subtask" then
-          self:delete_subtask(task)
-      elseif choice == "Toggle subtask status" then
-          self:toggle_subtask_status(task)
-      elseif choice == "Reorder subtasks" then
-          self:reorder_subtasks(task)
-      end
-  end)
+---Safely get task at cursor
+---@return Task?
+function LazyDo:get_current_task()
+    local task_index = self:get_task_index_at_cursor()
+    if not task_index or not self.tasks[task_index] then
+        notify("No task selected", vim.log.levels.WARN)
+        return nil
+    end
+    return self.tasks[task_index]
 end
 
----Adds a subtask to a task
+---Manage subtasks with error handling
+function LazyDo:manage_subtasks()
+    local current_task = self:get_current_task()
+    if not current_task then return end
+
+    -- Initialize subtasks if nil
+    current_task.subtasks = current_task.subtasks or {}
+
+    local actions = {
+        "Add subtask",
+        "Edit subtask",
+        "Delete subtask",
+        "Toggle subtask status",
+        "Reorder subtasks"
+    }
+
+    vim.ui.select(actions, {
+        prompt = "Manage subtasks:",
+        format_item = function(item)
+            return item
+        end
+    }, function(choice)
+        if not choice then return end
+
+        if choice == "Add subtask" then
+            self:add_subtask(current_task)
+        elseif choice == "Edit subtask" then
+            self:edit_subtask(current_task)
+        elseif choice == "Delete subtask" then
+            self:delete_subtask(current_task)
+        elseif choice == "Toggle subtask status" then
+            self:toggle_subtask(current_task)
+        elseif choice == "Reorder subtasks" then
+            self:reorder_subtasks(current_task)
+        end
+    end)
+end
+
+---Add subtask with error handling
 ---@param task Task
 function LazyDo:add_subtask(task)
-  vim.ui.input({
-      prompt = "New subtask: "
-  }, function(title)
-      if not title or title == "" then return end
-      
-      task.subtasks = task.subtasks or {}
-      table.insert(task.subtasks, create_subtask(title))
-      self:save_tasks()
-      self:render()
-  end)
+    if not task then return end
+
+    vim.ui.input({
+        prompt = "New subtask: "
+    }, function(input)
+        if not input or input == "" then return end
+        
+        task.subtasks = task.subtasks or {}
+        table.insert(task.subtasks, {
+            id = string.format("subtask_%d_%d", os.time(), math.random(1000, 9999)),
+            title = input,
+            status = "PENDING",
+            created_at = os.time()
+        })
+        
+        self:save_tasks()
+        self:render()
+        notify("Subtask added", vim.log.levels.INFO)
+    end)
 end
 
----Edits a subtask
+---Edit subtask with error handling
 ---@param task Task
 function LazyDo:edit_subtask(task)
-  if not task.subtasks or #task.subtasks == 0 then
-      notify("No subtasks to edit", vim.log.levels.INFO)
-      return
-  end
+    if not task or not task.subtasks or #task.subtasks == 0 then
+        notify("No subtasks to edit", vim.log.levels.WARN)
+        return
+    end
 
-  local subtask_titles = vim.tbl_map(function(st)
-      return string.format("%s %s", 
-          st.status == "DONE" and self.config.icons.task_done or self.config.icons.task_pending,
-          st.title)
-  end, task.subtasks)
+    local subtask_choices = vim.tbl_map(function(st)
+        return string.format("%s %s", 
+            st.status == "DONE" and self.config.icons.task_done or self.config.icons.task_pending,
+            st.title)
+    end, task.subtasks)
 
-  vim.ui.select(subtask_titles, {
-      prompt = "Select subtask to edit:"
-  }, function(choice, idx)
-      if not choice then return end
-      
-      vim.ui.input({
-          prompt = "Edit subtask:",
-          default = task.subtasks[idx].title
-      }, function(new_title)
-          if new_title and new_title ~= "" then
-              task.subtasks[idx].title = new_title
-              self:save_tasks()
-              self:render()
-          end
-      end)
-  end)
+    vim.ui.select(subtask_choices, {
+        prompt = "Select subtask to edit:"
+    }, function(choice, idx)
+        if not choice or not idx then return end
+        
+        vim.ui.input({
+            prompt = "Edit subtask:",
+            default = task.subtasks[idx].title
+        }, function(new_title)
+            if not new_title or new_title == "" then return end
+            
+            task.subtasks[idx].title = new_title
+            self:save_tasks()
+            self:render()
+            notify("Subtask updated", vim.log.levels.INFO)
+        end)
+    end)
+end
+
+---Delete subtask with error handling
+---@param task Task
+function LazyDo:delete_subtask(task)
+    if not task or not task.subtasks or #task.subtasks == 0 then
+        notify("No subtasks to delete", vim.log.levels.WARN)
+        return
+    end
+
+    local subtask_choices = vim.tbl_map(function(st)
+        return string.format("%s %s", 
+            st.status == "DONE" and self.config.icons.task_done or self.config.icons.task_pending,
+            st.title)
+    end, task.subtasks)
+
+    vim.ui.select(subtask_choices, {
+        prompt = "Select subtask to delete:"
+    }, function(choice, idx)
+        if not choice or not idx then return end
+
+        vim.ui.select(
+            { "Yes", "No" },
+            { prompt = "Delete this subtask?" },
+            function(confirm)
+                if confirm == "Yes" then
+                    table.remove(task.subtasks, idx)
+                    self:save_tasks()
+                    self:render()
+                    notify("Subtask deleted", vim.log.levels.INFO)
+                end
+            end
+        )
+    end)
+end
+
+---Toggle subtask status with error handling
+---@param task Task
+function LazyDo:toggle_subtask(task)
+    if not task or not task.subtasks or #task.subtasks == 0 then
+        notify("No subtasks to toggle", vim.log.levels.WARN)
+        return
+    end
+
+    local subtask_choices = vim.tbl_map(function(st)
+        return string.format("%s %s", 
+            st.status == "DONE" and self.config.icons.task_done or self.config.icons.task_pending,
+            st.title)
+    end, task.subtasks)
+
+    vim.ui.select(subtask_choices, {
+        prompt = "Select subtask to toggle:"
+    }, function(choice, idx)
+        if not choice or not idx then return end
+        
+        task.subtasks[idx].status = task.subtasks[idx].status == "DONE" and "PENDING" or "DONE"
+        self:save_tasks()
+        self:render()
+        notify("Subtask status toggled", vim.log.levels.INFO)
+    end)
+end
+
+---Reorder subtasks with error handling
+---@param task Task
+function LazyDo:reorder_subtasks(task)
+    if not task or not task.subtasks or #task.subtasks < 2 then
+        notify("Not enough subtasks to reorder", vim.log.levels.WARN)
+        return
+    end
+
+    local subtask_choices = vim.tbl_map(function(st)
+        return string.format("%s %s", 
+            st.status == "DONE" and self.config.icons.task_done or self.config.icons.task_pending,
+            st.title)
+    end, task.subtasks)
+
+    vim.ui.select(subtask_choices, {
+        prompt = "Select subtask to move:"
+    }, function(choice, idx)
+        if not choice or not idx then return end
+
+        vim.ui.select(
+            { "Move up", "Move down" },
+            { prompt = "Move direction:" },
+            function(direction)
+                if not direction then return end
+
+                if direction == "Move up" and idx > 1 then
+                    local temp = task.subtasks[idx]
+                    task.subtasks[idx] = task.subtasks[idx - 1]
+                    task.subtasks[idx - 1] = temp
+                    self:save_tasks()
+                    self:render()
+                elseif direction == "Move down" and idx < #task.subtasks then
+                    local temp = task.subtasks[idx]
+                    task.subtasks[idx] = task.subtasks[idx + 1]
+                    task.subtasks[idx + 1] = temp
+                    self:save_tasks()
+                    self:render()
+                end
+            end
+        )
+    end)
 end
 
 ---Enhanced notes management
@@ -1147,12 +1262,14 @@ local DEFAULT_CONFIG = {
       border = "rounded"
   },
   appearance = {
-      box_style = "modern",
+      style = "box",         -- "box" or "md"
+      box_style = "modern",  -- "modern", "minimal", "double"
       padding = 1,
       indent = "    ",
       highlight_current = true,
       show_icons = true
   },
+  colors = DEFAULT_COLORS,   -- User can override colors
   icons = {
       task_pending = "◆",
       task_done = "✓",
@@ -1164,7 +1281,6 @@ local DEFAULT_CONFIG = {
       },
       note = "📝",
       due_date = "📅",
-      subtask = "└",
       fold = {
           expanded = "▾",
           collapsed = "▸"
