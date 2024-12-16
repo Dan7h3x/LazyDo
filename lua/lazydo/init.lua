@@ -133,7 +133,7 @@ end
 ---Validates if the LazyDo instance and its buffer are valid
 ---@param self LazyDo
 ---@return boolean
-function LazyDo:is_valid_instance()
+function LazyDo:is_valid_instance(self)
 	if not self or not self.buf or not api.nvim_buf_is_valid(self.buf) then
 		notify("Invalid LazyDo instance or buffer", vim.log.levels.ERROR)
 		return false
