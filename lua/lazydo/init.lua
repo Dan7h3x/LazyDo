@@ -120,20 +120,78 @@ local function is_valid_instance(self)
     return true
 end
 
----Sets up highlight groups for the UI
+-- Color definitions and highlight setup
+local COLORS = {
+    -- Tokyonight dark colors
+    red = "#f7768e",
+    green = "#9ece6a",
+    blue = "#7aa2f7",
+    yellow = "#e0af68",
+    purple = "#bb9af7",
+    cyan = "#7dcfff",
+    orange = "#ff9e64",
+    gray = "#565f89",
+    bg = "#24283b",
+    fg = "#c0caf5",
+    comment = "#565f89",
+    border = "#3b4261"
+}
+
+---Sets up highlight groups for LazyDo
 function LazyDo:setup_highlights()
     local highlights = {
-        LazyDoTaskPending = { fg = "#EBCB8B" },
-        LazyDoTaskDone = { fg = "#A3BE8C" },
-        LazyDoNote = { fg = "#88C0D0" },
-        LazyDoDueDate = { fg = "#81A1C1" },
-        LazyDoHeader = { fg = "#5E81AC" },
-        LazyDoBorder = { fg = "#434C5E" }
+        -- Task status highlights
+        LazyDoTaskPending = { fg = COLORS.yellow },
+        LazyDoTaskDone = { fg = COLORS.green },
+        
+        -- Priority highlights
+        LazyDoPriorityHIGH = { fg = COLORS.red },
+        LazyDoPriorityMEDIUM = { fg = COLORS.yellow },
+        LazyDoPriorityLOW = { fg = COLORS.green },
+        LazyDoPriorityNONE = { fg = COLORS.gray },
+        
+        -- Due date highlights
+        LazyDoDueDate = { fg = COLORS.blue },
+        LazyDoDueOverdue = { fg = COLORS.red },
+        LazyDoDueToday = { fg = COLORS.yellow },
+        
+        -- Notes highlights
+        LazyDoNote = { fg = COLORS.cyan },
+        
+        -- Subtask highlights
+        LazyDoSubtask = { fg = COLORS.purple },
+        LazyDoSubtaskDone = { fg = COLORS.green },
+        LazyDoSubtaskPending = { fg = COLORS.yellow },
+        
+        -- UI elements
+        LazyDoHeader = { fg = COLORS.blue, bold = true },
+        LazyDoBorder = { fg = COLORS.border },
+        LazyDoTitle = { fg = COLORS.fg },
+        LazyDoStats = { fg = COLORS.comment },
+        LazyDoHelp = { fg = COLORS.comment, italic = true }
     }
 
+    -- Apply highlights
     for name, attrs in pairs(highlights) do
         api.nvim_set_hl(0, name, attrs)
     end
+end
+
+---Updates due date highlight based on status
+---@param due_date string
+---@return string highlight_group
+local function get_due_date_highlight(due_date)
+    if not due_date or due_date == "" then
+        return "LazyDoDueDate"
+    end
+
+    local today = os.date("%Y-%m-%d")
+    if due_date < today then
+        return "LazyDoDueOverdue"
+    elseif due_date == today then
+        return "LazyDoDueToday"
+    end
+    return "LazyDoDueDate"
 end
 
 ---Loads tasks from storage
@@ -532,78 +590,117 @@ function LazyDo:create_footer(width)
   return footer
 end
 
----Creates content for a single task
+---Creates content for a single task with subtasks and notes
 ---@param task Task
 ---@param width number
 ---@param is_selected boolean
----@return table, table
+---@return table, table Lines and highlights for the task
 function LazyDo:create_task_content(task, width, is_selected)
-  local lines = {}
-  local highlights = {}
-  local box = BOX_STYLES[self.config.appearance.box_style]
-  local padding = string.rep(" ", self.config.appearance.padding)
+    local lines = {}
+    local highlights = {}
+    local box = BOX_STYLES[self.config.appearance.box_style]
+    local padding = string.rep(" ", self.config.appearance.padding)
 
-  -- Create task box with content
-  local status_icon = task.status == "DONE" 
-      and self.config.icons.task_done 
-      or self.config.icons.task_pending
-  local priority_icon = self.config.icons.priority[task.priority]
+    -- Top border
+    table.insert(lines, string.format("%s%s%s",
+        box.top_left,
+        string.rep(box.horizontal, width - 2),
+        box.top_right
+    ))
+    table.insert(highlights, {"LazyDoBorder", #lines - 1, 0, width})
 
-  -- Add box top
-  table.insert(lines, string.format("%s%s%s",
-      box.top_left,
-      string.rep(box.horizontal, width - 2),
-      box.top_right
-  ))
+    -- Title line with status and priority
+    local status_icon = task.status == "DONE" and self.config.icons.task_done or self.config.icons.task_pending
+    local priority_icon = self.config.icons.priority[task.priority]
+    local title_line = string.format("%s%s%s %s %s",
+        box.vertical,
+        padding,
+        status_icon,
+        priority_icon,
+        task.title
+    )
+    table.insert(lines, title_line .. string.rep(" ", width - #title_line - 1) .. box.vertical)
+    
+    -- Title line highlights
+    local line_idx = #lines - 1
+    local status_hl = task.status == "DONE" and "LazyDoTaskDone" or "LazyDoTaskPending"
+    table.insert(highlights, {status_hl, line_idx, #box.vertical + #padding, #box.vertical + #padding + 1})
+    table.insert(highlights, {"LazyDoPriority", line_idx, #box.vertical + #padding + 2, #box.vertical + #padding + 3})
+    table.insert(highlights, {"LazyDoTitle", line_idx, #box.vertical + #padding + 4, -2})
 
-  -- Add title line
-  local title_line = string.format("%s%s%s %s %s",
-      box.vertical,
-      padding,
-      status_icon,
-      priority_icon,
-      task.title
-  )
-  table.insert(lines, title_line .. 
-      string.rep(" ", width - #title_line - 1) .. box.vertical)
+    -- Due date line with dynamic highlighting
+    if task.due_date and task.due_date ~= "" then
+        local due_line = string.format("%s%s%s Due: %s",
+            box.vertical,
+            padding,
+            self.config.icons.due_date,
+            task.due_date
+        )
+        table.insert(lines, due_line .. string.rep(" ", width - #due_line - 1) .. box.vertical)
+        table.insert(highlights, {
+            get_due_date_highlight(task.due_date),
+            #lines - 1,
+            #box.vertical + #padding,
+            -2
+        })
+    end
 
-  -- Add content (if not folded)
-  if not task.folded then
-      -- Add due date if present
-      if task.due_date and task.due_date ~= "" then
-          local due_line = string.format("%s%s%s %s",
-              box.vertical,
-              padding,
-              self.config.icons.due_date,
-              task.due_date
-          )
-          table.insert(lines, due_line ..
-              string.rep(" ", width - #due_line - 1) .. box.vertical)
-      end
+    -- Subtasks with enhanced highlighting
+    if task.subtasks and #task.subtasks > 0 then
+        for _, subtask in ipairs(task.subtasks) do
+            local subtask_icon = subtask.status == "DONE" 
+                and self.config.icons.task_done 
+                or self.config.icons.task_pending
+            local subtask_line = string.format("%s%s%s %s %s",
+                box.vertical,
+                padding,
+                self.config.icons.subtask,
+                subtask_icon,
+                subtask.title
+            )
+            table.insert(lines, subtask_line .. string.rep(" ", width - #subtask_line - 1) .. box.vertical)
+            
+            -- Enhanced subtask highlights
+            local subtask_hl = subtask.status == "DONE" 
+                and "LazyDoSubtaskDone" 
+                and "LazyDoSubtaskPending"
+            table.insert(highlights, {
+                subtask_hl,
+                #lines - 1,
+                #box.vertical + #padding + 2,
+                -2
+            })
+        end
+    end
 
-      -- Add notes if present
-      if task.notes and task.notes ~= "" then
-          for _, note_line in ipairs(vim.split(task.notes, "\n")) do
-              local formatted_line = string.format("%s%s%s %s",
-                  box.vertical,
-                  padding,
-                  self.config.icons.note,
-                  note_line
-              )
-              table.insert(lines, formatted_line ..
-                  string.rep(" ", width - #formatted_line - 1) .. box.vertical)
-          end
-      end
-  end
+    -- Notes with cyan highlighting
+    if not task.folded and task.notes and task.notes ~= "" then
+        for _, note_line in ipairs(vim.split(task.notes, "\n")) do
+            local formatted_line = string.format("%s%s%s %s",
+                box.vertical,
+                padding,
+                self.config.icons.note,
+                note_line
+            )
+            table.insert(lines, formatted_line .. string.rep(" ", width - #formatted_line - 1) .. box.vertical)
+            table.insert(highlights, {
+                "LazyDoNote",
+                #lines - 1,
+                #box.vertical + #padding,
+                -2
+            })
+        end
+    end
 
-  -- Add box bottom
-  table.insert(lines, string.format("%s%s%s",
-      box.bottom_left,
-      string.rep(box.horizontal, width - 2),
-      box.bottom_right
-  ))
+    -- Bottom border
+    table.insert(lines, string.format("%s%s%s",
+        box.bottom_left,
+        string.rep(box.horizontal, width - 2),
+        box.bottom_right
+    ))
+    table.insert(highlights, {"LazyDoBorder", #lines - 1, 0, width})
 
-  return lines, highlights
+    return lines, highlights
 end
 
 
