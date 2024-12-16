@@ -469,7 +469,7 @@ end
 ---Gets the task index at current cursor position
 ---@return number?
 function LazyDo:get_task_index_at_cursor()
-	if not LazyDo:is_valid_instance() then
+	if not LazyDo:is_valid_instance(self) then
 		return nil
 	end
 
@@ -527,7 +527,7 @@ end
 ---Main render function for the UI
 ---@param self LazyDo
 function LazyDo:render()
-	if not LazyDo:is_valid_instance() then
+	if not LazyDo:is_valid_instance(self) then
 		return
 	end
 
@@ -1474,7 +1474,7 @@ end
 
 ---Safely refresh the LazyDo buffer
 function LazyDo:refresh_buffer()
-	if not LazyDo:is_valid_instance() then
+	if not LazyDo:is_valid_instance(self) then
 		return
 	end
 
