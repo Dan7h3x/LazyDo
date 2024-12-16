@@ -166,6 +166,7 @@ function LazyDo.new(config)
 	self.tasks = {}
 	self.namespace = api.nvim_create_namespace("LazyDo")
 	self:setup_highlights()
+	self:setup_icon_highlights()
 	self:load_tasks()
 	return self
 end
@@ -206,6 +207,10 @@ function LazyDo:render_task_markdown(task, width, is_selected)
 	local highlights = {}
 	local indent = self.config.appearance.indent
 
+	-- Add separator above the task
+	table.insert(lines, string.rep("─", width))
+	table.insert(highlights, { "LazyDoBorder", #lines - 1, 0, width })
+
 	-- Task header with checkbox and priority
 	local status_mark = task.status == "DONE" and "x" or " "
 	local priority_icon = self.config.icons.priority[task.priority]
@@ -215,7 +220,7 @@ function LazyDo:render_task_markdown(task, width, is_selected)
 	-- Add header highlights
 	local status_hl = task.status == "DONE" and "LazyDoTaskDone" or "LazyDoTaskPending"
 	table.insert(highlights, { status_hl, #lines - 1, 0, 5 })
-	table.insert(highlights, { "LazyDoPriority" .. (task.priority or "NONE"), #lines - 1, 6, 7 })
+	table.insert(highlights, { "LazyDoIcon" .. (task.priority or "NoPriority"), #lines - 1, 6, 7 })
 
 	-- Due date
 	if task.due_date and task.due_date ~= "" then
@@ -247,6 +252,9 @@ function LazyDo:render_task_markdown(task, width, is_selected)
 
 	-- Add empty line for spacing
 	table.insert(lines, "")
+	-- Add separator below the task
+	table.insert(lines, string.rep("─", width))
+	table.insert(highlights, { "LazyDoBorder", #lines - 1, 0, width })
 
 	return lines, highlights
 end
@@ -260,11 +268,9 @@ end
 function LazyDo:render_task_box(task, width, is_selected)
 	local lines = {}
 	local highlights = {}
-	local box = DEFAULT_STYLES.box[self.config.appearance.box_style]
-	local padding = string.rep(" ", self.config.appearance.padding)
 
-	-- Top border
-	table.insert(lines, string.format("%s%s%s", box.top_left, string.rep(box.horizontal, width), box.top_right))
+	-- Add separator above the task
+	table.insert(lines, string.rep("─", width))
 	table.insert(highlights, { "LazyDoBorder", #lines - 1, 0, width })
 
 	-- Title line with status, priority, and due date
@@ -278,14 +284,14 @@ function LazyDo:render_task_box(task, width, is_selected)
 	end
 
 	local title_line =
-		string.format("%s%s%s %s %s%s", box.vertical, padding, status_icon, priority_icon, task.title, due_date_str)
+		string.format("%s %s %s %s", status_icon, priority_icon, task.title, due_date_str)
 
 	-- Add title line with padding to full width
-	table.insert(lines, title_line .. string.rep(" ", width - #title_line - 1) .. box.vertical)
+	table.insert(lines, title_line .. string.rep(" ", width - #title_line - 1))
 
 	-- Add highlights for title line components
 	local line_idx = #lines - 1
-	local current_pos = #box.vertical + #padding
+	local current_pos = 0
 
 	-- Status highlight
 	local status_hl = task.status == "DONE" and "LazyDoTaskDone" or "LazyDoTaskPending"
@@ -294,69 +300,16 @@ function LazyDo:render_task_box(task, width, is_selected)
 
 	-- Priority highlight
 	table.insert(highlights, {
-		"LazyDoPriority" .. task.priority,
+		"LazyDoIcon" .. task.priority,
 		line_idx,
 		current_pos,
 		current_pos + 1,
 	})
-	current_pos = current_pos + 2
 
-	-- Title highlight
-	local title_length = #task.title
-	table.insert(highlights, { "LazyDoTitle", line_idx, current_pos, current_pos + title_length })
-	current_pos = current_pos + title_length
-
-	-- Due date highlight
-	if task.due_date and task.due_date ~= "" then
-		table.insert(highlights, {
-			LazyDo:get_due_date_highlight(task.due_date),
-			line_idx,
-			current_pos,
-			current_pos + #due_date_str,
-		})
-	end
-
-	-- Subtasks
-	if task.subtasks and #task.subtasks > 0 then
-		for _, subtask in ipairs(task.subtasks) do
-			local subtask_icon = subtask.status == "DONE" and self.config.icons.task_done
-				or self.config.icons.task_pending
-			local subtask_line = string.format(
-				"%s%s%s %s %s",
-				box.vertical,
-				padding .. padding,
-				self.config.icons.subtask,
-				subtask_icon,
-				subtask.title
-			)
-			table.insert(lines, subtask_line .. string.rep(" ", width - #subtask_line - 1) .. box.vertical)
-
-			-- Subtask highlights
-			local subtask_hl = subtask.status == "DONE" and "LazyDoSubtaskDone" or "LazyDoSubtaskPending"
-			table.insert(highlights, {
-				subtask_hl,
-				#lines - 1,
-				#box.vertical + #padding * 2 + 2,
-				-2,
-			})
-		end
-	end
-
-	-- Notes (if not folded)
-	if not task.folded and task.notes and task.notes ~= "" then
-		for _, note_line in ipairs(vim.split(task.notes, "\n")) do
-			local formatted_line =
-				string.format("%s%s%s %s", box.vertical, padding .. padding, self.config.icons.note, note_line)
-			table.insert(lines, formatted_line .. string.rep(" ", width - #formatted_line - 1) .. box.vertical)
-			table.insert(highlights, { "LazyDoNote", #lines - 1, #box.vertical + #padding * 2, -2 })
-		end
-	end
-
-	-- Bottom border
-	table.insert(
-		lines,
-		string.format("%s%s%s", box.bottom_left, string.rep(box.horizontal, width - 2), box.bottom_right)
-	)
+	-- Add empty line for spacing
+	table.insert(lines, "")
+	-- Add separator below the task
+	table.insert(lines, string.rep("─", width))
 	table.insert(highlights, { "LazyDoBorder", #lines - 1, 0, width })
 
 	return lines, highlights
@@ -467,7 +420,7 @@ function LazyDo:add_task()
 		local new_task = Task.new(title)
 		table.insert(self.tasks, new_task)
 		self:save_tasks()
-		self:render()
+		self:refresh_buffer()
 		notify("Task added successfully")
 	end)
 end
@@ -517,7 +470,7 @@ function LazyDo:edit_task_title(task)
 		if new_title and new_title ~= "" then
 			task.title = new_title
 			self:save_tasks()
-			self:render()
+			self:refresh_buffer()
 		end
 	end)
 end
@@ -532,7 +485,7 @@ function LazyDo:edit_task_notes(task)
 		if new_notes then
 			task.notes = new_notes
 			self:save_tasks()
-			self:render()
+			self:refresh_buffer()
 		end
 	end)
 end
@@ -544,7 +497,7 @@ function LazyDo:edit_task_priority(task)
 		if new_priority then
 			task.priority = new_priority
 			self:save_tasks()
-			self:render()
+			self:refresh_buffer()
 		end
 	end)
 end
@@ -566,7 +519,7 @@ function LazyDo:edit_task_due_date(task)
 		if new_date:match("^%d%d%d%d%-%d%d%-%d%d$") then
 			task.due_date = new_date
 			self:save_tasks()
-			self:render()
+			self:refresh_buffer()
 			notify("Due date updated", vim.log.levels.INFO)
 		else
 			notify("Invalid date format. Use YYYY-MM-DD", vim.log.levels.ERROR)
@@ -584,7 +537,7 @@ function LazyDo:edit_task_tags(task)
 		if new_tags then
 			task.tags = vim.split(new_tags:gsub("%s+", ""), ",")
 			self:save_tasks()
-			self:render()
+			self:refresh_buffer()
 		end
 	end)
 end
@@ -599,7 +552,7 @@ function LazyDo:toggle_task()
 
 	task.status = task.status == "DONE" and "PENDING" or "DONE"
 	self:save_tasks()
-	self:render()
+	self:refresh_buffer()
 end
 
 ---Deletes the task at cursor position
@@ -614,7 +567,7 @@ function LazyDo:delete_task()
 		if choice == "Yes" then
 			table.remove(self.tasks, task_index)
 			self:save_tasks()
-			self:render()
+			self:refresh_buffer()
 			notify("Task deleted")
 		end
 	end)
@@ -872,6 +825,11 @@ function LazyDo:setup_keymaps()
 	map("n", "<Space>", function()
 		self:toggle_task()
 	end, "Toggle task status")
+
+	-- Search tasks
+	map("n", "f", function()
+		self:search_tasks()
+	end, "Search tasks")
 
 	-- Subtask management
 	map("n", "S", function()
@@ -1619,6 +1577,45 @@ function LazyDo.complete_date(arg)
 	return vim.tbl_filter(function(date)
 		return date:match(arg)
 	end, dates)
+end
+
+-- Define highlighting for icons and corresponding text
+local function setup_icon_highlights()
+	local colors = DEFAULT_COLORS.task
+	local highlights = {
+		LazyDoIconPending = { fg = colors.pending },
+		LazyDoIconDone = { fg = colors.done },
+		LazyDoIconHighPriority = { fg = colors.high_priority },
+		LazyDoIconMediumPriority = { fg = colors.medium_priority },
+		LazyDoIconLowPriority = { fg = colors.low_priority },
+		LazyDoIconNoPriority = { fg = colors.no_priority },
+	}
+
+	for name, attrs in pairs(highlights) do
+		api.nvim_set_hl(0, name, attrs)
+	end
+end
+
+---Search tasks using fzf-lua
+function LazyDo:search_tasks()
+	local fzf = require('fzf-lua')
+	local task_titles = vim.tbl_map(function(task)
+		return task.title
+	end, self.tasks)
+
+	fzf.fzf_exec(task_titles, {
+		prompt = 'Search Tasks: ',
+		actions = {
+			['default'] = function(selected)
+				local task = self.tasks[selected[1]]
+				if task then
+					self.selected_task_index = selected[1]
+					self:ensure_task_visible(self.selected_task_index)
+					self:render()
+				end
+			end,
+		},
+	})
 end
 
 return LazyDo
