@@ -284,42 +284,69 @@ function LazyDo:render_task_box(task, width, is_selected)
 	return lines, highlights
 end
 
----Sets up highlight groups using configured colors
-function LazyDo:setup_highlights()
-	local colors = self.config.colors
+-- Define conventional highlight colors
+function LazyDo:setup_conventional_highlight_colors()
+	local colors = {
+		-- Task status colors
+		task_done = "#98c379", -- Green
+		task_pending = "#e06c75", -- Red
+		task_high_priority = "#ff6c6b", -- Bright Red
+		task_medium_priority = "#e5c07b", -- Yellow
+		task_low_priority = "#61afef", -- Blue
+		task_no_priority = "#abb2bf", -- Grey
+
+		-- Due date colors
+		due_date_normal = "#61afef", -- Blue
+		due_date_overdue = "#e06c75", -- Red
+		due_date_today = "#e5c07b", -- Yellow
+
+		-- UI colors
+		ui_border = "#3e4451", -- Dark Grey
+		ui_title = "#c678dd", -- Purple
+		ui_header = "#51afef", -- Light Blue
+		ui_stats = "#5c6370", -- Grey
+		ui_help = "#56b6c2", -- Cyan
+	}
+
+	-- Set up highlights using the defined colors
 	local highlights = {
 		-- Task status
-		LazyDoTaskPending = { fg = colors.task.pending },
-		LazyDoTaskDone = { fg = colors.task.done },
+		LazyDoTaskDone = { fg = colors.task_done },
+		LazyDoTaskPending = { fg = colors.task_pending },
 
 		-- Priority
-		LazyDoPriorityHIGH = { fg = colors.task.high_priority },
-		LazyDoPriorityMEDIUM = { fg = colors.task.medium_priority },
-		LazyDoPriorityLOW = { fg = colors.task.low_priority },
-		LazyDoPriorityNONE = { fg = colors.task.no_priority },
+		LazyDoPriorityHIGH = { fg = colors.task_high_priority },
+		LazyDoPriorityMEDIUM = { fg = colors.task_medium_priority },
+		LazyDoPriorityLOW = { fg = colors.task_low_priority },
+		LazyDoPriorityNONE = { fg = colors.task_no_priority },
 
 		-- Due dates
-		LazyDoDueDate = { fg = colors.due_date.normal },
-		LazyDoDueOverdue = { fg = colors.due_date.overdue },
-		LazyDoDueToday = { fg = colors.due_date.today },
+		LazyDoDueDate = { fg = colors.due_date_normal },
+		LazyDoDueOverdue = { fg = colors.due_date_overdue },
+		LazyDoDueToday = { fg = colors.due_date_today },
 
 		-- Notes and subtasks
-		LazyDoNote = { fg = colors.notes },
-		LazyDoSubtask = { fg = colors.subtask },
-		LazyDoSubtaskDone = { fg = colors.task.done },
-		LazyDoSubtaskPending = { fg = colors.task.pending },
+		LazyDoNote = { fg = colors.task_no_priority },
+		LazyDoSubtask = { fg = colors.task_no_priority },
+		LazyDoSubtaskDone = { fg = colors.task_done },
+		LazyDoSubtaskPending = { fg = colors.task_pending },
 
 		-- UI elements
-		LazyDoHeader = { fg = colors.ui.header, bold = true },
-		LazyDoBorder = { fg = colors.ui.border },
-		LazyDoTitle = { fg = colors.ui.title },
-		LazyDoStats = { fg = colors.ui.stats },
-		LazyDoHelp = { fg = colors.ui.help, italic = true },
+		LazyDoHeader = { fg = colors.ui_header, bold = true },
+		LazyDoBorder = { fg = colors.ui_border },
+		LazyDoTitle = { fg = colors.ui_title },
+		LazyDoStats = { fg = colors.ui_stats },
+		LazyDoHelp = { fg = colors.ui_help, italic = true },
 	}
 
 	for name, attrs in pairs(highlights) do
 		api.nvim_set_hl(0, name, attrs)
 	end
+end
+
+---Sets up highlight groups using conventional colors
+function LazyDo:setup_highlights()
+	LazyDo:setup_conventional_highlight_colors()  -- Call the new setup function
 end
 
 ---Updates due date highlight based on status
