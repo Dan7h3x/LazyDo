@@ -116,21 +116,21 @@ local DEFAULT_CONFIG = {
 	},
 	colors = DEFAULT_COLORS, -- User can override colors
 	icons = {
-		task_pending = "◆",
-		task_done = "✓",
+		task_pending = "",
+		task_done = "",
 		priority = {
-			HIGH = "🔴",
-			MEDIUM = "🟡",
-			LOW = "🟢",
-			NONE = "⚪",
+			HIGH = " ",
+			MEDIUM = " ",
+			LOW = " ",
+			NONE = "",
 		},
-		note = "📝",
-		due_date = "📅",
+		note = "󰎞",
+		due_date = " ",
 		fold = {
 			expanded = "▾",
 			collapsed = "▸",
 		},
-		subtask = "☑",
+		subtask = "󰘍",
 	},
 	storage = {
 		data_path = string.format("%s/lazydo_tasks.json", fn.stdpath("data")),
@@ -219,7 +219,7 @@ function LazyDo:render_task_markdown(task, width, is_selected)
 
 	-- Due date
 	if task.due_date and task.due_date ~= "" then
-		local due_line = string.format("%s📅 Due: %s", indent, task.due_date)
+		local due_line = string.format("%s %s Due: %s", indent, self.config.icons.due_date, task.due_date)
 		table.insert(lines, due_line)
 		table.insert(highlights, { LazyDo:get_due_date_highlight(task.due_date), #lines - 1, #indent, -1 })
 	end
@@ -264,7 +264,7 @@ function LazyDo:render_task_box(task, width, is_selected)
 	local padding = string.rep(" ", self.config.appearance.padding)
 
 	-- Top border
-	table.insert(lines, string.format("%s%s%s", box.top_left, string.rep(box.horizontal, width - 2), box.top_right))
+	table.insert(lines, string.format("%s%s%s", box.top_left, string.rep(box.horizontal, width), box.top_right))
 	table.insert(highlights, { "LazyDoBorder", #lines - 1, 0, width })
 
 	-- Title line with status, priority, and due date
@@ -681,6 +681,7 @@ function LazyDo:create_window()
 	api.nvim_win_set_option(self.win, "cursorline", true)
 
 	self:setup_keymaps()
+	self:setup_highlights()
 	self:render()
 end
 
