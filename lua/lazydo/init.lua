@@ -422,16 +422,24 @@ end
 ---Edits task due date
 ---@param task Task
 function LazyDo:edit_task_due_date(task)
-  vim.ui.input({
-      prompt = "Due date (YYYY-MM-DD): ",
-      default = task.due_date or os.date("%Y-%m-%d")
-  }, function(new_date)
-      if new_date and new_date:match("^%d%d%d%d%-%d%d%-%d%d$") then
-          task.due_date = new_date
-          self:save_tasks()
-          self:render()
-      end
-  end)
+    local today = os.date("%Y-%m-%d")
+    vim.ui.input({
+        prompt = "Due date (YYYY-MM-DD): ",
+        default = task.due_date or today,
+        completion = "customlist,v:lua.require'lazydo'.complete_date"
+    }, function(new_date)
+        if not new_date then return end
+        
+        -- Validate date format
+        if new_date:match("^%d%d%d%d%-%d%d%-%d%d$") then
+            task.due_date = new_date
+            self:save_tasks()
+            self:render()
+            notify("Due date updated", vim.log.levels.INFO)
+        else
+            notify("Invalid date format. Use YYYY-MM-DD", vim.log.levels.ERROR)
+        end
+    end)
 end
 
 ---Edits task tags
@@ -1382,5 +1390,19 @@ function LazyDo:quick_add_task()
   end)
 end
 
+-- Date completion helper
+---@param arg string
+---@return string[]
+function LazyDo.complete_date(arg)
+    local today = os.date("*t")
+    local dates = {
+        os.date("%Y-%m-%d"), -- today
+        os.date("%Y-%m-%d", os.time{year=today.year, month=today.month, day=today.day+1}), -- tomorrow
+        os.date("%Y-%m-%d", os.time{year=today.year, month=today.month, day=today.day+7}), -- next week
+    }
+    return vim.tbl_filter(function(date)
+        return date:match(arg)
+    end, dates)
+end
 
 return LazyDo
