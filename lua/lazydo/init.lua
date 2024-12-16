@@ -212,9 +212,9 @@ function LazyDo:render_task_markdown(task, width, is_selected)
 	table.insert(highlights, { "LazyDoBorder", #lines - 1, 0, width })
 
 	-- Task header with checkbox and priority
-	local status_mark = task.status == "DONE" and "x" or " "
-	local priority_icon = self.config.icons.priority[task.priority]
-	local header = string.format("- [%s] %s %s", status_mark, priority_icon, task.title)
+	local status_mark = task.status == "DONE" and "✔️" or "❌"
+	local priority_icon = self.config.icons.priority[task.priority] or "⚪"
+	local header = string.format(" %s [%s] %s ", status_mark, priority_icon, task.title)
 	table.insert(lines, header)
 
 	-- Add header highlights
@@ -224,29 +224,16 @@ function LazyDo:render_task_markdown(task, width, is_selected)
 
 	-- Due date
 	if task.due_date and task.due_date ~= "" then
-		local due_line = string.format("%s %s Due: %s", indent, self.config.icons.due_date, task.due_date)
+		local due_line = string.format("%s Due: %s", indent, task.due_date)
 		table.insert(lines, due_line)
-		table.insert(highlights, { LazyDo:get_due_date_highlight(task.due_date), #lines - 1, #indent, -1 })
-	end
-
-	-- Subtasks
-	if task.subtasks and #task.subtasks > 0 then
-		for _, subtask in ipairs(task.subtasks) do
-			local subtask_mark = subtask.status == "DONE" and "x" or " "
-			local subtask_line = string.format("%s- [%s] %s", indent, subtask_mark, subtask.title)
-			table.insert(lines, subtask_line)
-
-			local subtask_hl = subtask.status == "DONE" and "LazyDoSubtaskDone" or "LazyDoSubtaskPending"
-			table.insert(highlights, { subtask_hl, #lines - 1, #indent, -1 })
-		end
+		table.insert(highlights, { "LazyDoDueDate", #lines - 1, #indent, -1 })
 	end
 
 	-- Notes
-	if not task.folded and task.notes and task.notes ~= "" then
+	if task.notes and task.notes ~= "" then
 		table.insert(lines, string.format("%s📝 Notes:", indent))
 		for _, note_line in ipairs(vim.split(task.notes, "\n")) do
 			table.insert(lines, string.format("%s%s%s", indent, indent, note_line))
-			table.insert(highlights, { "LazyDoNote", #lines - 1, 0, -1 })
 		end
 	end
 
@@ -274,37 +261,19 @@ function LazyDo:render_task_box(task, width, is_selected)
 	table.insert(highlights, { "LazyDoBorder", #lines - 1, 0, width })
 
 	-- Title line with status, priority, and due date
-	local status_icon = task.status == "DONE" and self.config.icons.task_done or self.config.icons.task_pending
-	local priority_icon = self.config.icons.priority[task.priority]
+	local status_icon = task.status == "DONE" and "✔️" or "❌"
+	local priority_icon = self.config.icons.priority[task.priority] or "⚪"
 
 	-- Format due date if exists
 	local due_date_str = ""
 	if task.due_date and task.due_date ~= "" then
-		due_date_str = string.format(" %s %s", self.config.icons.due_date, task.due_date)
+		due_date_str = string.format(" Due: %s", task.due_date)
 	end
 
-	local title_line =
-		string.format("%s %s %s %s", status_icon, priority_icon, task.title, due_date_str)
+	local title_line = string.format(" %s %s %s%s", status_icon, priority_icon, task.title, due_date_str)
 
 	-- Add title line with padding to full width
 	table.insert(lines, title_line .. string.rep(" ", width - #title_line - 1))
-
-	-- Add highlights for title line components
-	local line_idx = #lines - 1
-	local current_pos = 0
-
-	-- Status highlight
-	local status_hl = task.status == "DONE" and "LazyDoTaskDone" or "LazyDoTaskPending"
-	table.insert(highlights, { status_hl, line_idx, current_pos, current_pos + 1 })
-	current_pos = current_pos + 2
-
-	-- Priority highlight
-	table.insert(highlights, {
-		"LazyDoIcon" .. task.priority,
-		line_idx,
-		current_pos,
-		current_pos + 1,
-	})
 
 	-- Add empty line for spacing
 	table.insert(lines, "")
@@ -1650,6 +1619,18 @@ function LazyDo:add_template_task()
 	self:save_tasks()
 	self:refresh_buffer()
 	notify("Template task added successfully")
+end
+
+---Safely refresh the LazyDo buffer
+function LazyDo:refresh_buffer()
+	if not is_valid_instance(self) then
+		return
+	end
+
+	api.nvim_buf_set_option(self.buf, "modifiable", true)
+	api.nvim_buf_set_lines(self.buf, 0, -1, false, {})  -- Clear the buffer
+	self:render()  -- Re-render the UI
+	api.nvim_buf_set_option(self.buf, "modifiable", false)
 end
 
 return LazyDo
