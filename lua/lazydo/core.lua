@@ -96,6 +96,17 @@ function LazyDo:refresh_display()
     end
 
     ui.setup_task_highlights(self)
+
+    -- Add help if enabled
+    if self.show_help then
+      vim.list_extend(lines, self:render_help())
+    end
+
+    -- Add footer
+    require('lazydo.ui').render_footer(self)
+
+    -- Update buffer
+    vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, lines)
   end)
   self.is_processing = false
 end
@@ -277,6 +288,11 @@ function LazyDo:setup_highlights()
     LazyDoPriorityLow = { fg = colors.priority and colors.priority.low or colors.done },
     LazyDoSubtask = { fg = colors.subtask },
     LazyDoStatusLine = { fg = colors.header },
+    LazyDoKey = { fg = colors.header, bold = true },
+    LazyDoSeparator = { fg = colors.border },
+    LazyDoHelp = { fg = colors.note },
+    LazyDoHelpHeader = { fg = colors.header, bold = true },
+    LazyDoFooter = { fg = colors.border },
   }
 
   -- Safely set highlights
@@ -293,6 +309,75 @@ function LazyDo:create_commands()
   vim.api.nvim_create_user_command('LazyDoAdd', function(opts)
     self:add_task(opts.args)
   end, { nargs = '?' })
+end
+
+function LazyDo:render_help()
+  if not self.show_help then return {} end
+
+  local width = vim.api.nvim_win_get_width(self.win)
+  local lines = {}
+  
+  -- Help header
+  table.insert(lines, string.rep("─", width))
+  table.insert(lines, utils.center(" Help ", width))
+  table.insert(lines, string.rep("─", width))
+
+  -- Help content
+  local help_sections = {
+    {
+      title = "Navigation",
+      content = {
+        "j/k        - Move cursor up/down",
+        "h/l        - Collapse/Expand task",
+        "gg/G       - Go to top/bottom",
+        "<C-u>/<C-d> - Page up/down",
+      }
+    },
+    {
+      title = "Task Management",
+      content = {
+        "<Space>    - Toggle task completion",
+        "e         - Edit task",
+        "dd        - Delete task",
+        "a         - Add new task",
+        "A         - Add subtask to current task",
+      }
+    },
+    {
+      title = "Quick Actions",
+      content = {
+        "n         - Add/edit note",
+        "d         - Set due date",
+        ">/<       - Increase/decrease priority",
+        "t         - Add tag",
+        "s         - Sort tasks",
+        "f         - Filter tasks",
+      }
+    },
+    {
+      title = "Other",
+      content = {
+        "q         - Close window",
+        "?         - Toggle this help",
+        ":LazyDoAdd - Add task from command line",
+        ":LazyDoToggle - Toggle window",
+      }
+    }
+  }
+
+  -- Render help sections
+  for _, section in ipairs(help_sections) do
+    table.insert(lines, "")
+    table.insert(lines, " " .. section.title)
+    table.insert(lines, " " .. string.rep("─", #section.title))
+    for _, line in ipairs(section.content) do
+      table.insert(lines, "   " .. line)
+    end
+  end
+
+  table.insert(lines, "")
+  table.insert(lines, string.rep("─", width))
+  return lines
 end
 
 return LazyDo
