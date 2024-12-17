@@ -5,7 +5,7 @@ return function(opts)
   if not LazyDo.instance then
     local instance = LazyDo:new()
     instance.opts = vim.tbl_deep_extend("force", config.defaults, opts or {})
-    
+
     -- Initialize storage and wrap functions
     instance:wrap_with_auto_save()
     instance:load_tasks()
@@ -28,4 +28,4 @@ return function(opts)
   end
 
   return LazyDo.instance
-end 
+end

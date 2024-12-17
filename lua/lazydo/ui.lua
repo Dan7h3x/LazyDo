@@ -1,6 +1,15 @@
 local M = {}
 local utils = require('lazydo.utils')
 
+-- Add animations and transitions
+M.ANIMATIONS = {
+  FADE_FRAMES = 10,
+  FADE_DURATION_MS = 100,
+  SLIDE_FRAMES = 8,
+  SLIDE_DURATION_MS = 80,
+}
+
+-- Enhanced UI constants
 M.CONSTANTS = {
   BLOCK = {
     TOP_LEFT = "╭",
@@ -13,6 +22,9 @@ M.CONSTANTS = {
     TASK_END = "┤",
     SUBTASK_BRANCH = "├─",
     SUBTASK_LAST = "└─",
+    PROGRESS_EMPTY = "○",
+    PROGRESS_FULL = "●",
+    SEPARATOR = "•",
   },
   PADDING = 2,
   MIN_WIDTH = 60,
@@ -84,62 +96,94 @@ end
 function M.render_task_block(task, width, indent, icons)
   local lines = {}
   local highlights = {}
-  local block_start = #lines + 1
   
-  -- Status and priority indicators
+  -- Calculate task completion for subtasks
+  local total_subtasks = #task.subtasks
+  local completed_subtasks = 0
+  for _, subtask in ipairs(task.subtasks) do
+    if subtask.done then
+      completed_subtasks = completed_subtasks + 1
+    end
+  end
+
+  -- Status and priority indicators with better visual hierarchy
   local status = task.done and icons.task_done or
       (task.due_date and task.due_date < os.time()) and icons.task_overdue or
       icons.task_pending
 
-  local priority = string.rep("!", task.priority)
-  
-  -- Block borders
+  local priority_icon = task.priority == 3 and icons.priority.high or
+                       task.priority == 2 and icons.priority.medium or
+                       icons.priority.low
+
+  -- Add visual tags
+  local tags_str = ""
+  if #task.tags > 0 then
+    tags_str = " " .. table.concat(vim.tbl_map(function(tag)
+      return "#" .. tag
+    end, task.tags), " ")
+  end
+
+  -- Enhanced block borders with better spacing
   local block_width = width - #indent
   local top = indent .. M.CONSTANTS.BLOCK.TOP_LEFT ..
       string.rep(M.CONSTANTS.BLOCK.HORIZONTAL, block_width - 2) ..
       M.CONSTANTS.BLOCK.TOP_RIGHT
 
-  -- Task header
+  -- Task header with improved layout
   local header = indent .. M.CONSTANTS.BLOCK.VERTICAL ..
-      utils.pad_right(string.format(" %s %s %s",
-        status, priority, task.content), block_width - 2) ..
+      utils.pad_right(string.format(" %s %s %s%s",
+        status, priority_icon, task.content, tags_str), block_width - 2) ..
       M.CONSTANTS.BLOCK.VERTICAL
 
   table.insert(lines, top)
   table.insert(lines, header)
 
-  -- Due date
+  -- Due date with countdown
   if task.due_date then
+    local days_left = math.floor((task.due_date - os.time()) / 86400)
     local date_str = os.date("Due: %Y-%m-%d", task.due_date)
+    local countdown = days_left > 0 and string.format("(%d days left)", days_left) or
+                     days_left == 0 and "(Due today)" or
+                     string.format("(%d days overdue)", math.abs(days_left))
+    
     local date_line = indent .. M.CONSTANTS.BLOCK.VERTICAL ..
-        utils.pad_right("  " .. icons.due_date .. " " .. date_str,
-        block_width - 2) .. M.CONSTANTS.BLOCK.VERTICAL
+        utils.pad_right(string.format("  %s %s %s",
+          icons.due_date, date_str, countdown), block_width - 2) ..
+        M.CONSTANTS.BLOCK.VERTICAL
     table.insert(lines, date_line)
   end
 
-  -- Notes
+  -- Notes with better formatting
   if task.notes then
     local wrapped_notes = utils.word_wrap(task.notes, block_width - 6)
+    table.insert(lines, indent .. M.CONSTANTS.BLOCK.VERTICAL ..
+        utils.pad_right("  " .. icons.note .. " Notes:", block_width - 2) ..
+        M.CONSTANTS.BLOCK.VERTICAL)
+    
     for _, note_line in ipairs(wrapped_notes) do
-      local note = indent .. M.CONSTANTS.BLOCK.VERTICAL ..
-          utils.pad_right("  " .. icons.note .. " " .. note_line,
-          block_width - 2) .. M.CONSTANTS.BLOCK.VERTICAL
-      table.insert(lines, note)
+      table.insert(lines, indent .. M.CONSTANTS.BLOCK.VERTICAL ..
+          utils.pad_right("    " .. note_line, block_width - 2) ..
+          M.CONSTANTS.BLOCK.VERTICAL)
     end
   end
 
-  -- Subtasks
+  -- Subtasks with progress bar
   if #task.subtasks > 0 then
+    -- Add subtask header with progress
+    local progress_width = 20
+    local progress_bar = M.render_progress_bar(total_subtasks, completed_subtasks, progress_width)
+    local progress_text = string.format("Subtasks (%d/%d) ", completed_subtasks, total_subtasks)
+    
     table.insert(lines, indent .. M.CONSTANTS.BLOCK.VERTICAL ..
-        utils.pad_right("  Subtasks:", block_width - 2) ..
+        utils.pad_right("  " .. progress_text .. progress_bar, block_width - 2) ..
         M.CONSTANTS.BLOCK.VERTICAL)
     
+    -- Render subtasks
     for i, subtask in ipairs(task.subtasks) do
       local is_last = i == #task.subtasks
       local prefix = is_last and M.CONSTANTS.BLOCK.SUBTASK_LAST or
           M.CONSTANTS.BLOCK.SUBTASK_BRANCH
-      local subtask_status = subtask.done and icons.task_done or
-          icons.task_pending
+      local subtask_status = subtask.done and icons.task_done or icons.task_pending
       
       local subtask_line = indent .. M.CONSTANTS.BLOCK.VERTICAL ..
           utils.pad_right("  " .. prefix .. " " .. subtask_status ..
@@ -149,6 +193,20 @@ function M.render_task_block(task, width, indent, icons)
     end
   end
 
+  -- Add task metadata
+  local metadata = {
+    string.format("Created: %s", os.date("%Y-%m-%d", task.created_at)),
+    string.format("Updated: %s", os.date("%Y-%m-%d", task.updated_at)),
+  }
+  if task.last_completed then
+    table.insert(metadata, string.format("Completed: %s", os.date("%Y-%m-%d", task.last_completed)))
+  end
+  
+  local metadata_str = table.concat(metadata, " " .. M.CONSTANTS.BLOCK.SEPARATOR .. " ")
+  table.insert(lines, indent .. M.CONSTANTS.BLOCK.VERTICAL ..
+      utils.pad_right("  " .. metadata_str, block_width - 2) ..
+      M.CONSTANTS.BLOCK.VERTICAL)
+
   -- Block footer
   local bottom = indent .. M.CONSTANTS.BLOCK.BOTTOM_LEFT ..
       string.rep(M.CONSTANTS.BLOCK.HORIZONTAL, block_width - 2) ..
@@ -156,7 +214,7 @@ function M.render_task_block(task, width, indent, icons)
   table.insert(lines, bottom)
   table.insert(lines, "") -- Spacing
 
-  return lines, highlights, block_start
+  return lines, highlights
 end
 
 function M.setup_buffer_keymaps(lazydo, buf)
@@ -525,6 +583,64 @@ function M.show_quick_edit_menu(lazydo)
       M.edit_task_component(lazydo, choice.value)
     end
   end)
+end
+
+-- Add progress bar rendering
+function M.render_progress_bar(total, completed, width)
+  local progress = completed / total
+  local filled_width = math.floor(width * progress)
+  local empty_width = width - filled_width
+  
+  return string.rep(M.CONSTANTS.BLOCK.PROGRESS_FULL, filled_width) ..
+         string.rep(M.CONSTANTS.BLOCK.PROGRESS_EMPTY, empty_width)
+end
+
+-- Add floating window animations
+function M.animate_window_open(win, opts)
+  local start_width = math.floor(opts.width * 0.5)
+  local start_height = math.floor(opts.height * 0.5)
+  local width_step = (opts.width - start_width) / M.ANIMATIONS.SLIDE_FRAMES
+  local height_step = (opts.height - start_height) / M.ANIMATIONS.SLIDE_FRAMES
+
+  for i = 1, M.ANIMATIONS.SLIDE_FRAMES do
+    local current_width = math.floor(start_width + (width_step * i))
+    local current_height = math.floor(start_height + (height_step * i))
+    
+    vim.api.nvim_win_set_config(win, {
+      width = current_width,
+      height = current_height,
+    })
+    
+    vim.cmd("redraw")
+    vim.loop.sleep(M.ANIMATIONS.SLIDE_DURATION_MS / M.ANIMATIONS.SLIDE_FRAMES)
+  end
+end
+
+-- Add status line
+function M.render_status_line(lazydo)
+  local stats = lazydo:get_task_statistics()
+  local total_width = vim.api.nvim_win_get_width(lazydo.win)
+  
+  -- Create progress bar
+  local progress_width = 20
+  local progress = stats.done / (stats.total > 0 and stats.total or 1)
+  local progress_bar = M.render_progress_bar(stats.total, stats.done, progress_width)
+  
+  -- Format statistics
+  local stats_text = string.format(
+    "Tasks: %d │ Done: %d │ Pending: %d │ Overdue: %d │ Progress: ",
+    stats.total, stats.done, stats.pending, stats.overdue
+  )
+  
+  -- Combine elements
+  local status_line = stats_text .. progress_bar
+  
+  -- Add to virtual text
+  vim.api.nvim_buf_clear_namespace(lazydo.buf, lazydo.ns.virtual, 0, -1)
+  vim.api.nvim_buf_set_extmark(lazydo.buf, lazydo.ns.virtual, 0, 0, {
+    virt_text = {{status_line, "LazyDoStatusLine"}},
+    virt_text_pos = "overlay",
+  })
 end
 
 return M 
