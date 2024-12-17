@@ -11,10 +11,25 @@ LazyDo.is_visible = false
 -- Add setup function for initialization
 ---@param opts? table
 function LazyDo.setup(opts)
-  -- Create singleton instance
+  -- Create singleton instance if it doesn't exist
   if not LazyDo.instance then
-    LazyDo.instance = LazyDo.new(opts)
+    local self = setmetatable({}, { __index = LazyDo })
+    self.opts = vim.tbl_deep_extend("force", LazyDo.default_opts, opts or {})
+    self.tasks = {}
+    self.is_visible = false
+    LazyDo.instance = self
+    
+    -- Initialize storage
+    self:ensure_storage_dir(self.opts.storage.path)
+    self:load_tasks()
+    
+    -- Create commands and keymaps
+    self:create_commands()
+    
+    -- Setup highlights
+    self:setup_highlights()
   end
+  
   return LazyDo.instance
 end
 
@@ -89,27 +104,26 @@ function LazyDo:setup()
     vim.api.nvim_buf_set_option(self.buf, 'bufhidden', 'hide')
     vim.api.nvim_buf_set_option(self.buf, 'swapfile', false)
     vim.api.nvim_buf_set_option(self.buf, 'filetype', 'lazydo')
+    
+    -- Setup buffer autocmds
+    if self.opts.storage.auto_save then
+      vim.api.nvim_create_autocmd("BufLeave", {
+        buffer = self.buf,
+        callback = function()
+          self:save_tasks()
+        end
+      })
+    end
   end
 
-  -- Set up window
+  -- Show the window
   self:show()
-  self:setup_highlights()
-  self:setup_keymaps()
-  self:load_tasks()
-
-  -- Auto-save on buffer close if enabled
-  if self.opts.storage.auto_save then
-    vim.api.nvim_create_autocmd("BufLeave", {
-      buffer = self.buf,
-      callback = function()
-        self:save_tasks()
-      end
-    })
-  end
 end
 
 -- Add global commands and keymaps
 function LazyDo:create_commands()
+  local self = self -- Capture self reference
+  
   -- Create user commands
   vim.api.nvim_create_user_command("LazyDoToggle", function()
     self:toggle()
@@ -121,8 +135,13 @@ function LazyDo:create_commands()
 
   -- Create default keymaps if enabled
   if self.opts.create_keymaps ~= false then
-    vim.keymap.set('n', '<leader>td', function() self:toggle() end, { desc = "Toggle LazyDo" })
-    vim.keymap.set('n', '<leader>ta', function() self:quick_add_task() end, { desc = "Quick Add Task" })
+    vim.keymap.set('n', '<leader>td', function() 
+      self:toggle() 
+    end, { desc = "Toggle LazyDo" })
+    
+    vim.keymap.set('n', '<leader>ta', function() 
+      self:quick_add_task() 
+    end, { desc = "Quick Add Task" })
   end
 end
 
