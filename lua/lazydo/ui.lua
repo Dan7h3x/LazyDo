@@ -82,7 +82,12 @@ function M.create_window(lazydo)
 		vim.api.nvim_win_set_option(win, "winblend", lazydo.opts.ui.winblend or 0)
 		M.setup_buffer_keymaps(lazydo, lazydo.buf)
 		M.setup_auto_save(lazydo)
-		M.render_footer(lazydo)
+		-- M.render_footer(lazydo)
+		vim.schedule(function()
+			if vim.api.nvim_win_is_valid(win) then
+				M.render_footer(lazydo)
+			end
+		end)
 		vim.keymap.set("n", "?", function()
 			lazydo.show_help = not lazydo.show_help
 			lazydo:refresh_display()
@@ -692,7 +697,12 @@ function M.render_footer(lazydo)
 		return
 	end
 
-	local width = vim.api.nvim_win_get_width(lazydo.win)
+	local width
+	if lazydo.win and vim.api.nvim_win_is_valid(lazydo.win) then
+		width = vim.api.nvim_win_get_width(lazydo.win)
+	else
+		width = math.floor(vim.o.columns * (lazydo.opts.ui.width or 0.8))
+	end
 	local footer_lines = {}
 
 	-- Create help sections
@@ -747,28 +757,60 @@ function M.render_footer(lazydo)
 	end
 
 	-- Add lines to buffer
-	local buf_line_count = vim.api.nvim_buf_line_count(lazydo.buf)
-	vim.api.nvim_buf_set_lines(lazydo.buf, buf_line_count, -1, false, footer_lines)
+	-- local buf_line_count = vim.api.nvim_buf_line_count(lazydo.buf)
+	-- vim.api.nvim_buf_set_lines(lazydo.buf, buf_line_count, -1, false, footer_lines)
+	--
+	-- -- Add highlights
+	-- local ns = vim.api.nvim_create_namespace("lazydo_footer")
+	-- for i, line in ipairs(wrapped_help) do
+	-- 	-- Highlight key bindings
+	-- 	for key in line:gmatch("([^:]+):") do
+	-- 		local start_col = line:find(key, 1, true) - 1
+	-- 		vim.api.nvim_buf_add_highlight(lazydo.buf, ns, "LazyDoKey", buf_line_count + i, start_col, start_col + #key)
+	-- 	end
+	-- 	-- Highlight separators
+	-- 	for sep_start in line:gmatch("()│") do
+	-- 		vim.api.nvim_buf_add_highlight(
+	-- 			lazydo.buf,
+	-- 			ns,
+	-- 			"LazyDoSeparator",
+	-- 			buf_line_count + i,
+	-- 			sep_start - 1,
+	-- 			sep_start
+	-- 		)
+	-- 	end
+	-- end
+	local ok, err = pcall(function()
+		local buf_line_count = vim.api.nvim_buf_line_count(lazydo.buf)
+		vim.api.nvim_buf_set_lines(lazydo.buf, buf_line_count, -1, false, footer_lines)
+		local ns = vim.api.nvim_create_namespace("lazydo_footer")
+		for i, line in ipairs(wrapped_help) do
+			for key in line:gmatch("([^:]+):") do
+				local start_col = line:find(key, 1, true) - 1
+				vim.api.nvim_buf_add_highlight(
+					lazydo.buf,
+					ns,
+					"LazyDoKey",
+					buf_line_count + i,
+					start_col,
+					start_col + #key
+				)
+			end
+			for sep_start in line:gmatch("()│") do
+				vim.api.nvim_buf_add_highlight(
+					lazydo.buf,
+					ns,
+					"LazyDoSeparator",
+					buf_line_count + i,
+					sep_start - 1,
+					sep_start
+				)
+			end
+		end
+	end)
 
-	-- Add highlights
-	local ns = vim.api.nvim_create_namespace("lazydo_footer")
-	for i, line in ipairs(wrapped_help) do
-		-- Highlight key bindings
-		for key in line:gmatch("([^:]+):") do
-			local start_col = line:find(key, 1, true) - 1
-			vim.api.nvim_buf_add_highlight(lazydo.buf, ns, "LazyDoKey", buf_line_count + i, start_col, start_col + #key)
-		end
-		-- Highlight separators
-		for sep_start in line:gmatch("()│") do
-			vim.api.nvim_buf_add_highlight(
-				lazydo.buf,
-				ns,
-				"LazyDoSeparator",
-				buf_line_count + i,
-				sep_start - 1,
-				sep_start
-			)
-		end
+	if not ok then
+		vim.notify("Error rendering footer: " .. tostring(err), vim.log.levels.ERROR)
 	end
 end
 
