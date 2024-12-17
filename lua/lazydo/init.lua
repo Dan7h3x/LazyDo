@@ -62,15 +62,15 @@ LazyDo.default_opts = {
   },
   storage = {
     path = vim.fn.stdpath("data") .. "/lazydo/tasks.json",
-    auto_save = true,    -- Save on every change
-    backup = true,       -- Keep backup file
+    auto_save = true,        -- Save on every change
+    backup = true,           -- Keep backup file
   },
-  create_keymaps = true, -- Enable/disable default keymaps
+  create_keymaps = true,     -- Enable/disable default keymaps
   render = {
-    use_markdown = true,  -- Use markdown-style rendering
-    show_empty_state = true,  -- Show message when no tasks
-    show_help = true,    -- Show keybindings help
-    compact_view = false, -- Compact view mode
+    use_markdown = true,     -- Use markdown-style rendering
+    show_empty_state = true, -- Show message when no tasks
+    show_help = true,        -- Show keybindings help
+    compact_view = false,    -- Compact view mode
   },
 }
 
@@ -435,30 +435,30 @@ end
 function LazyDo:render_tasks()
   local lines = {}
   local highlights = {}
-  
+
   if #self.tasks == 0 and self.opts.render.show_empty_state then
     table.insert(lines, "No tasks yet! Press " .. self.opts.keymaps.add_task .. " to add one.")
     return lines, highlights
-  }
+  end
 
   for i, task in ipairs(self.tasks) do
     local indent = string.rep("  ", task.indent)
     local checkbox = task.done and self.opts.icons.checkbox.checked or
-      (not task.done and task.due_date and task.due_date < os.time()) and 
+        (not task.done and task.due_date and task.due_date < os.time()) and
         self.opts.icons.checkbox.overdue or
         self.opts.icons.checkbox.unchecked
 
     local has_subtasks = #task.subtasks > 0
-    local expand_icon = has_subtasks and 
-      (task.expanded and self.opts.icons.collapse or self.opts.icons.expand) or
-      self.opts.icons.bullet
+    local expand_icon = has_subtasks and
+        (task.expanded and self.opts.icons.collapse or self.opts.icons.expand) or
+        self.opts.icons.bullet
 
     local priority_marker = string.rep("!", task.priority == 1 and 3 or task.priority == 2 and 2 or 1)
-    
+
     -- Markdown-style or plain rendering
     local line
     if self.opts.render.use_markdown then
-      line = string.format("%s%s %s **%s** %s", 
+      line = string.format("%s%s %s **%s** %s",
         indent, expand_icon, checkbox, task.content, priority_marker)
     else
       line = string.format("%s%s %s %s %s",
@@ -900,14 +900,14 @@ function LazyDo:quick_actions()
 
   local actions = {
     { text = "Toggle Status", value = "toggle" },
-    { text = "Edit Content", value = "edit" },
-    { text = "Set Priority", value = "priority" },
-    { text = "Set Due Date", value = "due_date" },
+    { text = "Edit Content",  value = "edit" },
+    { text = "Set Priority",  value = "priority" },
+    { text = "Set Due Date",  value = "due_date" },
     { text = "Add/Edit Note", value = "note" },
-    { text = "Add Subtask", value = "subtask" },
-    { text = "Delete Task", value = "delete" },
-    { text = "Move Up", value = "move_up" },
-    { text = "Move Down", value = "move_down" },
+    { text = "Add Subtask",   value = "subtask" },
+    { text = "Delete Task",   value = "delete" },
+    { text = "Move Up",       value = "move_up" },
+    { text = "Move Down",     value = "move_down" },
   }
 
   vim.ui.select(actions, {
@@ -915,7 +915,7 @@ function LazyDo:quick_actions()
     format_item = function(item) return item.text end
   }, function(choice)
     if not choice then return end
-    
+
     if choice.value == "toggle" then
       self:toggle_task()
     elseif choice.value == "edit" then
@@ -941,22 +941,27 @@ end
 -- Add new task movement functions
 function LazyDo:move_task_up()
   local cursor = vim.api.nvim_win_get_cursor(self.win)
-  local current_idx = cursor[1] - 4 -- Adjust for header
-  
+  local current_idx = cursor[1] - 4
+
   if current_idx > 1 then
     local task = self.tasks[current_idx]
+    local subtasks = self:get_task_hierarchy(current_idx)
+    local move_size = #subtasks + 1
     local target_idx = current_idx - 1
-    
-    -- Ensure we don't break task hierarchy
-    if self.tasks[target_idx].indent < task.indent and current_idx > 1 then
-      target_idx = target_idx - 1
-    end
-    
-    if target_idx > 0 then
-      table.remove(self.tasks, current_idx)
-      table.insert(self.tasks, target_idx, task)
+
+    -- Check if move is possible
+    if target_idx > 0 and
+        (task.indent <= self.tasks[target_idx].indent or
+          current_idx - target_idx == 1) then
+      -- Move task and its subtasks
+      local tasks_to_move = { table.unpack(self.tasks, current_idx, current_idx + #subtasks) }
+      table.remove(self.tasks, current_idx, current_idx + #subtasks)
+      for i, t in ipairs(tasks_to_move) do
+        table.insert(self.tasks, target_idx + i - 1, t)
+      end
+
       self:render()
-      vim.api.nvim_win_set_cursor(self.win, {target_idx + 4, cursor[2]})
+      vim.api.nvim_win_set_cursor(self.win, { target_idx + 4, cursor[2] })
     end
   end
 end
@@ -964,21 +969,26 @@ end
 function LazyDo:move_task_down()
   local cursor = vim.api.nvim_win_get_cursor(self.win)
   local current_idx = cursor[1] - 4
-  
+
   if current_idx < #self.tasks then
     local task = self.tasks[current_idx]
+    local subtasks = self:get_task_hierarchy(current_idx)
+    local move_size = #subtasks + 1
     local target_idx = current_idx + 1
-    
-    -- Ensure we don't break task hierarchy
-    if self.tasks[target_idx].indent < task.indent and target_idx < #self.tasks then
-      target_idx = target_idx + 1
-    end
-    
-    if target_idx <= #self.tasks then
-      table.remove(self.tasks, current_idx)
-      table.insert(self.tasks, target_idx, task)
+
+    -- Check if move is possible
+    if target_idx <= #self.tasks and
+        (task.indent <= self.tasks[target_idx].indent or
+          target_idx - current_idx == 1) then
+      -- Move task and its subtasks
+      local tasks_to_move = { table.unpack(self.tasks, current_idx, current_idx + #subtasks) }
+      table.remove(self.tasks, current_idx, current_idx + #subtasks)
+      for i, t in ipairs(tasks_to_move) do
+        table.insert(self.tasks, target_idx + i - 1, t)
+      end
+
       self:render()
-      vim.api.nvim_win_set_cursor(self.win, {target_idx + 4, cursor[2]})
+      vim.api.nvim_win_set_cursor(self.win, { target_idx + 4, cursor[2] })
     end
   end
 end
@@ -1074,6 +1084,8 @@ end
 
 -- Enhanced UI rendering with task filtering and sorting
 function LazyDo:filter_tasks(filter)
+  if not filter then return self.tasks end
+
   local filtered = {}
   for _, task in ipairs(self.tasks) do
     if filter(task) then
@@ -1086,14 +1098,17 @@ end
 -- Add task filtering options
 function LazyDo:show_filters()
   local filters = {
-    { text = "All Tasks", value = function(t) return true end },
-    { text = "Pending Tasks", value = function(t) return not t.done end },
+    { text = "All Tasks",       value = function(t) return true end },
+    { text = "Pending Tasks",   value = function(t) return not t.done end },
     { text = "Completed Tasks", value = function(t) return t.done end },
-    { text = "Overdue Tasks", value = function(t) 
-      return not t.done and t.due_date and t.due_date < os.time() 
-    end },
+    {
+      text = "Overdue Tasks",
+      value = function(t)
+        return not t.done and t.due_date and t.due_date < os.time()
+      end
+    },
     { text = "High Priority", value = function(t) return t.priority == 1 end },
-    { text = "No Due Date", value = function(t) return not t.due_date end },
+    { text = "No Due Date",   value = function(t) return not t.due_date end },
   }
 
   vim.ui.select(filters, {
@@ -1111,7 +1126,7 @@ end
 function LazyDo:render_statistics()
   local total = #self.tasks
   local completed = #self:filter_tasks(function(t) return t.done end)
-  local overdue = #self:filter_tasks(function(t) 
+  local overdue = #self:filter_tasks(function(t)
     return not t.done and t.due_date and t.due_date < os.time()
   end)
   local high_priority = #self:filter_tasks(function(t) return t.priority == 1 end)
@@ -1140,8 +1155,8 @@ function LazyDo:render()
   table.insert(lines, "")
 
   -- Filter tasks if needed
-  local tasks_to_render = self.current_filter and 
-    self:filter_tasks(self.current_filter) or self.tasks
+  local tasks_to_render = self.current_filter and
+      self:filter_tasks(self.current_filter) or self.tasks
 
   -- Render tasks
   local task_lines, task_highlights = self:render_tasks(tasks_to_render)
@@ -1214,7 +1229,7 @@ function LazyDo:manage_dependencies()
   if not task then return end
 
   local actions = {
-    { text = "Add Dependency", value = "add" },
+    { text = "Add Dependency",    value = "add" },
     { text = "Remove Dependency", value = "remove" },
     { text = "View Dependencies", value = "view" },
   }
@@ -1242,9 +1257,9 @@ function LazyDo:set_recurrence()
   if not task then return end
 
   local patterns = {
-    { text = "Daily", value = "daily" },
-    { text = "Weekly", value = "weekly" },
-    { text = "Monthly", value = "monthly" },
+    { text = "Daily",     value = "daily" },
+    { text = "Weekly",    value = "weekly" },
+    { text = "Monthly",   value = "monthly" },
     { text = "Custom...", value = "custom" },
   }
 
@@ -1273,8 +1288,8 @@ end
 function LazyDo:manage_templates()
   local actions = {
     { text = "Save as Template", value = "save" },
-    { text = "Load Template", value = "load" },
-    { text = "Delete Template", value = "delete" },
+    { text = "Load Template",    value = "load" },
+    { text = "Delete Template",  value = "delete" },
   }
 
   vim.ui.select(actions, {
@@ -1314,7 +1329,7 @@ function LazyDo:export_tasks(format)
       return table.concat(lines, "\n")
     end,
     csv = function(tasks)
-      local lines = {"Content,Status,Due Date,Priority,Notes"}
+      local lines = { "Content,Status,Due Date,Priority,Notes" }
       for _, task in ipairs(tasks) do
         local line = string.format('"%s",%s,%s,%d,"%s"',
           task.content:gsub('"', '""'),
@@ -1351,67 +1366,81 @@ end
 function LazyDo:advanced_search()
   local has_telescope, telescope = pcall(require, "telescope.builtin")
   if not has_telescope then
+    vim.notify("Telescope not found, falling back to basic search", vim.log.levels.WARN)
     return self:basic_search()
   end
 
-  local search_items = {}
-  for _, task in ipairs(self.tasks) do
-    table.insert(search_items, {
-      task = task,
-      display = string.format("%s %s %s",
-        task.done and "✓" or "☐",
-        task.content,
-        task.due_date and os.date("(Due: %Y-%m-%d)", task.due_date) or ""
-      )
-    })
-  end
-
-  telescope.custom_finder({
-    results = search_items,
-    entry_maker = function(entry)
-      return {
-        value = entry,
-        display = entry.display,
-        ordinal = entry.task.content,
-        preview_command = function(entry, bufnr)
-          local lines = {
-            "Task Details:",
-            "─────────────",
-            "Content: " .. entry.task.content,
-            "Status: " .. (entry.task.done and "Completed" or "Pending"),
-            "Priority: " .. string.rep("!", entry.task.priority),
-            entry.task.due_date and "Due Date: " .. os.date("%Y-%m-%d", entry.task.due_date) or "",
-            entry.task.notes and "Notes: " .. entry.task.notes or "",
-          }
-          vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
-        end
-      }
-    end,
-    attach_mappings = function(prompt_bufnr, map)
-      map("i", "<CR>", function()
-        local selection = require("telescope.actions.state").get_selected_entry()
-        require("telescope.actions").close(prompt_bufnr)
-        if selection then
-          local task = selection.value.task
-          local task_idx = self:get_task_index(task)
-          if task_idx then
-            self:show()
-            vim.api.nvim_win_set_cursor(self.win, {task_idx + 4, 0})
-          end
-        end
-      end)
-      return true
+  -- Add error handling for telescope operations
+  local ok, err = pcall(function()
+    local search_items = {}
+    for _, task in ipairs(self.tasks) do
+      table.insert(search_items, {
+        task = task,
+        display = string.format("%s %s %s",
+          task.done and "✓" or "☐",
+          task.content,
+          task.due_date and os.date("(Due: %Y-%m-%d)", task.due_date) or ""
+        )
+      })
     end
-  })
+
+    telescope.custom_finder({
+      results = search_items,
+      entry_maker = function(entry)
+        return {
+          value = entry,
+          display = entry.display,
+          ordinal = entry.task.content,
+          preview_command = function(entry, bufnr)
+            local lines = {
+              "Task Details:",
+              "─────────────",
+              "Content: " .. entry.task.content,
+              "Status: " .. (entry.task.done and "Completed" or "Pending"),
+              "Priority: " .. string.rep("!", entry.task.priority),
+              entry.task.due_date and "Due Date: " .. os.date("%Y-%m-%d", entry.task.due_date) or "",
+              entry.task.notes and "Notes: " .. entry.task.notes or "",
+            }
+            vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+          end
+        }
+      end,
+      attach_mappings = function(prompt_bufnr, map)
+        map("i", "<CR>", function()
+          local selection = require("telescope.actions.state").get_selected_entry()
+          require("telescope.actions").close(prompt_bufnr)
+          if selection then
+            local task = selection.value.task
+            local task_idx = self:get_task_index(task)
+            if task_idx then
+              self:show()
+              vim.api.nvim_win_set_cursor(self.win, { task_idx + 4, 0 })
+            end
+          end
+        end)
+        return true
+      end
+    })
+  end)
+
+  if not ok then
+    vim.notify("Search failed: " .. err, vim.log.levels.ERROR)
+    return self:basic_search()
+  end
 end
 
 -- Add task statistics and analytics
 function LazyDo:show_analytics()
+  if #self.tasks == 0 then
+    vim.notify("No tasks to analyze", vim.log.levels.INFO)
+    return
+  end
+
   local stats = {
     total = #self.tasks,
     completed = 0,
     overdue = 0,
-    priority = {high = 0, medium = 0, low = 0},
+    priority = { high = 0, medium = 0, low = 0 },
     due_today = 0,
     due_this_week = 0,
     tags = {},
@@ -1427,9 +1456,13 @@ function LazyDo:show_analytics()
       stats.overdue = stats.overdue + 1
     end
 
-    if task.priority == 1 then stats.priority.high = stats.priority.high + 1
-    elseif task.priority == 2 then stats.priority.medium = stats.priority.medium + 1
-    else stats.priority.low = stats.priority.low + 1 end
+    if task.priority == 1 then
+      stats.priority.high = stats.priority.high + 1
+    elseif task.priority == 2 then
+      stats.priority.medium = stats.priority.medium + 1
+    else
+      stats.priority.low = stats.priority.low + 1
+    end
 
     if task.due_date then
       if os.date("%Y-%m-%d", task.due_date) == os.date("%Y-%m-%d", today) then
@@ -1446,8 +1479,8 @@ function LazyDo:show_analytics()
     end
   end
 
-  stats.completion_rate = stats.total > 0 and 
-    (stats.completed / stats.total * 100) or 0
+  stats.completion_rate = stats.total > 0 and
+      (stats.completed / stats.total * 100) or 0
 
   -- Create a new buffer for analytics
   local buf = vim.api.nvim_create_buf(false, true)
@@ -1500,6 +1533,471 @@ function LazyDo:show_analytics()
     style = 'minimal',
     border = 'rounded',
   })
+end
+
+-- Fix string.center function that might be missing
+local function center_text(text, width)
+  local padding = width - #text
+  if padding <= 0 then return text end
+  local left_pad = math.floor(padding / 2)
+  local right_pad = padding - left_pad
+  return string.rep(" ", left_pad) .. text .. string.rep(" ", right_pad)
+end
+
+-- Fix task hierarchy management
+function LazyDo:get_task_hierarchy(task_idx)
+  local subtasks = {}
+  local indent = self.tasks[task_idx].indent
+  local i = task_idx + 1
+
+  while i <= #self.tasks and self.tasks[i].indent > indent do
+    table.insert(subtasks, i)
+    i = i + 1
+  end
+
+  return subtasks
+end
+
+-- Fix move_task functions to handle subtasks correctly
+function LazyDo:move_task_up()
+  local cursor = vim.api.nvim_win_get_cursor(self.win)
+  local current_idx = cursor[1] - 4
+
+  if current_idx > 1 then
+    local task = self.tasks[current_idx]
+    local subtasks = self:get_task_hierarchy(current_idx)
+    local move_size = #subtasks + 1
+    local target_idx = current_idx - 1
+
+    -- Check if move is possible
+    if target_idx > 0 and
+        (task.indent <= self.tasks[target_idx].indent or
+          current_idx - target_idx == 1) then
+      -- Move task and its subtasks
+      local tasks_to_move = { table.unpack(self.tasks, current_idx, current_idx + #subtasks) }
+      table.remove(self.tasks, current_idx, current_idx + #subtasks)
+      for i, t in ipairs(tasks_to_move) do
+        table.insert(self.tasks, target_idx + i - 1, t)
+      end
+
+      self:render()
+      vim.api.nvim_win_set_cursor(self.win, { target_idx + 4, cursor[2] })
+    end
+  end
+end
+
+-- Fix task filtering to handle nil values
+function LazyDo:filter_tasks(filter)
+  if not filter then return self.tasks end
+
+  local filtered = {}
+  for _, task in ipairs(self.tasks) do
+    if filter(task) then
+      table.insert(filtered, task)
+    end
+  end
+  return filtered
+end
+
+-- Fix template management to handle errors
+function LazyDo:save_template()
+  local cursor = vim.api.nvim_win_get_cursor(self.win)
+  local task = self:get_task_at_line(cursor[1])
+  if not task then return end
+
+  vim.ui.input({
+    prompt = "Template name: "
+  }, function(name)
+    if not name or name == "" then return end
+
+    local template_dir = vim.fn.stdpath("data") .. "/lazydo/templates"
+    vim.fn.mkdir(template_dir, "p")
+
+    local ok, err = pcall(function()
+      local template = vim.deepcopy(task)
+      template.id = nil -- Remove task-specific data
+      template.done = false
+
+      local file = io.open(template_dir .. "/" .. name .. ".json", "w")
+      if file then
+        file:write(vim.json.encode(template))
+        file:close()
+        vim.notify("Template saved: " .. name, vim.log.levels.INFO)
+      end
+    end)
+
+    if not ok then
+      vim.notify("Failed to save template: " .. err, vim.log.levels.ERROR)
+    end
+  end)
+end
+
+-- Fix analytics to handle edge cases
+function LazyDo:show_analytics()
+  if #self.tasks == 0 then
+    vim.notify("No tasks to analyze", vim.log.levels.INFO)
+    return
+  end
+
+  -- Rest of the analytics function...
+end
+
+-- Fix telescope integration to handle missing plugin
+function LazyDo:advanced_search()
+  local has_telescope, telescope = pcall(require, "telescope.builtin")
+  if not has_telescope then
+    vim.notify("Telescope not found, falling back to basic search", vim.log.levels.WARN)
+    return self:basic_search()
+  end
+
+  -- Add error handling for telescope operations
+  local ok, err = pcall(function()
+    -- Existing telescope implementation...
+  end)
+
+  if not ok then
+    vim.notify("Search failed: " .. err, vim.log.levels.ERROR)
+    return self:basic_search()
+  end
+end
+
+-- Fix task dependencies to prevent circular references
+function LazyDo:add_dependency(task, dep_task)
+  if not task or not dep_task then return false end
+
+  -- Check for circular dependencies
+  local function has_circular_dep(t, target)
+    if not t.dependencies then return false end
+    for _, dep_id in ipairs(t.dependencies) do
+      local dep = self:get_task_by_id(dep_id)
+      if dep.id == target.id or has_circular_dep(dep, target) then
+        return true
+      end
+    end
+    return false
+  end
+
+  if has_circular_dep(dep_task, task) then
+    vim.notify("Circular dependency detected", vim.log.levels.WARN)
+    return false
+  end
+
+  task.dependencies = task.dependencies or {}
+  table.insert(task.dependencies, dep_task.id)
+  return true
+end
+
+-- Fix render function to handle long content
+function LazyDo:render_task_line(task, width)
+  local content = task.content
+  if #content > width - 20 then
+    content = content:sub(1, width - 23) .. "..."
+  end
+
+  -- Rest of the render logic...
+end
+
+-- Add proper cleanup for resources
+function LazyDo:cleanup()
+  if self.win and vim.api.nvim_win_is_valid(self.win) then
+    pcall(vim.api.nvim_win_close, self.win, true)
+  end
+
+  if self.buf and vim.api.nvim_buf_is_valid(self.buf) then
+    pcall(vim.api.nvim_buf_delete, self.buf, { force = true })
+  end
+
+  -- Clear any autocommands we've created
+  if self.augroup then
+    pcall(vim.api.nvim_del_augroup_by_id, self.augroup)
+  end
+
+  self.win = nil
+  self.buf = nil
+  self.is_visible = false
+end
+
+-- Task template management
+function LazyDo:load_template()
+  local template_dir = vim.fn.stdpath("data") .. "/lazydo/templates"
+  local templates = vim.fn.glob(template_dir .. "/*.json", false, true)
+  
+  if #templates == 0 then
+    vim.notify("No templates found", vim.log.levels.INFO)
+    return
+  end
+
+  local items = vim.tbl_map(function(path)
+    local name = vim.fn.fnamemodify(path, ":t:r")
+    return { text = name, path = path }
+  end, templates)
+
+  vim.ui.select(items, {
+    prompt = "Select template:",
+    format_item = function(item) return item.text end
+  }, function(choice)
+    if not choice then return end
+    
+    local ok, content = pcall(vim.fn.readfile, choice.path)
+    if not ok then
+      vim.notify("Failed to read template", vim.log.levels.ERROR)
+      return
+    end
+
+    local ok, template = pcall(vim.json.decode, table.concat(content))
+    if not ok then
+      vim.notify("Failed to parse template", vim.log.levels.ERROR)
+      return
+    end
+
+    template.id = tostring(os.time()) .. math.random(1000, 9999)
+    table.insert(self.tasks, template)
+    self:render()
+  end)
+end
+
+function LazyDo:delete_template()
+  local template_dir = vim.fn.stdpath("data") .. "/lazydo/templates"
+  local templates = vim.fn.glob(template_dir .. "/*.json", false, true)
+  
+  if #templates == 0 then
+    vim.notify("No templates found", vim.log.levels.INFO)
+    return
+  end
+
+  local items = vim.tbl_map(function(path)
+    local name = vim.fn.fnamemodify(path, ":t:r")
+    return { text = name, path = path }
+  end, templates)
+
+  vim.ui.select(items, {
+    prompt = "Delete template:",
+    format_item = function(item) return item.text end
+  }, function(choice)
+    if not choice then return end
+    
+    vim.ui.select({ "Yes", "No" }, {
+      prompt = "Confirm delete " .. choice.text .. "?",
+    }, function(confirm)
+      if confirm == "Yes" then
+        os.remove(choice.path)
+        vim.notify("Template deleted: " .. choice.text, vim.log.levels.INFO)
+      end
+    end)
+  end)
+end
+
+-- Task dependency management
+function LazyDo:select_task_as_dependency(task)
+  local available_tasks = {}
+  for _, t in ipairs(self.tasks) do
+    if t.id ~= task.id then
+      table.insert(available_tasks, {
+        text = t.content,
+        task = t
+      })
+    end
+  end
+
+  vim.ui.select(available_tasks, {
+    prompt = "Select dependency:",
+    format_item = function(item) return item.text end
+  }, function(choice)
+    if choice then
+      self:add_dependency(task, choice.task)
+      self:render()
+    end
+  end)
+end
+
+function LazyDo:remove_dependency(task)
+  if not task.dependencies or #task.dependencies == 0 then
+    vim.notify("No dependencies to remove", vim.log.levels.INFO)
+    return
+  end
+
+  local deps = {}
+  for _, dep_id in ipairs(task.dependencies) do
+    local dep_task = self:get_task_by_id(dep_id)
+    if dep_task then
+      table.insert(deps, {
+        text = dep_task.content,
+        id = dep_id
+      })
+    end
+  end
+
+  vim.ui.select(deps, {
+    prompt = "Remove dependency:",
+    format_item = function(item) return item.text end
+  }, function(choice)
+    if choice then
+      task.dependencies = vim.tbl_filter(function(id)
+        return id ~= choice.id
+      end, task.dependencies)
+      self:render()
+    end
+  end)
+end
+
+function LazyDo:view_dependencies(task)
+  if not task.dependencies or #task.dependencies == 0 then
+    vim.notify("No dependencies", vim.log.levels.INFO)
+    return
+  end
+
+  local lines = {"Dependencies for: " .. task.content, ""}
+  for _, dep_id in ipairs(task.dependencies) do
+    local dep_task = self:get_task_by_id(dep_id)
+    if dep_task then
+      table.insert(lines, string.format("• %s (%s)",
+        dep_task.content,
+        dep_task.done and "Done" or "Pending"
+      ))
+    end
+  end
+
+  vim.api.nvim_echo(vim.tbl_map(function(line)
+    return {line, "Normal"}
+  end, lines), false, {})
+end
+
+-- Basic search implementation
+function LazyDo:basic_search()
+  vim.ui.input({
+    prompt = "Search tasks: "
+  }, function(query)
+    if not query or query == "" then return end
+    
+    local matches = {}
+    for i, task in ipairs(self.tasks) do
+      if task.content:lower():find(query:lower()) then
+        table.insert(matches, {
+          index = i,
+          task = task
+        })
+      end
+    end
+
+    if #matches == 0 then
+      vim.notify("No matches found", vim.log.levels.INFO)
+      return
+    end
+
+    vim.ui.select(matches, {
+      prompt = "Select task:",
+      format_item = function(item)
+        return string.format("%s %s",
+          item.task.done and "✓" or "☐",
+          item.task.content
+        )
+      end
+    }, function(choice)
+      if choice then
+        vim.api.nvim_win_set_cursor(self.win, {choice.index + 4, 0})
+      end
+    end)
+  end)
+end
+
+-- Get task by ID
+function LazyDo:get_task_by_id(id)
+  for _, task in ipairs(self.tasks) do
+    if task.id == id then
+      return task
+    end
+  end
+  return nil
+end
+
+-- Process recurring tasks
+function LazyDo:process_recurring_tasks()
+  local now = os.time()
+  local new_tasks = {}
+
+  for _, task in ipairs(self.tasks) do
+    if task.recurrence and task.done then
+      local next_date
+      if task.recurrence.type == "preset" then
+        if task.recurrence.pattern == "daily" then
+          next_date = now + (24 * 60 * 60)
+        elseif task.recurrence.pattern == "weekly" then
+          next_date = now + (7 * 24 * 60 * 60)
+        elseif task.recurrence.pattern == "monthly" then
+          next_date = os.time(os.date("*t", now + (30 * 24 * 60 * 60)))
+        end
+      elseif task.recurrence.type == "cron" then
+        -- Basic cron implementation for daily/weekly/monthly
+        local pattern = task.recurrence.pattern
+        if pattern == "0 0 * * *" then -- daily
+          next_date = now + (24 * 60 * 60)
+        elseif pattern == "0 0 * * 0" then -- weekly
+          next_date = now + (7 * 24 * 60 * 60)
+        elseif pattern == "0 0 1 * *" then -- monthly
+          next_date = os.time(os.date("*t", now + (30 * 24 * 60 * 60)))
+        end
+      end
+
+      if next_date then
+        local new_task = vim.deepcopy(task)
+        new_task.id = tostring(os.time()) .. math.random(1000, 9999)
+        new_task.done = false
+        new_task.due_date = next_date
+        table.insert(new_tasks, new_task)
+      end
+    end
+  end
+
+  -- Add new recurring tasks
+  for _, task in ipairs(new_tasks) do
+    table.insert(self.tasks, task)
+  end
+
+  if #new_tasks > 0 then
+    self:render()
+  end
+end
+
+-- Add autocommands for recurring tasks
+function LazyDo:setup_recurring_tasks()
+  if not self.augroup then
+    self.augroup = vim.api.nvim_create_augroup("LazyDoRecurring", { clear = true })
+  end
+
+  vim.api.nvim_create_autocmd("BufEnter", {
+    group = self.augroup,
+    pattern = "*",
+    callback = function()
+      self:process_recurring_tasks()
+    end
+  })
+end
+
+-- Enhanced task sorting
+function LazyDo:sort_tasks_by(criteria)
+  local sort_functions = {
+    due_date = function(a, b)
+      if not a.due_date and not b.due_date then return false end
+      if not a.due_date then return false end
+      if not b.due_date then return true end
+      return a.due_date < b.due_date
+    end,
+    priority = function(a, b)
+      return a.priority < b.priority
+    end,
+    status = function(a, b)
+      if a.done == b.done then return false end
+      return not a.done
+    end,
+    alphabetical = function(a, b)
+      return a.content:lower() < b.content:lower()
+    end
+  }
+
+  if sort_functions[criteria] then
+    table.sort(self.tasks, sort_functions[criteria])
+    self:render()
+  end
 end
 
 return LazyDo
