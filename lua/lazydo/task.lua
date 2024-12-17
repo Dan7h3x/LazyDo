@@ -12,7 +12,7 @@ function M.Task.new(content, opts)
 	self.priority = opts.priority or 2
 	self.due_date = opts.due_date
 	self.notes = opts.notes
-	self.subtasks = { "Subtask 1" }
+	self.subtasks = {}
 	self.indent = opts.indent or 0
 	self.created_at = os.time()
 	self.updated_at = os.time()
