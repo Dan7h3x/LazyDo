@@ -696,7 +696,7 @@ function M.render_footer(lazydo)
 	if not lazydo or not lazydo.buf then
 		return
 	end
-
+	vim.api.nvim_buf_set_option(lazydo.buf,"modifiable",true)
 	local width
 	if lazydo.win and vim.api.nvim_win_is_valid(lazydo.win) then
 		width = vim.api.nvim_win_get_width(lazydo.win)
@@ -783,7 +783,7 @@ function M.render_footer(lazydo)
 			end
 		end
 	end)
-
+	vim.api.nvim_buf_set_option(lazydo.buf,"modifiable",false)
 	if not ok then
 		vim.notify("Error rendering footer: " .. tostring(err), vim.log.levels.ERROR)
 	end
