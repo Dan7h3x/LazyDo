@@ -81,6 +81,9 @@ function M.create_window(lazydo)
   if win then
     lazydo.win = win  -- Set the window handle first
     vim.api.nvim_win_set_option(win, 'winblend', lazydo.opts.ui.winblend or 0)
+    
+    -- Setup buffer options
+    vim.api.nvim_buf_set_option(lazydo.buf, 'modifiable', true)
     M.setup_buffer_keymaps(lazydo, lazydo.buf)
     
     -- Setup auto-save
@@ -670,6 +673,47 @@ function M.render_status_line(lazydo)
   })
 end
 
+-- Add buffer rendering helper
+function M.safe_buffer_update(buf, start_line, end_line, lines, opts)
+  opts = opts or {}
+  
+  -- Save current modifiable state
+  local was_modifiable = vim.api.nvim_buf_get_option(buf, 'modifiable')
+  
+  local ok, err = pcall(function()
+    -- Make buffer modifiable
+    vim.api.nvim_buf_set_option(buf, 'modifiable', true)
+    
+    -- Update lines
+    vim.api.nvim_buf_set_lines(buf, start_line, end_line, false, lines)
+    
+    -- Apply any highlights
+    if opts.highlights then
+      local ns = vim.api.nvim_create_namespace(opts.namespace or 'lazydo_highlights')
+      vim.api.nvim_buf_clear_namespace(buf, ns, start_line, end_line)
+      
+      for _, hl in ipairs(opts.highlights) do
+        vim.api.nvim_buf_add_highlight(buf, ns, hl.group, start_line + hl.line, hl.col_start, hl.col_end)
+      end
+    end
+    
+    -- Restore modifiable state if it was false
+    if not was_modifiable then
+      vim.api.nvim_buf_set_option(buf, 'modifiable', false)
+    end
+  end)
+
+  if not ok then
+    vim.notify("Buffer update failed: " .. tostring(err), vim.log.levels.ERROR)
+    -- Ensure we restore modifiable state even on error
+    if not was_modifiable then
+      pcall(vim.api.nvim_buf_set_option, buf, 'modifiable', false)
+    end
+  end
+  
+  return ok
+end
+
 function M.render_footer(lazydo)
   if not lazydo or not lazydo.buf then return end
   
@@ -678,86 +722,115 @@ function M.render_footer(lazydo)
   if lazydo.win and vim.api.nvim_win_is_valid(lazydo.win) then
     width = vim.api.nvim_win_get_width(lazydo.win)
   else
-    -- Fallback to a default width or calculate from opts
     width = math.floor(vim.o.columns * (lazydo.opts.ui.width or 0.8))
   end
 
   local footer_lines = {}
+  local highlights = {}
 
-  -- Create help sections
+  -- Create compact sections for better space usage
   local sections = {
     {
-      title = "Navigation",
       items = {
-        { key = "j/k", desc = "Move up/down" },
-        { key = "h/l", desc = "Collapse/Expand" },
-        { key = "gg/G", desc = "Go to top/bottom" },
+        { key = "j/k", desc = "↕" },
+        { key = "h/l", desc = "↔" },
+        { key = "gg/G", desc = "⇕" },
       }
     },
     {
-      title = "Task Actions",
       items = {
-        { key = "<Space>", desc = "Toggle done" },
-        { key = "e", desc = "Edit task" },
-        { key = "dd", desc = "Delete task" },
-        { key = "a", desc = "Add task" },
-        { key = "A", desc = "Add subtask" },
+        { key = "SPC", desc = "✓" },
+        { key = "e", desc = "Edit" },
+        { key = "dd", desc = "Del" },
+        { key = "a", desc = "Add" },
       }
     },
     {
-      title = "Quick Actions",
       items = {
-        { key = "n", desc = "Add note" },
-        { key = "d", desc = "Set due date" },
-        { key = "</>", desc = "Change priority" },
-        { key = "q", desc = "Close window" },
-        { key = "?", desc = "Toggle help" },
+        { key = "n", desc = "Note" },
+        { key = "d", desc = "Date" },
+        { key = "</>", desc = "Pri" },
+        { key = "?", desc = "Help" },
       }
     }
   }
 
-  -- Render footer
+  -- Add separator line
   table.insert(footer_lines, string.rep("─", width))
-  
-  -- Create compact help line
+
+  -- Create compact help line with better formatting
   local help_items = {}
+  local current_line_items = {}
+  local current_width = 0
+  local max_item_width = math.floor(width / 4) -- Allow 4 items per line
+
   for _, section in ipairs(sections) do
     for _, item in ipairs(section.items) do
-      table.insert(help_items, string.format("%s:%s", item.key, item.desc))
+      local item_text = string.format("%s:%s", item.key, item.desc)
+      local item_width = vim.fn.strdisplaywidth(item_text) + 3 -- +3 for separator
+
+      if current_width + item_width > width - 4 then
+        -- Start new line
+        table.insert(help_items, table.concat(current_line_items, " │ "))
+        current_line_items = {}
+        current_width = 0
+      end
+
+      table.insert(current_line_items, item_text)
+      current_width = current_width + item_width
+    end
+    
+    -- Add section separator if not last section
+    if #current_line_items > 0 then
+      table.insert(current_line_items, "")
     end
   end
-  
-  -- Split help items into multiple lines if needed
-  local help_text = table.concat(help_items, " │ ")
-  local wrapped_help = utils.word_wrap(help_text, width - 4)
-  
-  for _, line in ipairs(wrapped_help) do
+
+  -- Add remaining items
+  if #current_line_items > 0 then
+    table.insert(help_items, table.concat(current_line_items, " │ "))
+  end
+
+  -- Add help lines with proper padding
+  for _, line in ipairs(help_items) do
     table.insert(footer_lines, "  " .. line)
   end
 
-  -- Add lines to buffer safely
-  local ok, err = pcall(function()
-    local buf_line_count = vim.api.nvim_buf_line_count(lazydo.buf)
-    vim.api.nvim_buf_set_lines(lazydo.buf, buf_line_count, -1, false, footer_lines)
+  -- Calculate where to insert footer
+  local buf_line_count = vim.api.nvim_buf_line_count(lazydo.buf)
+  local footer_start = buf_line_count
 
-    -- Add highlights
-    local ns = vim.api.nvim_create_namespace('lazydo_footer')
-    for i, line in ipairs(wrapped_help) do
-      -- Highlight key bindings
-      for key in line:gmatch("([^:]+):") do
-        local start_col = line:find(key, 1, true) - 1
-        vim.api.nvim_buf_add_highlight(lazydo.buf, ns, "LazyDoKey", buf_line_count + i, start_col, start_col + #key)
-      end
-      -- Highlight separators
-      for sep_start in line:gmatch("()│") do
-        vim.api.nvim_buf_add_highlight(lazydo.buf, ns, "LazyDoSeparator", buf_line_count + i, sep_start - 1, sep_start)
-      end
+  -- Prepare highlights
+  local highlight_data = {
+    namespace = 'lazydo_footer',
+    highlights = {}
+  }
+
+  -- Add highlights for each line
+  for i, line in ipairs(footer_lines) do
+    local line_idx = i - 1
+    -- Highlight keys
+    for key in line:gmatch("([^:]+):") do
+      table.insert(highlight_data.highlights, {
+        group = "LazyDoKey",
+        line = line_idx,
+        col_start = line:find(key, 1, true) - 1,
+        col_end = line:find(key, 1, true) - 1 + #key
+      })
     end
-  end)
-
-  if not ok then
-    vim.notify("Error rendering footer: " .. tostring(err), vim.log.levels.ERROR)
+    -- Highlight separators
+    for sep_start in line:gmatch("()│") do
+      table.insert(highlight_data.highlights, {
+        group = "LazyDoSeparator",
+        line = line_idx,
+        col_start = sep_start - 1,
+        col_end = sep_start
+      })
+    end
   end
+
+  -- Update buffer safely
+  M.safe_buffer_update(lazydo.buf, footer_start, -1, footer_lines, highlight_data)
 end
 
 function M.setup_auto_save(lazydo)
