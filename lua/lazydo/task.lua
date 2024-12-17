@@ -170,4 +170,3 @@ function M.Task.deserialize(data)
 end
 
 return M
-
