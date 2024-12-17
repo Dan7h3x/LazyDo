@@ -284,7 +284,7 @@ function M.setup_buffer_keymaps(lazydo, buf)
 			vim.notify("No active task to add a subtask to", vim.log.levels.WARN)
 		end
 	end, "Add subtask")
-	safe_map(lazydo.opts.keymaps.add_subtask or "A", function()
+	safe_map(lazydo.opts.keymaps.add_subtask or "E", function()
 		local task = lazydo.get_current_task(lazydo)
 		if task then
 			lazydo.edit_subtask(lazydo,task)
