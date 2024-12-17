@@ -57,6 +57,29 @@ LazyDo.is_visible = false
 ---@param opts? table
 function LazyDo.setup(opts)
   -- Create singleton instance if it doesn't exist
+  if not self.buf or not vim.api.nvim_buf_is_valid(self.buf) then
+    local ok, buf = pcall(vim.api.nvim_create_buf, false, true)
+    if not ok then
+      vim.notify("Failed to create buffer: " .. buf, vim.log.levels.ERROR)
+      return false
+    end
+    self.buf = buf -- Store the buffer number
+    
+    -- Set buffer options
+    ok, err = pcall(function()
+      vim.api.nvim_buf_set_option(self.buf, 'buftype', 'nofile')
+      vim.api.nvim_buf_set_option(self.buf, 'bufhidden', 'hide')
+      vim.api.nvim_buf_set_option(self.buf, 'swapfile', false)
+      vim.api.nvim_buf_set_option(self.buf, 'filetype', 'lazydo')
+      vim.api.nvim_buf_set_option(self.buf, 'modifiable', true)
+    end)
+    if not ok then
+      vim.notify("Failed to set buffer options: " .. err, vim.log.levels.ERROR)
+      return false
+    end
+    self:setup_highlights()
+  end
+    
   if not LazyDo.instance then
     local self = setmetatable({}, { __index = LazyDo })
     self.opts = vim.tbl_deep_extend("force", LazyDo.default_opts, opts or {})
@@ -65,18 +88,18 @@ function LazyDo.setup(opts)
     self.buf = nil
     self.win = nil
     LazyDo.instance = self
-    
+
     -- Initialize storage
     self:ensure_storage_dir(self.opts.storage.path)
     self:load_tasks()
-    
+
     -- Create commands and keymaps
     self:create_commands()
-    
+
     -- Setup highlights
     self:setup_highlights()
   end
-  
+
   return LazyDo.instance
 end
 
@@ -98,6 +121,12 @@ function LazyDo:show()
   -- Ensure buffer is set up
   if not self:setup() then
     vim.notify("Failed to setup LazyDo buffer", vim.log.levels.ERROR)
+    return
+  end
+
+  -- Verify buffer is valid before creating window
+  if not vim.api.nvim_buf_is_valid(self.buf) then
+    vim.notify("Invalid buffer", vim.log.levels.ERROR)
     return
   end
 
@@ -147,7 +176,7 @@ function LazyDo:setup_window_options()
     vim.wo[self.win].wrap = false
 
     -- Add autocmd to close on certain events
-    vim.api.nvim_create_autocmd({"BufLeave", "BufWinLeave"}, {
+    vim.api.nvim_create_autocmd({ "BufLeave", "BufWinLeave" }, {
       buffer = self.buf,
       callback = function()
         if self.is_visible then
@@ -821,11 +850,11 @@ function LazyDo:cleanup()
   if self.win and vim.api.nvim_win_is_valid(self.win) then
     vim.api.nvim_win_close(self.win, true)
   end
-  
+
   if self.buf and vim.api.nvim_buf_is_valid(self.buf) then
     vim.api.nvim_buf_delete(self.buf, { force = true })
   end
-  
+
   self.win = nil
   self.buf = nil
   self.is_visible = false
