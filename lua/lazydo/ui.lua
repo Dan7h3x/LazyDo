@@ -56,37 +56,31 @@ function M.create_buffer(lazydo)
 end
 
 function M.create_window(lazydo)
-  local width = math.max(M.CONSTANTS.MIN_WIDTH,
-    math.floor(vim.o.columns * 0.8))
-  local height = math.floor(vim.o.lines * 0.8)
+  if not lazydo then
+    vim.notify("LazyDo instance not available", vim.log.levels.ERROR)
+    return nil
+  end
+
+  local width = math.floor(vim.o.columns * (lazydo.opts.ui.width or 0.8))
+  local height = math.floor(vim.o.lines * (lazydo.opts.ui.height or 0.8))
   local row = math.floor((vim.o.lines - height) / 2)
   local col = math.floor((vim.o.columns - width) / 2)
 
-  local win_opts = {
+  local win = vim.api.nvim_open_win(lazydo.buf, true, {
     relative = 'editor',
     width = width,
     height = height,
     row = row,
     col = col,
     style = 'minimal',
-    border = 'rounded',
-    title = ' LazyDo ',
-    title_pos = 'center'
-  }
+    border = lazydo.opts.ui.border or 'rounded',
+    title = lazydo.opts.ui.title or ' LazyDo ',
+    title_pos = 'center',
+  })
 
-  local win = vim.api.nvim_open_win(lazydo.buf, true, win_opts)
-
-  -- Set window options
-  local win_opts = {
-    wrap = false,
-    cursorline = true,
-    number = false,
-    relativenumber = false,
-    signcolumn = "no"
-  }
-
-  for opt, val in pairs(win_opts) do
-    vim.api.nvim_win_set_option(win, opt, val)
+  if win then
+    vim.api.nvim_win_set_option(win, 'winblend', lazydo.opts.ui.winblend or 0)
+    M.setup_buffer_keymaps(lazydo, lazydo.buf)
   end
 
   return win
@@ -218,50 +212,47 @@ function M.render_task_block(task, width, indent, icons)
 end
 
 function M.setup_buffer_keymaps(lazydo, buf)
-  local function safe_map(key, fn, desc)
-    vim.keymap.set('n', key, function()
-      if vim.api.nvim_get_current_buf() == buf then
-        if lazydo.is_ui_busy then return end
-        local ok, err = pcall(fn)
-        if not ok then
-          vim.notify("LazyDo action failed: " .. err, vim.log.levels.ERROR)
-        end
-      end
-    end, {
-      buffer = buf,
-      silent = true,
-      nowait = true,
-      desc = desc
-    })
+  if not lazydo or not buf then
+    vim.notify("Invalid arguments for setup_buffer_keymaps", vim.log.levels.ERROR)
+    return
   end
 
-  -- Core task management
-  safe_map(lazydo.opts.keymaps.toggle_done, function() lazydo:toggle_task() end, "Toggle task")
-  safe_map(lazydo.opts.keymaps.edit_task, function() lazydo:edit_task() end, "Edit task")
-  safe_map(lazydo.opts.keymaps.delete_task, function() lazydo:delete_task() end, "Delete task")
-  safe_map(lazydo.opts.keymaps.add_task, function() lazydo:add_task() end, "Add task")
-  safe_map(lazydo.opts.keymaps.add_subtask, function() lazydo:add_subtask() end, "Add subtask")
+  local function safe_map(key, fn, desc)
+    vim.keymap.set('n', key, function()
+      local status, err = pcall(fn)
+      if not status then
+        vim.notify("LazyDo action failed: " .. tostring(err), vim.log.levels.ERROR)
+      end
+    end, { buffer = buf, desc = desc })
+  end
 
-  -- Task organization
-  safe_map(lazydo.opts.keymaps.move_up, function() lazydo:move_task_up() end, "Move up")
-  safe_map(lazydo.opts.keymaps.move_down, function() lazydo:move_task_down() end, "Move down")
-  safe_map(lazydo.opts.keymaps.increase_priority, function() lazydo:change_priority(1) end, "Increase priority")
-  safe_map(lazydo.opts.keymaps.decrease_priority, function() lazydo:change_priority(-1) end, "Decrease priority")
+  -- Add keymaps with error handling
+  safe_map(lazydo.opts.keymaps.toggle_done or '<Space>', function()
+    local task = lazydo:get_current_task()
+    if task then
+      task:toggle()
+      if lazydo.opts.storage.auto_save then
+        require('lazydo.storage').save_tasks(lazydo)
+      end
+      lazydo:refresh_display()
+    end
+  end, "Toggle task done")
 
-  -- Task properties
-  safe_map(lazydo.opts.keymaps.quick_note, function() lazydo:quick_note() end, "Quick note")
-  safe_map(lazydo.opts.keymaps.quick_date, function() lazydo:quick_date() end, "Set due date")
-
-  -- Navigation and view
-  safe_map(lazydo.opts.keymaps.toggle_expand, function() lazydo:toggle_expand() end, "Toggle expand")
-  safe_map(lazydo.opts.keymaps.search_tasks, function() lazydo:search_tasks() end, "Search tasks")
-  safe_map('?', function() M.show_help() end, "Show help")
-  safe_map('q', function() M.close_window() end, "Close LazyDo")
-
-  -- Add quick edit menu
-  safe_map('<CR>', function()
+  safe_map(lazydo.opts.keymaps.edit_task or 'e', function()
     M.show_quick_edit_menu(lazydo)
-  end, "Quick edit menu")
+  end, "Edit task")
+
+  safe_map(lazydo.opts.keymaps.delete_task or 'dd', function()
+    lazydo:delete_task()
+  end, "Delete task")
+
+  safe_map('q', function()
+    if lazydo.close_window then
+      lazydo:close_window()
+    end
+  end, "Close window")
+
+  -- Add other keymaps as needed...
 end
 
 function M.setup_highlights(lazydo)
@@ -499,40 +490,47 @@ function M.setup_task_highlights(lazydo)
   end
 end
 
--- Add interactive editing functions
+-- Add edit task functionality
 function M.edit_task_component(lazydo, component)
+  if not lazydo or not lazydo.buf then
+    vim.notify("LazyDo instance not available", vim.log.levels.ERROR)
+    return
+  end
+
   local task = lazydo:get_current_task()
-  if not task then return end
+  if not task then
+    vim.notify("No task selected", vim.log.levels.WARN)
+    return
+  end
 
-  local function callback(input)
-    if input and input ~= "" then
-      if component == "content" then
-        task.content = input
-      elseif component == "note" then
-        task:set_note(input)
-      elseif component == "due_date" then
-        local timestamp = utils.parse_date(input)
-        if timestamp then
-          task:set_due_date(timestamp)
-        else
-          vim.notify("Invalid date format", vim.log.levels.ERROR)
-          return
-        end
-      elseif component == "priority" then
-        local priority = tonumber(input)
-        if priority and priority >= 1 and priority <= 3 then
-          task.priority = priority
-        else
-          vim.notify("Priority must be between 1 and 3", vim.log.levels.ERROR)
-          return
-        end
-      end
+  local callback = function(input)
+    if input == nil then return end -- User cancelled
 
-      if lazydo.opts.storage.auto_save then
-        lazydo:save_tasks()
+    if component == "content" then
+      task.content = input
+    elseif component == "note" then
+      task.notes = input
+    elseif component == "due_date" then
+      task.due_date = utils.parse_date(input)
+      if not task.due_date then
+        vim.notify("Invalid date format", vim.log.levels.WARN)
+        return
       end
-      lazydo:refresh_display()
+    elseif component == "priority" then
+      local priority = tonumber(input)
+      if priority and priority >= 1 and priority <= 3 then
+        task.priority = priority
+      else
+        vim.notify("Priority must be between 1 and 3", vim.log.levels.WARN)
+        return
+      end
     end
+
+    task.updated_at = os.time()
+    if lazydo.opts.storage.auto_save then
+      require('lazydo.storage').save_tasks(lazydo)
+    end
+    lazydo:refresh_display()
   end
 
   local current_value = ""
@@ -546,25 +544,32 @@ function M.edit_task_component(lazydo, component)
     current_value = tostring(task.priority)
   end
 
-  local prompt = string.format("Edit %s: ", component)
   vim.ui.input({
-    prompt = prompt,
+    prompt = string.format("Edit %s: ", component),
     default = current_value,
   }, callback)
 end
 
 -- Add quick edit menu
 function M.show_quick_edit_menu(lazydo)
+  if not lazydo then
+    vim.notify("LazyDo instance not available", vim.log.levels.ERROR)
+    return
+  end
+
   local task = lazydo:get_current_task()
-  if not task then return end
+  if not task then
+    vim.notify("No task selected", vim.log.levels.WARN)
+    return
+  end
 
   local items = {
-    { text = "Edit Content",    value = "content" },
-    { text = "Edit Note",       value = "note" },
-    { text = "Set Due Date",    value = "due_date" },
+    { text = "Edit Content", value = "content" },
+    { text = "Edit Note", value = "note" },
+    { text = "Set Due Date", value = "due_date" },
     { text = "Change Priority", value = "priority" },
-    { text = "Toggle Done",     value = "toggle" },
-    { text = "Delete Task",     value = "delete" },
+    { text = "Toggle Done", value = "toggle" },
+    { text = "Delete Task", value = "delete" },
   }
 
   vim.ui.select(items, {
@@ -574,14 +579,19 @@ function M.show_quick_edit_menu(lazydo)
     end,
   }, function(choice)
     if not choice then return end
-
+    
     if choice.value == "toggle" then
       task:toggle()
+      if lazydo.opts.storage.auto_save then
+        require('lazydo.storage').save_tasks(lazydo)
+      end
     elseif choice.value == "delete" then
       lazydo:delete_task()
     else
       M.edit_task_component(lazydo, choice.value)
     end
+    
+    lazydo:refresh_display()
   end)
 end
 
