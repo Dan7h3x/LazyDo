@@ -652,6 +652,8 @@ function M.show_quick_edit_menu(lazydo)
 		{ text = "Change Priority", value = "priority" },
 		{ text = "Toggle Done", value = "toggle" },
 		{ text = "Delete Task", value = "delete" },
+		{ text = "Add Subtask", value = "add_subtask" }, 
+        { text = "Edit Subtask", value = "edit_subtask" }, 
 	}
 
 	vim.ui.select(items, {
@@ -671,6 +673,10 @@ function M.show_quick_edit_menu(lazydo)
 			end
 		elseif choice.value == "delete" then
 			lazydo:delete_task()
+		elseif choice.value == "add_subtask" then
+            lazydo:add_subtask() -- Call the method to add a subtask
+        elseif choice.value == "edit_subtask" then
+            lazydo:edit_subtask() -- Call the method to edit a subtask
 		else
 			M.edit_task_component(lazydo, choice.value)
 		end
