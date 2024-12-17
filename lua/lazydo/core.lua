@@ -313,7 +313,7 @@ function LazyDo:edit_subtask(task)
         vim.notify("No subtasks available to edit", vim.log.levels.WARN)
         return
     end
-	if #task.subtasks = 0 then
+	if #task.subtasks == 0 then
 		task:add_subtask("Subtask 1")
 	end
     -- Assuming you have a way to select a subtask to edit
