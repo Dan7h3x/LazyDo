@@ -1,8 +1,145 @@
 ---@class LazyDo
 ---@field opts table Plugin options
----@field win number Window handle
----@field buf number Buffer handle
+---@field win number? Window handle
+---@field buf number? Buffer handle
+---@field is_visible boolean Visibility state
 local LazyDo = {}
+
+-- Add visibility state
+LazyDo.is_visible = false
+
+-- Add setup function for initialization
+---@param opts? table
+function LazyDo.setup(opts)
+  -- Create singleton instance
+  if not LazyDo.instance then
+    LazyDo.instance = LazyDo.new(opts)
+  end
+  return LazyDo.instance
+end
+
+-- Add toggle function
+function LazyDo:toggle()
+  if self.is_visible and self.win and vim.api.nvim_win_is_valid(self.win) then
+    vim.api.nvim_win_close(self.win, true)
+    self.is_visible = false
+  else
+    self:show()
+  end
+end
+
+-- Add show function
+function LazyDo:show()
+  if not self.buf or not vim.api.nvim_buf_is_valid(self.buf) then
+    self:setup()
+  elseif not self.win or not vim.api.nvim_win_is_valid(self.win) then
+    -- Reuse existing buffer but create new window
+    local width = math.floor(vim.o.columns * 0.8)
+    local height = math.floor(vim.o.lines * 0.8)
+    local row = math.floor((vim.o.lines - height) / 2)
+    local col = math.floor((vim.o.columns - width) / 2)
+
+    local opts = {
+      relative = 'editor',
+      width = width,
+      height = height,
+      row = row,
+      col = col,
+      style = 'minimal',
+      border = 'rounded',
+    }
+
+    self.win = vim.api.nvim_open_win(self.buf, true, opts)
+    self:setup_window_options()
+  end
+  
+  self.is_visible = true
+  self:render()
+end
+
+-- Add window options setup
+function LazyDo:setup_window_options()
+  -- Set window-local options
+  vim.wo[self.win].number = false
+  vim.wo[self.win].relativenumber = false
+  vim.wo[self.win].cursorline = true
+  vim.wo[self.win].signcolumn = "no"
+  vim.wo[self.win].wrap = false
+  
+  -- Set buffer-local options
+  vim.api.nvim_buf_set_option(self.buf, 'modifiable', false)
+  
+  -- Add autocmd to close on certain events
+  vim.api.nvim_create_autocmd({"BufLeave", "BufWinLeave"}, {
+    buffer = self.buf,
+    callback = function()
+      if self.is_visible then
+        self:toggle()
+      end
+    end,
+  })
+end
+
+-- Modify setup function
+function LazyDo:setup()
+  -- Create buffer if it doesn't exist
+  if not self.buf or not vim.api.nvim_buf_is_valid(self.buf) then
+    self.buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_option(self.buf, 'buftype', 'nofile')
+    vim.api.nvim_buf_set_option(self.buf, 'bufhidden', 'hide')
+    vim.api.nvim_buf_set_option(self.buf, 'swapfile', false)
+    vim.api.nvim_buf_set_option(self.buf, 'filetype', 'lazydo')
+  end
+
+  -- Set up window
+  self:show()
+  self:setup_highlights()
+  self:setup_keymaps()
+  self:load_tasks()
+
+  -- Auto-save on buffer close if enabled
+  if self.opts.storage.auto_save then
+    vim.api.nvim_create_autocmd("BufLeave", {
+      buffer = self.buf,
+      callback = function()
+        self:save_tasks()
+      end
+    })
+  end
+end
+
+-- Add global commands and keymaps
+function LazyDo:create_commands()
+  -- Create user commands
+  vim.api.nvim_create_user_command("LazyDoToggle", function()
+    self:toggle()
+  end, {})
+  
+  vim.api.nvim_create_user_command("LazyDoQuickAdd", function()
+    self:quick_add_task()
+  end, {})
+
+  -- Create default keymaps if enabled
+  if self.opts.create_keymaps ~= false then
+    vim.keymap.set('n', '<leader>td', function() self:toggle() end, { desc = "Toggle LazyDo" })
+    vim.keymap.set('n', '<leader>ta', function() self:quick_add_task() end, { desc = "Quick Add Task" })
+  end
+end
+
+-- Add quick add task function
+function LazyDo:quick_add_task()
+  vim.ui.input({ prompt = "Quick add task: " }, function(content)
+    if content and content ~= "" then
+      local task = self:create_task(content)
+      table.insert(self.tasks, task)
+      if self.opts.storage.auto_save then
+        self:save_tasks()
+      end
+      -- Show notification
+      vim.notify("Task added: " .. content, vim.log.levels.INFO)
+    end
+  end)
+end
 
 -- Default options for the plugin
 LazyDo.default_opts = {
@@ -57,47 +194,6 @@ function LazyDo.new(opts)
   LazyDo.wrap_with_auto_save(self)
   self:setup()
   return self
-end
-
----Sets up the LazyDo buffer and window
-function LazyDo:setup()
-  -- Create buffer
-  self.buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_option(self.buf, 'buftype', 'nofile')
-  vim.api.nvim_buf_set_option(self.buf, 'bufhidden', 'hide')
-  vim.api.nvim_buf_set_option(self.buf, 'swapfile', false)
-
-  -- Create window
-  local width = math.floor(vim.o.columns * 0.8)
-  local height = math.floor(vim.o.lines * 0.8)
-  local row = math.floor((vim.o.lines - height) / 2)
-  local col = math.floor((vim.o.columns - width) / 2)
-
-  local opts = {
-    relative = 'editor',
-    width = width,
-    height = height,
-    row = row,
-    col = col,
-    style = 'minimal',
-    border = 'rounded',
-  }
-
-  self.win = vim.api.nvim_open_win(self.buf, true, opts)
-  self:setup_highlights()
-  self:setup_keymaps()
-  self:load_tasks()
-  self:render()
-
-  -- Auto-save on buffer close if enabled
-  if self.opts.storage.auto_save then
-    vim.api.nvim_create_autocmd("BufLeave", {
-      buffer = self.buf,
-      callback = function()
-        self:save_tasks()
-      end
-    })
-  end
 end
 
 ---Sets up syntax highlights
