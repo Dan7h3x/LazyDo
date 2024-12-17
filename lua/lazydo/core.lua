@@ -307,13 +307,13 @@ function LazyDo:set_note(task)
 end
 
 function LazyDo:add_subtask(task)
+	local template_subtask = task:add_subtask("New Subtask...", { hidden = true })
 	if not task then
 		vim.notify("No task selected to add a subtask", vim.log.levels.WARN)
 		return
 	end
 
 	-- Create a template subtask
-	local template_subtask = task:add_subtask("New Subtask...", { hidden = true })
 
 	-- Prompt user to edit the new subtask
 	vim.ui.input({ prompt = "Enter subtask content: ", default = template_subtask.content }, function(input)
@@ -329,15 +329,15 @@ function LazyDo:add_subtask(task)
 end
 
 function LazyDo:edit_subtask(task)
+	if #task.subtasks == 0 then
+		task:add_subtask("Edit Subtask...", { hidden = true })
+	end
 	if not task or #task.subtasks == 0 then
 		vim.notify("No subtasks available to edit", vim.log.levels.WARN)
 		return
 	end
 
 	-- Create a template subtask if none exist
-	if #task.subtasks == 0 then
-		task:add_subtask("Edit Subtask...", { hidden = true })
-	end
 
 	-- Assuming you have a way to select a subtask to edit
 	local subtask_items = {}
