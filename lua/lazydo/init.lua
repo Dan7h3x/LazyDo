@@ -326,43 +326,142 @@ function LazyDo:setup_buffer_keymaps()
     return
   end
 
-  local function map(key, fn)
-    vim.keymap.set('n', key, fn, {
+  -- Create buffer-local autocommand group
+  local augroup = vim.api.nvim_create_augroup("LazyDoBuffer" .. self.buf, { clear = true })
+
+  -- Setup autocommands for dynamic updates
+  vim.api.nvim_create_autocmd({"CursorMoved", "CursorMovedI"}, {
+    group = augroup,
+    buffer = self.buf,
+    callback = function()
+      self:highlight_current_task()
+    end
+  })
+
+  local function map(key, fn, opts)
+    opts = vim.tbl_extend("force", {
       buffer = self.buf,
       silent = true,
       nowait = true,
-      desc = "LazyDo: " .. key
-    })
+    }, opts or {})
+    
+    vim.keymap.set('n', key, function()
+      -- Ensure we're in the LazyDo buffer
+      if vim.api.nvim_get_current_buf() == self.buf then
+        fn()
+      end
+    end, opts)
   end
 
-  -- Clear existing keymaps for this buffer
+  -- Clear existing keymaps
   pcall(vim.api.nvim_buf_clear_namespace, self.buf, 0, 0, -1)
 
   -- Core task management
-  for key, mapping in pairs(self.opts.keymaps) do
-    local fn = self[key] -- Get the corresponding method
-    if fn then
-      map(mapping, function()
-        -- Ensure we're in the LazyDo buffer
-        if vim.api.nvim_get_current_buf() == self.buf then
-          fn(self)
-        end
-      end)
-    end
-  end
+  map(self.opts.keymaps.toggle_done, function() self:toggle_task() end)
+  map(self.opts.keymaps.edit_task, function() self:edit_task() end)
+  map(self.opts.keymaps.add_task, function() self:add_task() end)
+  map(self.opts.keymaps.delete_task, function() self:delete_task() end)
+  map(self.opts.keymaps.add_subtask, function() self:add_subtask() end)
+  map(self.opts.keymaps.search_tasks, function() self:search_tasks() end)
+  map(self.opts.keymaps.sort_by_date, function() self:sort_by_date() end)
+  map(self.opts.keymaps.sort_by_priority, function() self:sort_by_priority() end)
+  map(self.opts.keymaps.toggle_expand, function() self:toggle_expand() end)
+  map(self.opts.keymaps.move_up, function() self:move_task_up() end)
+  map(self.opts.keymaps.move_down, function() self:move_task_down() end)
+  map(self.opts.keymaps.increase_priority, function() self:change_priority(-1) end)
+  map(self.opts.keymaps.decrease_priority, function() self:change_priority(1) end)
+  map(self.opts.keymaps.quick_note, function() self:quick_note() end)
+  map(self.opts.keymaps.quick_date, function() self:quick_date() end)
 
   -- Additional special mappings
-  map('<CR>', function()
-    if vim.api.nvim_get_current_buf() == self.buf then
-      self:quick_actions()
-    end
-  end)
+  map('<CR>', function() self:quick_actions() end)
+  map('?', function() self:show_help() end)
+  map('q', function() self:toggle() end)
+  map('<Esc>', function() self:toggle() end)
+end
+
+---Highlight current task under cursor
+function LazyDo:highlight_current_task()
+  if not self.buf or not vim.api.nvim_buf_is_valid(self.buf) then return end
+
+  -- Clear existing current task highlight
+  vim.api.nvim_buf_clear_namespace(self.buf, self.current_task_ns or 0, 0, -1)
   
-  map('?', function()
-    if vim.api.nvim_get_current_buf() == self.buf then
-      self:show_help()
-    end
-  end)
+  -- Create namespace if it doesn't exist
+  if not self.current_task_ns then
+    self.current_task_ns = vim.api.nvim_create_namespace('lazydo_current_task')
+  end
+
+  local task = self:get_current_task()
+  if task then
+    local cursor = vim.api.nvim_win_get_cursor(self.win)
+    local line_nr = cursor[1] - 1 -- Convert to 0-based index
+    
+    -- Add highlight for current line
+    vim.api.nvim_buf_add_highlight(
+      self.buf,
+      self.current_task_ns,
+      'LazyDoCurrentTask',
+      line_nr,
+      0,
+      -1
+    )
+  end
+end
+
+---Search tasks using fzf-lua
+function LazyDo:search_tasks()
+  local ok, fzf = pcall(require, 'fzf-lua')
+  if not ok then
+    vim.notify("fzf-lua is required for task search", vim.log.levels.ERROR)
+    return
+  end
+
+  local tasks = {}
+  for i, task in ipairs(self.tasks) do
+    local status = task.done and "✓" or
+        (task.due_date and task.due_date < os.time()) and "!" or
+        "○"
+
+    local priority = string.rep("!", task.priority == 1 and 3 or task.priority == 2 and 2 or 1)
+    local due = task.due_date and os.date(" (due: %Y-%m-%d)", task.due_date) or ""
+    local notes = task.notes and " 📝" or ""
+    
+    table.insert(tasks, {
+      line = string.format("[%s] %s %s%s%s", status, priority, task.content, due, notes),
+      index = i,
+      task = task
+    })
+  end
+
+  fzf.fzf_exec(
+    vim.tbl_map(function(t) return t.line end, tasks),
+    {
+      prompt = "Search Tasks> ",
+      actions = {
+        ["default"] = function(selected)
+          if #selected < 1 then return end
+          local idx = selected[1].idx
+          local task = tasks[idx].task
+          
+          -- Ensure window is visible
+          if not self.is_visible then
+            self:show()
+          end
+          
+          -- Jump to task
+          local task_line = self:get_task_line_number(task)
+          if task_line then
+            vim.api.nvim_win_set_cursor(self.win, { task_line, 0 })
+            self:highlight_current_task()
+          end
+        end
+      },
+      winopts = {
+        height = 0
+      }
+    }
+  )
 end
 
 ---@class Task
@@ -652,51 +751,6 @@ function LazyDo:edit_task()
       end)
     end
   end)
-end
-
----Searches tasks using fzf-lua
-function LazyDo:search_tasks()
-  local ok, fzf = pcall(require, 'fzf-lua')
-  if not ok then
-    vim.notify("fzf-lua is required for task search", vim.log.levels.ERROR)
-    return
-  end
-
-  local tasks = {}
-  for _, task in ipairs(self.tasks) do
-    local status = task.done and "[Done]" or
-        (task.due_date and task.due_date < os.time()) and "[Overdue]" or
-        "[Pending]"
-
-    local priority = task.priority == 1 and "⚡High" or
-        task.priority == 2 and "●Medium" or
-        "○Low"
-
-    local due = task.due_date and os.date(" (due: %Y-%m-%d)", task.due_date) or ""
-    local indent = string.rep("  ", task.indent)
-
-    table.insert(tasks, {
-      display = string.format("%s%s [%s]%s %s",
-        indent, status, priority, due, task.content),
-      task = task,
-      line = self:get_task_index(task)
-    })
-  end
-
-  fzf.fzf_exec(
-    vim.tbl_map(function(t) return t.display end, tasks),
-    {
-      prompt = "Search Tasks> ",
-      actions = {
-        ["default"] = function(selected)
-          local idx = selected[1].idx
-          local task_line = tasks[idx].line
-          -- Jump to the task line
-          vim.api.nvim_win_set_cursor(self.win, { task_line + 4, 0 })
-        end
-      }
-    }
-  )
 end
 
 ---Sort tasks by due date
