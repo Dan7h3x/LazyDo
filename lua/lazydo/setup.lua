@@ -11,6 +11,7 @@ return function(opts)
 		instance:load_tasks()
 		instance:create_commands()
 		instance:setup_highlights()
+		instance:setup_task_highlights()
 
 		-- Setup auto-save
 		if instance.opts.storage.auto_save then

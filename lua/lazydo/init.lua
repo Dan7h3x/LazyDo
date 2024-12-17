@@ -109,6 +109,7 @@ function M.setup(opts)
 
 	-- Setup highlights and commands
 	instance:setup_highlights()
+	instance:setup_task_highlights()
 	instance:create_commands()
 
 	M._instance = instance
