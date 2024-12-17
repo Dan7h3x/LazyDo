@@ -132,7 +132,7 @@ function LazyDo:render_content()
 	local lines = {}
 
 	-- Add header
-	table.insert(lines, utils.center(" {  LazyDo } ", width))
+	table.insert(lines, utils.center(" {  LazyDo  } ", width))
 	table.insert(lines, string.rep("═", width))
 
 	-- Add statistics
@@ -270,6 +270,24 @@ function LazyDo:delete_task()
 		end
 	end
 	return false
+end
+
+function LazyDo:set_note()
+    local task = self:get_current_task()
+    if not task then
+        vim.notify("No task selected", vim.log.levels.WARN)
+        return
+    end
+
+    vim.ui.input({ prompt = "Set note: ", default = task.notes }, function(input)
+        if input ~= nil then
+            task:set_note(input) -- Ensure this method exists in the Task class
+            if self.opts.storage.auto_save then
+                require("lazydo.storage").save_tasks(self)
+            end
+            self:refresh_display()
+        end
+    end)
 end
 
 function LazyDo:move_task(task, direction)
