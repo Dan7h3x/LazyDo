@@ -90,10 +90,13 @@ end
 
 -- Add show function
 function LazyDo:show()
+  -- Ensure buffer is set up
   if not self.buf or not vim.api.nvim_buf_is_valid(self.buf) then
     self:setup()
-  elseif not self.win or not vim.api.nvim_win_is_valid(self.win) then
-    -- Reuse existing buffer but create new window
+  end
+
+  -- Create or reuse window
+  if not self.win or not vim.api.nvim_win_is_valid(self.win) then
     local width = math.floor(vim.o.columns * 0.8)
     local height = math.floor(vim.o.lines * 0.8)
     local row = math.floor((vim.o.lines - height) / 2)
@@ -119,6 +122,10 @@ end
 
 -- Add window options setup
 function LazyDo:setup_window_options()
+  if not self.win or not vim.api.nvim_win_is_valid(self.win) then
+    return
+  end
+
   -- Set window-local options
   vim.wo[self.win].number = false
   vim.wo[self.win].relativenumber = false
@@ -126,11 +133,8 @@ function LazyDo:setup_window_options()
   vim.wo[self.win].signcolumn = "no"
   vim.wo[self.win].wrap = false
 
-  -- Set buffer-local options
-  vim.api.nvim_buf_set_option(self.buf, 'modifiable', false)
-
   -- Add autocmd to close on certain events
-  vim.api.nvim_create_autocmd({ "BufLeave", "BufWinLeave" }, {
+  vim.api.nvim_create_autocmd({"BufLeave", "BufWinLeave"}, {
     buffer = self.buf,
     callback = function()
       if self.is_visible then
@@ -138,6 +142,16 @@ function LazyDo:setup_window_options()
       end
     end,
   })
+
+  -- Add autocmd for auto-save
+  if self.opts.storage.auto_save then
+    vim.api.nvim_create_autocmd("BufLeave", {
+      buffer = self.buf,
+      callback = function()
+        self:save_tasks()
+      end
+    })
+  end
 end
 
 -- Add global commands and keymaps
@@ -410,6 +424,14 @@ end
 
 ---Updates the render method to include tasks
 function LazyDo:render()
+  -- Ensure we have a valid buffer
+  if not self.buf or not vim.api.nvim_buf_is_valid(self.buf) then
+    return
+  end
+
+  -- Make buffer modifiable
+  vim.api.nvim_buf_set_option(self.buf, 'modifiable', true)
+
   -- Clear buffer
   vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, {})
 
@@ -422,15 +444,19 @@ function LazyDo:render()
   local header_lines = vim.split(header, "\n")
   vim.api.nvim_buf_set_lines(self.buf, 0, #header_lines, false, header_lines)
 
+  -- Render tasks
   self:render_tasks()
 
-  -- Render footer with keymaps
+  -- Render footer
   local footer = "Press: " ..
       self.opts.keymaps.add_task .. " to add task | " ..
       self.opts.keymaps.toggle_done .. " to toggle | " ..
       self.opts.keymaps.search_tasks .. " to search"
 
   vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, { footer })
+
+  -- Make buffer non-modifiable again
+  vim.api.nvim_buf_set_option(self.buf, 'modifiable', false)
 end
 
 ---Adds a subtask to the current task
