@@ -105,7 +105,7 @@ function LazyDo:refresh_display()
 		end
 
 		ui.setup_task_highlights(self)
-		self:highlight_active_task()
+		-- self:highlight_active_task()
 
 		-- Update buffer
 	end)
@@ -214,7 +214,7 @@ function LazyDo:highlight_active_task()
 	local task_line = task.line_number -- Assuming each task has a line_number property
 	local task_end_line = self:get_task_block_height(task) -- Adjust based on how many lines the task spans
 
-	for i = task_line, task_line + task_end_line  do
+	for i = task_line, task_line + task_end_line do
 		vim.api.nvim_buf_add_highlight(self.buf, self.ns.highlight, "LazyDoActiveTask", i, 0, -1)
 	end
 end
