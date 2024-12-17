@@ -120,7 +120,8 @@ function LazyDo.setup(opts)
 
     -- Create commands and keymaps
     self:create_commands()
-
+    self:setup_keymaps()
+    self:setup_buffer_keymaps()
     -- Setup highlights
     self:setup_highlights()
   end
