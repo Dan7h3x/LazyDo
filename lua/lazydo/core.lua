@@ -195,7 +195,12 @@ function LazyDo:get_current_task()
 			current_task = task
 			break
 		end
-		task_start = task_start + task_height + 3 -- +1 for spacing
+		task_start = task_start + task_height + 3 -- +3 for spacing (1 for empty line + 2 for borders)
+	end
+
+	-- If the cursor is below the last task, return nil
+	if current_line >= task_start then
+		return nil
 	end
 
 	return current_task
@@ -289,13 +294,14 @@ function LazyDo:add_subtask(task)
 		return
 	end
 
-	if #task.subtasks == 0 then
-		task:add_subtask("Subtask 1")
-	end
+	-- Create a template subtask
+	local template_subtask = task:add_subtask("New Subtask...", { hidden = true })
 
-	vim.ui.input({ prompt = "Enter subtask content: " }, function(input)
+	-- Prompt user to edit the new subtask
+	vim.ui.input({ prompt = "Enter subtask content: ", default = template_subtask.content }, function(input)
 		if input and input ~= "" then
-			task:add_subtask(input) -- Assuming task has an add_subtask method
+			template_subtask.content = input -- Update the content of the subtask
+			template_subtask.hidden = false -- Make it visible after editing
 			if self.opts.storage.auto_save then
 				require("lazydo.storage").save_tasks(self)
 			end
@@ -309,13 +315,18 @@ function LazyDo:edit_subtask(task)
 		vim.notify("No subtasks available to edit", vim.log.levels.WARN)
 		return
 	end
+
+	-- Create a template subtask if none exist
 	if #task.subtasks == 0 then
-		task:add_subtask("Subtask 1")
+		task:add_subtask("Edit Subtask...", { hidden = true })
 	end
+
 	-- Assuming you have a way to select a subtask to edit
 	local subtask_items = {}
 	for i, subtask in ipairs(task.subtasks) do
-		table.insert(subtask_items, { text = subtask.content, value = i }) -- Assuming subtask has a content property
+		if not subtask.hidden then -- Only show visible subtasks
+			table.insert(subtask_items, { text = subtask.content, value = i }) -- Assuming subtask has a content property
+		end
 	end
 
 	vim.ui.select(subtask_items, {
@@ -329,6 +340,7 @@ function LazyDo:edit_subtask(task)
 			vim.ui.input({ prompt = "Edit subtask content: ", default = subtask.content }, function(input)
 				if input and input ~= "" then
 					subtask.content = input -- Update the subtask content
+					subtask.hidden = false -- Make it visible after editing
 					if self.opts.storage.auto_save then
 						require("lazydo.storage").save_tasks(self)
 					end

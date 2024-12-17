@@ -48,6 +48,7 @@ function M.Task:add_subtask(content, opts)
 	opts = opts or {}
 	opts.indent = self.indent + 1
 	local subtask = M.Task.new(content, opts)
+	subtask.hidden = true -- Set the hidden property to true by default
 	table.insert(self.subtasks, subtask)
 	self.updated_at = os.time()
 	return subtask
@@ -124,6 +125,23 @@ function M.Task:change_priority(delta)
 	self.updated_at = os.time()
 end
 
+-- Additional methods to manage hidden subtasks
+function M.Task:toggle_subtask_visibility(index)
+	if self.subtasks[index] then
+		self.subtasks[index].hidden = not self.subtasks[index].hidden
+	end
+end
+
+function M.Task:get_visible_subtasks()
+	local visible_subtasks = {}
+	for _, subtask in ipairs(self.subtasks) do
+		if not subtask.hidden then
+			table.insert(visible_subtasks, subtask)
+		end
+	end
+	return visible_subtasks
+end
+
 -- Serialization
 function M.Task:serialize()
 	return {
@@ -163,7 +181,9 @@ function M.Task.deserialize(data)
 
 	-- Deserialize subtasks
 	for _, subtask_data in ipairs(data.subtasks or {}) do
-		table.insert(task.subtasks, M.Task.deserialize(subtask_data))
+		local subtask = M.Task.deserialize(subtask_data)
+		subtask.hidden = true -- Ensure deserialized subtasks are hidden by default
+		table.insert(task.subtasks, subtask)
 	end
 
 	return task
