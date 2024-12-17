@@ -5,6 +5,32 @@
 ---@field is_visible boolean Visibility state
 local LazyDo = {}
 
+-- Add utility functions at the top of the file
+local utils = {}
+
+-- Fix string.center function
+function utils.center(text, width)
+  local padding = width - vim.fn.strdisplaywidth(text)
+  if padding <= 0 then return text end
+  local left_pad = math.floor(padding / 2)
+  local right_pad = padding - left_pad
+  return string.rep(" ", left_pad) .. text .. string.rep(" ", right_pad)
+end
+
+-- Safe table access
+function utils.get_or_create(tbl, key, default)
+  if tbl[key] == nil then
+    tbl[key] = default
+  end
+  return tbl[key]
+end
+
+-- Safe string operations
+function utils.safe_sub(str, start_idx, end_idx)
+  if not str then return "" end
+  return string.sub(str or "", start_idx, end_idx)
+end
+
 -- Move default options to the top of the file, before any function definitions
 LazyDo.default_opts = {
   icons = {
@@ -508,46 +534,66 @@ end
 
 ---Updates the render method to include tasks
 function LazyDo:render()
-  -- Ensure we have a valid buffer
-  if not self.buf or not vim.api.nvim_buf_is_valid(self.buf) then
-    vim.notify("Invalid buffer for rendering", vim.log.levels.ERROR)
-    return
+  if not self.buf or not vim.api.nvim_buf_is_valid(self.buf) then return end
+
+  local lines = {}
+  local highlights = {}
+
+  -- Add header
+  table.insert(lines, "╭" .. string.rep("─", 50) .. "╮")
+  table.insert(lines, "│" .. utils.center("LazyDo Task Manager", 50) .. "│")
+  table.insert(lines, "╰" .. string.rep("─", 50) .. "╯")
+
+  -- Add statistics
+  table.insert(lines, "")
+  table.insert(lines, self:render_statistics())
+  table.insert(lines, "")
+
+  -- Initialize task fields if they don't exist
+  for _, task in ipairs(self.tasks) do
+    task.tags = task.tags or {}
+    task.priority = task.priority or 3
+    task.indent = task.indent or 0
+    task.id = task.id or tostring(os.time()) .. math.random(1000, 9999)
+    task.subtasks = task.subtasks or {}
+    task.dependencies = task.dependencies or {}
   end
 
-  local ok, err = pcall(function()
-    -- Make buffer modifiable
-    vim.api.nvim_buf_set_option(self.buf, 'modifiable', true)
+  -- Filter tasks if needed
+  local tasks_to_render = self.current_filter and 
+    self:filter_tasks(self.current_filter) or self.tasks
 
-    -- Clear buffer
-    vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, {})
+  -- Render tasks
+  local task_lines, task_highlights = self:render_tasks(tasks_to_render)
+  vim.list_extend(lines, task_lines)
+  vim.list_extend(highlights, task_highlights)
 
-    -- Render header
-    local header = [[
-╭──────────────────╮
-│      LazyDo      │
-╰──────────────────╯
-]]
-    local header_lines = vim.split(header, "\n")
-    vim.api.nvim_buf_set_lines(self.buf, 0, #header_lines, false, header_lines)
+  -- Add help footer if enabled
+  if self.opts and self.opts.render and self.opts.render.show_help then
+    table.insert(lines, "")
+    table.insert(lines, "── Commands ──")
+    local keymaps = self.opts.keymaps or {}
+    table.insert(lines, string.format(
+      "%s:Toggle | %s:Edit | %s:Add | %s:Delete | %s:Filter | %s:Sort",
+      keymaps.toggle_done or "t",
+      keymaps.edit_task or "e",
+      keymaps.add_task or "a",
+      keymaps.delete_task or "d",
+      keymaps.search_tasks or "f",
+      keymaps.sort_by_priority or "s"
+    ))
+  end
 
-    -- Render tasks
-    local lines, highlights = self:render_tasks()
-    vim.api.nvim_buf_set_lines(self.buf, 3, -2, false, lines)
+  -- Update buffer content safely
+  vim.api.nvim_buf_set_option(self.buf, 'modifiable', true)
+  vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, lines)
+  vim.api.nvim_buf_set_option(self.buf, 'modifiable', false)
 
-    -- Render footer
-    local footer = "Press: " ..
-        self.opts.keymaps.add_task .. " to add task | " ..
-        self.opts.keymaps.toggle_done .. " to toggle | " ..
-        self.opts.keymaps.search_tasks .. " to search"
-
-    vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, { footer })
-
-    -- Make buffer non-modifiable again
-    vim.api.nvim_buf_set_option(self.buf, 'modifiable', false)
-  end)
-
-  if not ok then
-    vim.notify("Failed to render buffer: " .. err, vim.log.levels.ERROR)
+  -- Apply highlights safely
+  for _, hl in ipairs(highlights) do
+    pcall(vim.api.nvim_buf_add_highlight,
+      self.buf, -1, hl.hl_group, hl.line, hl.col_start, hl.col_end
+    )
   end
 end
 
@@ -1146,7 +1192,7 @@ function LazyDo:render()
 
   -- Add header
   table.insert(lines, "╭" .. string.rep("─", 50) .. "╮")
-  table.insert(lines, "│" .. string.center("LazyDo Task Manager", 50) .. "│")
+  table.insert(lines, "│" .. utils.center("LazyDo Task Manager", 50) .. "│")
   table.insert(lines, "╰" .. string.rep("─", 50) .. "╯")
 
   -- Add statistics
@@ -1154,9 +1200,19 @@ function LazyDo:render()
   table.insert(lines, self:render_statistics())
   table.insert(lines, "")
 
+  -- Initialize task fields if they don't exist
+  for _, task in ipairs(self.tasks) do
+    task.tags = task.tags or {}
+    task.priority = task.priority or 3
+    task.indent = task.indent or 0
+    task.id = task.id or tostring(os.time()) .. math.random(1000, 9999)
+    task.subtasks = task.subtasks or {}
+    task.dependencies = task.dependencies or {}
+  end
+
   -- Filter tasks if needed
-  local tasks_to_render = self.current_filter and
-      self:filter_tasks(self.current_filter) or self.tasks
+  local tasks_to_render = self.current_filter and 
+    self:filter_tasks(self.current_filter) or self.tasks
 
   -- Render tasks
   local task_lines, task_highlights = self:render_tasks(tasks_to_render)
@@ -1164,28 +1220,29 @@ function LazyDo:render()
   vim.list_extend(highlights, task_highlights)
 
   -- Add help footer if enabled
-  if self.opts.render.show_help then
+  if self.opts and self.opts.render and self.opts.render.show_help then
     table.insert(lines, "")
     table.insert(lines, "── Commands ──")
+    local keymaps = self.opts.keymaps or {}
     table.insert(lines, string.format(
       "%s:Toggle | %s:Edit | %s:Add | %s:Delete | %s:Filter | %s:Sort",
-      self.opts.keymaps.toggle_done,
-      self.opts.keymaps.edit_task,
-      self.opts.keymaps.add_task,
-      self.opts.keymaps.delete_task,
-      self.opts.keymaps.search_tasks,
-      self.opts.keymaps.sort_by_priority
+      keymaps.toggle_done or "t",
+      keymaps.edit_task or "e",
+      keymaps.add_task or "a",
+      keymaps.delete_task or "d",
+      keymaps.search_tasks or "f",
+      keymaps.sort_by_priority or "s"
     ))
   end
 
-  -- Update buffer content
+  -- Update buffer content safely
   vim.api.nvim_buf_set_option(self.buf, 'modifiable', true)
   vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, lines)
   vim.api.nvim_buf_set_option(self.buf, 'modifiable', false)
 
-  -- Apply highlights
+  -- Apply highlights safely
   for _, hl in ipairs(highlights) do
-    vim.api.nvim_buf_add_highlight(
+    pcall(vim.api.nvim_buf_add_highlight,
       self.buf, -1, hl.hl_group, hl.line, hl.col_start, hl.col_end
     )
   end
