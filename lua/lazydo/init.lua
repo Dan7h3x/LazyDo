@@ -57,29 +57,6 @@ LazyDo.is_visible = false
 ---@param opts? table
 function LazyDo.setup(opts)
   -- Create singleton instance if it doesn't exist
-  if not self.buf or not vim.api.nvim_buf_is_valid(self.buf) then
-    local ok, buf = pcall(vim.api.nvim_create_buf, false, true)
-    if not ok then
-      vim.notify("Failed to create buffer: " .. buf, vim.log.levels.ERROR)
-      return false
-    end
-    self.buf = buf -- Store the buffer number
-    
-    -- Set buffer options
-    ok, err = pcall(function()
-      vim.api.nvim_buf_set_option(self.buf, 'buftype', 'nofile')
-      vim.api.nvim_buf_set_option(self.buf, 'bufhidden', 'hide')
-      vim.api.nvim_buf_set_option(self.buf, 'swapfile', false)
-      vim.api.nvim_buf_set_option(self.buf, 'filetype', 'lazydo')
-      vim.api.nvim_buf_set_option(self.buf, 'modifiable', true)
-    end)
-    if not ok then
-      vim.notify("Failed to set buffer options: " .. err, vim.log.levels.ERROR)
-      return false
-    end
-    self:setup_highlights()
-  end
-    
   if not LazyDo.instance then
     local self = setmetatable({}, { __index = LazyDo })
     self.opts = vim.tbl_deep_extend("force", LazyDo.default_opts, opts or {})
@@ -119,9 +96,27 @@ end
 -- Add show function
 function LazyDo:show()
   -- Ensure buffer is set up
-  if not self:setup() then
-    vim.notify("Failed to setup LazyDo buffer", vim.log.levels.ERROR)
-    return
+  if not self.buf or not vim.api.nvim_buf_is_valid(self.buf) then
+    local ok, buf = pcall(vim.api.nvim_create_buf, false, true)
+    if not ok then
+      vim.notify("Failed to create buffer: " .. buf, vim.log.levels.ERROR)
+      return false
+    end
+    self.buf = buf -- Store the buffer number
+
+    -- Set buffer options
+    ok, err = pcall(function()
+      vim.api.nvim_buf_set_option(self.buf, 'buftype', 'nofile')
+      vim.api.nvim_buf_set_option(self.buf, 'bufhidden', 'hide')
+      vim.api.nvim_buf_set_option(self.buf, 'swapfile', false)
+      vim.api.nvim_buf_set_option(self.buf, 'filetype', 'lazydo')
+      vim.api.nvim_buf_set_option(self.buf, 'modifiable', true)
+    end)
+    if not ok then
+      vim.notify("Failed to set buffer options: " .. err, vim.log.levels.ERROR)
+      return false
+    end
+    self:setup_highlights()
   end
 
   -- Verify buffer is valid before creating window
@@ -152,7 +147,7 @@ function LazyDo:show()
       vim.notify("Failed to create window: " .. win_or_err, vim.log.levels.ERROR)
       return
     end
-    
+
     self.win = win_or_err
     self:setup_window_options()
   end
