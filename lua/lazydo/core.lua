@@ -49,7 +49,7 @@ end
 
 function LazyDo:close_window()
   if self.is_ui_busy then return end
-  
+
   if self.refresh_timer then
     self.refresh_timer:stop()
     self.refresh_timer:close()
@@ -75,7 +75,7 @@ function LazyDo:setup_live_refresh()
   if not self.refresh_timer then
     self.refresh_timer = vim.loop.new_timer()
   end
-  
+
   self.refresh_timer:start(0, 100, vim.schedule_wrap(function()
     if self.is_visible and not self.is_processing then
       self:refresh_display()
@@ -85,16 +85,16 @@ end
 
 function LazyDo:refresh_display()
   if not self.buf or not vim.api.nvim_buf_is_valid(self.buf) then return end
-  
+
   self.is_processing = true
   local ok = pcall(function()
     local cursor = vim.api.nvim_win_get_cursor(self.win)
     self:render_content()
-    
+
     if cursor[1] <= vim.api.nvim_buf_line_count(self.buf) then
       vim.api.nvim_win_set_cursor(self.win, cursor)
     end
-    
+
     ui.setup_task_highlights(self)
   end)
   self.is_processing = false
@@ -102,29 +102,29 @@ end
 
 function LazyDo:render_content()
   if not self.buf or not vim.api.nvim_buf_is_valid(self.buf) then return end
-  
+
   vim.api.nvim_buf_set_option(self.buf, 'modifiable', true)
-  
+
   local width = vim.api.nvim_win_get_width(self.win)
   local lines = {}
-  
+
   -- Add header
   table.insert(lines, utils.center(" LazyDo ", width))
   table.insert(lines, string.rep("═", width))
-  
+
   -- Add statistics
   local stats = self:get_task_statistics()
   local stats_line = string.format(" Total: %d | Done: %d | Pending: %d | Overdue: %d ",
     stats.total, stats.done, stats.pending, stats.overdue)
   table.insert(lines, utils.center(stats_line, width))
   table.insert(lines, "")
-  
+
   -- Render tasks
   for _, task in ipairs(self.tasks) do
     local task_lines = ui.render_task_block(task, width, "", self.opts.icons)
     vim.list_extend(lines, task_lines)
   end
-  
+
   vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, lines)
   vim.api.nvim_buf_set_option(self.buf, 'modifiable', false)
 end
@@ -136,7 +136,7 @@ function LazyDo:get_task_statistics()
     pending = 0,
     overdue = 0
   }
-  
+
   local now = os.time()
   for _, task in ipairs(self.tasks) do
     if task.done then
@@ -148,23 +148,23 @@ function LazyDo:get_task_statistics()
       end
     end
   end
-  
+
   return stats
 end
 
 function LazyDo:get_current_task()
   if not self.win or not vim.api.nvim_win_is_valid(self.win) then return nil end
-  
+
   local cursor = vim.api.nvim_win_get_cursor(self.win)
   local line_nr = cursor[1]
-  
+
   -- Skip header (title + separator + stats + empty line)
   if line_nr <= 4 then return nil end
-  
+
   local current_task = nil
   local current_line = line_nr
   local task_start = 5 -- First task starts after header
-  
+
   for _, task in ipairs(self.tasks) do
     local task_height = self:get_task_block_height(task)
     if current_line >= task_start and current_line < task_start + task_height then
@@ -173,13 +173,13 @@ function LazyDo:get_current_task()
     end
     task_start = task_start + task_height + 1 -- +1 for spacing
   end
-  
+
   return current_task
 end
 
 function LazyDo:get_task_block_height(task)
   local height = 3 -- Minimum height (top border + content + bottom border)
-  
+
   if task.due_date then height = height + 1 end
   if task.notes then
     local wrapped_notes = utils.word_wrap(task.notes, vim.api.nvim_win_get_width(self.win) - 6)
@@ -188,7 +188,7 @@ function LazyDo:get_task_block_height(task)
   if #task.subtasks > 0 then
     height = height + 1 + #task.subtasks -- Header + subtasks
   end
-  
+
   return height
 end
 
@@ -205,7 +205,7 @@ end
 function LazyDo:delete_task()
   local task = self:get_current_task()
   if not task then return end
-  
+
   for i, t in ipairs(self.tasks) do
     if t.id == task.id then
       table.remove(self.tasks, i)
@@ -239,7 +239,7 @@ end
 
 function LazyDo:setup_highlights()
   local colors = self.opts.colors
-  
+
   -- Define highlight groups
   local highlights = {
     LazyDoBorder = { fg = colors.border },
@@ -254,7 +254,7 @@ function LazyDo:setup_highlights()
     LazyDoPriorityLow = { fg = colors.priority.low },
     LazyDoSubtask = { fg = colors.subtask },
   }
-  
+
   for group, settings in pairs(highlights) do
     vim.api.nvim_set_hl(0, group, settings)
   end
@@ -264,10 +264,11 @@ function LazyDo:create_commands()
   vim.api.nvim_create_user_command('LazyDoToggle', function()
     self:toggle()
   end, {})
-  
+
   vim.api.nvim_create_user_command('LazyDoAdd', function(opts)
     self:add_task(opts.args)
   end, { nargs = '?' })
 end
 
-return LazyDo 
+return LazyDo
+

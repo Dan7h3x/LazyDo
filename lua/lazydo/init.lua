@@ -8,7 +8,7 @@ local M = {
 }
 
 -- Add wrap_with_auto_save function
-local function wrap_with_auto_save(instance)
+function LazyDo:wrap_with_auto_save(instance)
   local functions_to_wrap = {
     'add_task',
     'delete_task',
@@ -47,7 +47,7 @@ end
 function M.setup(opts)
   if not M._instance then
     local instance = LazyDo:new()
-    instance = wrap_with_auto_save(instance)
+    instance = LazyDo.wrap_with_auto_save(instance)
     M._instance = setup(opts)
   end
   return M._instance
@@ -98,13 +98,13 @@ local function safe_call(method, ...)
     vim.notify("LazyDo is not initialized. Call setup() first.", vim.log.levels.ERROR)
     return nil
   end
-  
+
   local ok, result = pcall(method, M._instance, ...)
   if not ok then
     vim.notify("LazyDo error: " .. tostring(result), vim.log.levels.ERROR)
     return nil
   end
-  
+
   return result
 end
 
