@@ -272,24 +272,30 @@ function M.setup_buffer_keymaps(lazydo, buf)
 	safe_map(lazydo.opts.keymaps.edit_task or "e", function()
 		M.show_quick_edit_menu(lazydo)
 	end, "Edit task")
-	safe_map(lazydo.opts.keymaps.helpwin or "H", function()
-		M.show_help(lazydo)
-	end, "Help win")
+
 	safe_map(lazydo.opts.keymaps.add_task or "a", function()
 		vim.cmd("LazyDoAdd")
 	end, "Add task")
 	safe_map(lazydo.opts.keymaps.add_subtask or "A", function()
 		local task = lazydo.get_current_task(lazydo)
 		if task then
-			task.add_subtask()
+			lazydo.add_subtask(lazydo,task)
 		else
 			vim.notify("No active task to add a subtask to", vim.log.levels.WARN)
 		end
 	end, "Add subtask")
+	safe_map(lazydo.opts.keymaps.add_subtask or "A", function()
+		local task = lazydo.get_current_task(lazydo)
+		if task then
+			lazydo.edit_subtask(lazydo,task)
+		else
+			vim.notify("No active task to add a subtask to", vim.log.levels.WARN)
+		end
+	end, "Edit subtask")
 	safe_map(lazydo.opts.keymaps.move_up or "K", function()
 		local task = lazydo.get_current_task(lazydo)
 		if task then
-			lazydo.move_task(task, 1)
+			lazydo.move_task(lazydo,task, 1)
 		else
 			vim.notify("No active task selected", vim.log.levels.WARN)
 		end
@@ -297,7 +303,7 @@ function M.setup_buffer_keymaps(lazydo, buf)
 	safe_map(lazydo.opts.keymaps.move_down or "J", function()
 		local task = lazydo.get_current_task(lazydo)
 		if task then
-			lazydo.move_task(task, -1)
+			lazydo.move_task(lazydo,task, -1)
 		else
 			vim.notify("No active task selected", vim.log.levels.WARN)
 		end
@@ -305,7 +311,7 @@ function M.setup_buffer_keymaps(lazydo, buf)
 	safe_map(lazydo.opts.keymaps.quick_note or "n", function()
 		local task = lazydo.get_current_task(lazydo)
 		if task then
-			lazydo.set_note(task)
+			lazydo.set_note(lazydo,task)
 		else
 			vim.notify("No active task selected", vim.log.levels.WARN)
 		end
@@ -349,120 +355,120 @@ function M.setup_highlights(lazydo)
 	end
 end
 
-function M.show_help(lazydo)
-	if lazydo.help_win and vim.api.nvim_win_is_valid(lazydo.help_win) then
-		vim.api.nvim_win_close(lazydo.help_win, true)
-		lazydo.help_win = nil
-		return
-	end
+-- function M.show_help(lazydo)
+-- 	if lazydo.help_win and vim.api.nvim_win_is_valid(lazydo.help_win) then
+-- 		vim.api.nvim_win_close(lazydo.help_win, true)
+-- 		lazydo.help_win = nil
+-- 		return
+-- 	end
 
-	local help_lines = {
-		"LazyDo Keybindings",
-		"═════════════════",
-		"",
-		"Task Management:",
-		string.format("  %s - Toggle task completion", lazydo.opts.keymaps.toggle_done),
-		string.format("  %s - Edit task", lazydo.opts.keymaps.edit_task),
-		string.format("  %s - Add new task", lazydo.opts.keymaps.add_task),
-		string.format("  %s - Delete task", lazydo.opts.keymaps.delete_task),
-		string.format("  %s - Add subtask", lazydo.opts.keymaps.add_subtask),
-		"",
-		"Organization:",
-		string.format("  %s - Move task up", lazydo.opts.keymaps.move_up),
-		string.format("  %s - Move task down", lazydo.opts.keymaps.move_down),
-		string.format("  %s - Toggle expand/collapse", lazydo.opts.keymaps.toggle_expand),
-		"",
-		"Properties:",
-		string.format("  %s - Increase priority", lazydo.opts.keymaps.increase_priority),
-		string.format("  %s - Decrease priority", lazydo.opts.keymaps.decrease_priority),
-		string.format("  %s - Add/edit note", lazydo.opts.keymaps.quick_note),
-		string.format("  %s - Set due date", lazydo.opts.keymaps.quick_date),
-		"",
-		"Navigation & Search:",
-		string.format("  %s - Search tasks", lazydo.opts.keymaps.search_tasks),
-		string.format("  %s - Sort by date", lazydo.opts.keymaps.sort_by_date),
-		string.format("  %s - Sort by priority", lazydo.opts.keymaps.sort_by_priority),
-		"",
-		"Other:",
-		"  <CR> - Quick actions menu",
-		"  ?    - Toggle this help window",
-		"  q    - Close window",
-	}
+-- 	local help_lines = {
+-- 		"LazyDo Keybindings",
+-- 		"═════════════════",
+-- 		"",
+-- 		"Task Management:",
+-- 		string.format("  %s - Toggle task completion", lazydo.opts.keymaps.toggle_done),
+-- 		string.format("  %s - Edit task", lazydo.opts.keymaps.edit_task),
+-- 		string.format("  %s - Add new task", lazydo.opts.keymaps.add_task),
+-- 		string.format("  %s - Delete task", lazydo.opts.keymaps.delete_task),
+-- 		string.format("  %s - Add subtask", lazydo.opts.keymaps.add_subtask),
+-- 		"",
+-- 		"Organization:",
+-- 		string.format("  %s - Move task up", lazydo.opts.keymaps.move_up),
+-- 		string.format("  %s - Move task down", lazydo.opts.keymaps.move_down),
+-- 		string.format("  %s - Toggle expand/collapse", lazydo.opts.keymaps.toggle_expand),
+-- 		"",
+-- 		"Properties:",
+-- 		string.format("  %s - Increase priority", lazydo.opts.keymaps.increase_priority),
+-- 		string.format("  %s - Decrease priority", lazydo.opts.keymaps.decrease_priority),
+-- 		string.format("  %s - Add/edit note", lazydo.opts.keymaps.quick_note),
+-- 		string.format("  %s - Set due date", lazydo.opts.keymaps.quick_date),
+-- 		"",
+-- 		"Navigation & Search:",
+-- 		string.format("  %s - Search tasks", lazydo.opts.keymaps.search_tasks),
+-- 		string.format("  %s - Sort by date", lazydo.opts.keymaps.sort_by_date),
+-- 		string.format("  %s - Sort by priority", lazydo.opts.keymaps.sort_by_priority),
+-- 		"",
+-- 		"Other:",
+-- 		"  <CR> - Quick actions menu",
+-- 		"  ?    - Toggle this help window",
+-- 		"  q    - Close window",
+-- 	}
 
-	-- Create help buffer
-	if not lazydo.help_buf or not vim.api.nvim_buf_is_valid(lazydo.help_buf) then
-		lazydo.help_buf = vim.api.nvim_create_buf(false, true)
-		vim.api.nvim_buf_set_lines(lazydo.help_buf, 0, -1, false, help_lines)
+-- 	-- Create help buffer
+-- 	if not lazydo.help_buf or not vim.api.nvim_buf_is_valid(lazydo.help_buf) then
+-- 		lazydo.help_buf = vim.api.nvim_create_buf(false, true)
+-- 		vim.api.nvim_buf_set_lines(lazydo.help_buf, 0, -1, false, help_lines)
 
-		local help_opts = {
-			modifiable = false,
-			modified = false,
-			readonly = true,
-			buftype = "nofile",
-			bufhidden = "wipe",
-			swapfile = false,
-			filetype = "lazydo-help",
-		}
+-- 		local help_opts = {
+-- 			modifiable = false,
+-- 			modified = false,
+-- 			readonly = true,
+-- 			buftype = "nofile",
+-- 			bufhidden = "wipe",
+-- 			swapfile = false,
+-- 			filetype = "lazydo-help",
+-- 		}
 
-		for opt, val in pairs(help_opts) do
-			vim.api.nvim_buf_set_option(lazydo.help_buf, opt, val)
-		end
-	end
+-- 		for opt, val in pairs(help_opts) do
+-- 			vim.api.nvim_buf_set_option(lazydo.help_buf, opt, val)
+-- 		end
+-- 	end
 
-	-- Calculate window dimensions
-	local width = 60
-	local height = #help_lines
-	local row = math.floor((vim.o.lines - height) / 2)
-	local col = math.floor((vim.o.columns - width) / 2)
+-- 	-- Calculate window dimensions
+-- 	local width = 60
+-- 	local height = #help_lines
+-- 	local row = math.floor((vim.o.lines - height) / 2)
+-- 	local col = math.floor((vim.o.columns - width) / 2)
 
-	-- Create help window
-	local win_opts = {
-		relative = "editor",
-		width = width,
-		height = height,
-		row = row,
-		col = col,
-		style = "minimal",
-		border = "rounded",
-		title = " LazyDo Help ",
-		title_pos = "center",
-	}
+-- 	-- Create help window
+-- 	local win_opts = {
+-- 		relative = "editor",
+-- 		width = width,
+-- 		height = height,
+-- 		row = row,
+-- 		col = col,
+-- 		style = "minimal",
+-- 		border = "rounded",
+-- 		title = " LazyDo Help ",
+-- 		title_pos = "center",
+-- 	}
 
-	lazydo.help_win = vim.api.nvim_open_win(lazydo.help_buf, false, win_opts)
+-- 	lazydo.help_win = vim.api.nvim_open_win(lazydo.help_buf, false, win_opts)
 
-	-- Set help window options
-	local win_options = {
-		wrap = false,
-		cursorline = true,
-		winblend = 10,
-		number = false,
-		relativenumber = false,
-		signcolumn = "no",
-	}
+-- 	-- Set help window options
+-- 	local win_options = {
+-- 		wrap = false,
+-- 		cursorline = true,
+-- 		winblend = 10,
+-- 		number = false,
+-- 		relativenumber = false,
+-- 		signcolumn = "no",
+-- 	}
 
-	for opt, val in pairs(win_options) do
-		vim.api.nvim_win_set_option(lazydo.help_win, opt, val)
-	end
+-- 	for opt, val in pairs(win_options) do
+-- 		vim.api.nvim_win_set_option(lazydo.help_win, opt, val)
+-- 	end
 
-	-- Set help window keymaps
-	local function set_help_keymap(key, action)
-		vim.keymap.set("n", key, action, { buffer = lazydo.help_buf, silent = true, nowait = true })
-	end
+-- 	-- Set help window keymaps
+-- 	local function set_help_keymap(key, action)
+-- 		vim.keymap.set("n", key, action, { buffer = lazydo.help_buf, silent = true, nowait = true })
+-- 	end
 
-	set_help_keymap("q", function()
-		if lazydo.help_win and vim.api.nvim_win_is_valid(lazydo.help_win) then
-			vim.api.nvim_win_close(lazydo.help_win, true)
-			lazydo.help_win = nil
-		end
-	end)
+-- 	set_help_keymap("q", function()
+-- 		if lazydo.help_win and vim.api.nvim_win_is_valid(lazydo.help_win) then
+-- 			vim.api.nvim_win_close(lazydo.help_win, true)
+-- 			lazydo.help_win = nil
+-- 		end
+-- 	end)
 
-	set_help_keymap("<Esc>", function()
-		if lazydo.help_win and vim.api.nvim_win_is_valid(lazydo.help_win) then
-			vim.api.nvim_win_close(lazydo.help_win, true)
-			lazydo.help_win = nil
-		end
-	end)
-end
+-- 	set_help_keymap("<Esc>", function()
+-- 		if lazydo.help_win and vim.api.nvim_win_is_valid(lazydo.help_win) then
+-- 			vim.api.nvim_win_close(lazydo.help_win, true)
+-- 			lazydo.help_win = nil
+-- 		end
+-- 	end)
+-- end
 
 -- Add highlight groups for task components
 function M.setup_task_highlights(lazydo)

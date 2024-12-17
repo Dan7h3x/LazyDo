@@ -290,6 +290,57 @@ function LazyDo:set_note(task)
 	end)
 end
 
+function LazyDo:add_subtask(task)
+    if not task then
+        vim.notify("No task selected to add a subtask", vim.log.levels.WARN)
+        return
+    end
+
+    vim.ui.input({ prompt = "Enter subtask content: " }, function(input)
+        if input and input ~= "" then
+            task:add_subtask(input) -- Assuming task has an add_subtask method
+            if self.opts.storage.auto_save then
+                require("lazydo.storage").save_tasks(self)
+            end
+            self:refresh_display()
+        end
+    end)
+end
+
+function LazyDo:edit_subtask(task)
+    if not task or #task.subtasks == 0 then
+        vim.notify("No subtasks available to edit", vim.log.levels.WARN)
+        return
+    end
+
+    -- Assuming you have a way to select a subtask to edit
+    local subtask_items = {}
+    for i, subtask in ipairs(task.subtasks) do
+        table.insert(subtask_items, { text = subtask.content, value = i }) -- Assuming subtask has a content property
+    end
+
+    vim.ui.select(subtask_items, {
+        prompt = "Select a subtask to edit:",
+        format_item = function(item)
+            return item.text
+        end,
+    }, function(choice)
+        if choice then
+            local subtask = task.subtasks[choice.value]
+            vim.ui.input({ prompt = "Edit subtask content: ", default = subtask.content }, function(input)
+                if input and input ~= "" then
+                    subtask.content = input -- Update the subtask content
+                    if self.opts.storage.auto_save then
+                        require("lazydo.storage").save_tasks(self)
+                    end
+                    self:refresh_display()
+                end
+            end)
+        end
+    end)
+end
+
+
 function LazyDo:set_date(task)
 	if not task then
 		vim.notify("No task selected", vim.log.levels.WARN)
