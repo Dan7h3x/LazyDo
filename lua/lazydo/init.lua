@@ -44,8 +44,8 @@ LazyDo.default_opts = {
   },
   storage = {
     path = vim.fn.stdpath("data") .. "/lazydo/tasks.json",
-    auto_save = true, -- Save on every change
-    backup = true,    -- Keep backup file
+    auto_save = true,    -- Save on every change
+    backup = true,       -- Keep backup file
   },
   create_keymaps = true, -- Enable/disable default keymaps
 }
@@ -63,18 +63,18 @@ function LazyDo.setup(opts)
     self.tasks = {}
     self.is_visible = false
     LazyDo.instance = self
-    
+
     -- Initialize storage
     self:ensure_storage_dir(self.opts.storage.path)
     self:load_tasks()
-    
+
     -- Create commands and keymaps
     self:create_commands()
-    
+
     -- Setup highlights
     self:setup_highlights()
   end
-  
+
   return LazyDo.instance
 end
 
@@ -112,7 +112,7 @@ function LazyDo:show()
     self.win = vim.api.nvim_open_win(self.buf, true, opts)
     self:setup_window_options()
   end
-  
+
   self.is_visible = true
   self:render()
 end
@@ -125,12 +125,12 @@ function LazyDo:setup_window_options()
   vim.wo[self.win].cursorline = true
   vim.wo[self.win].signcolumn = "no"
   vim.wo[self.win].wrap = false
-  
+
   -- Set buffer-local options
   vim.api.nvim_buf_set_option(self.buf, 'modifiable', false)
-  
+
   -- Add autocmd to close on certain events
-  vim.api.nvim_create_autocmd({"BufLeave", "BufWinLeave"}, {
+  vim.api.nvim_create_autocmd({ "BufLeave", "BufWinLeave" }, {
     buffer = self.buf,
     callback = function()
       if self.is_visible then
@@ -140,52 +140,27 @@ function LazyDo:setup_window_options()
   })
 end
 
--- Modify setup function
-function LazyDo:setup()
-  -- Create buffer if it doesn't exist
-  if not self.buf or not vim.api.nvim_buf_is_valid(self.buf) then
-    self.buf = vim.api.nvim_create_buf(false, true)
-    vim.api.nvim_buf_set_option(self.buf, 'buftype', 'nofile')
-    vim.api.nvim_buf_set_option(self.buf, 'bufhidden', 'hide')
-    vim.api.nvim_buf_set_option(self.buf, 'swapfile', false)
-    vim.api.nvim_buf_set_option(self.buf, 'filetype', 'lazydo')
-    
-    -- Setup buffer autocmds
-    if self.opts.storage.auto_save then
-      vim.api.nvim_create_autocmd("BufLeave", {
-        buffer = self.buf,
-        callback = function()
-          self:save_tasks()
-        end
-      })
-    end
-  end
-
-  -- Show the window
-  self:show()
-end
-
 -- Add global commands and keymaps
 function LazyDo:create_commands()
   local self = self -- Capture self reference
-  
+
   -- Create user commands
   vim.api.nvim_create_user_command("LazyDoToggle", function()
     self:toggle()
   end, {})
-  
+
   vim.api.nvim_create_user_command("LazyDoQuickAdd", function()
     self:quick_add_task()
   end, {})
 
   -- Create default keymaps if enabled
   if self.opts.create_keymaps ~= false then
-    vim.keymap.set('n', '<leader>td', function() 
-      self:toggle() 
+    vim.keymap.set('n', '<leader>td', function()
+      self:toggle()
     end, { desc = "Toggle LazyDo" })
-    
-    vim.keymap.set('n', '<leader>ta', function() 
-      self:quick_add_task() 
+
+    vim.keymap.set('n', '<leader>ta', function()
+      self:quick_add_task()
     end, { desc = "Quick Add Task" })
   end
 end
