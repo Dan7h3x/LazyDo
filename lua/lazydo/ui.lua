@@ -82,11 +82,7 @@ function M.create_window(lazydo)
 		vim.api.nvim_win_set_option(win, "winblend", lazydo.opts.ui.winblend or 0)
 		M.setup_buffer_keymaps(lazydo, lazydo.buf)
 		M.setup_auto_save(lazydo)
-		vim.schedule(function()
-			if vim.api.nvim_win_is_valid(win) then
-				M.render_help_footer(lazydo)
-			end
-		end)
+	
 		vim.keymap.set("n", "?", function()
 			lazydo.show_help = not lazydo.show_help
 			lazydo:refresh_display()

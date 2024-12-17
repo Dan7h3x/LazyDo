@@ -198,13 +198,19 @@ function LazyDo:get_current_task()
 		task_start = task_start + task_height + 1 -- +1 for spacing
 	end
 
-	while current_task == nil and current_line > 0 do
-        current_line = current_line - 1
-        local line_content = vim.api.nvim_buf_get_lines(self.buf, current_line - 1, current_line, false)[1]
-        if line_content and line_content:match("%S") then -- Check for non-empty line
-            return self:get_current_task() -- Call the original method to get the task
-        end
-    end
+	-- If the current task is not found, check previous lines for non-empty lines
+	local max_check_lines = 4 -- Limit the number of lines to check
+	local lines_checked = 0
+
+	while current_task == nil and current_line > 0 and lines_checked < max_check_lines do
+		current_line = current_line - 1
+		lines_checked = lines_checked + 1
+
+		local line_content = vim.api.nvim_buf_get_lines(self.buf, current_line - 1, current_line, false)[1]
+		if line_content and line_content:match("%S") then -- Check for non-empty line
+			return self:get_current_task() -- Call the original method to get the task
+		end
+	end
 
 	return current_task
 end
