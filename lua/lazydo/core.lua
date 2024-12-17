@@ -293,7 +293,7 @@ function LazyDo:add_subtask(task)
         return
     end
 
-	if #task.subtasks = 0 then
+	if #task.subtasks == 0 then
 		task:add_subtask("Subtask 1")
 	end
 
