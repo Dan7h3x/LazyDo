@@ -99,7 +99,7 @@ function M.setup(opts)
 	end
 
 	-- Wrap instance with auto-save
-	instance = LazyDo.wrap_with_auto_save(instance)
+	-- instance = LazyDo.wrap_with_auto_save(instance)
 	if not instance then
 		error("Failed to wrap instance with auto-save")
 	end
