@@ -5,6 +5,51 @@
 ---@field is_visible boolean Visibility state
 local LazyDo = {}
 
+-- Move default options to the top of the file, before any function definitions
+LazyDo.default_opts = {
+  icons = {
+    task_pending = "󰄱",
+    task_done = "󰄵",
+    task_overdue = "󰄮",
+    due_date = "󰃰",
+    note = "󰏫",
+    priority = {
+      high = "󰀦",
+      medium = "󰀧",
+      low = "󰀨",
+    }
+  },
+  colors = {
+    header = "#89b4fa",
+    pending = "#cba6f7",
+    done = "#a6e3a1",
+    overdue = "#f38ba8",
+    note = "#94e2d5",
+    due_date = "#fab387",
+    priority = {
+      high = "#f38ba8",
+      medium = "#fab387",
+      low = "#a6e3a1",
+    }
+  },
+  keymaps = {
+    toggle_done = "<Space>",
+    edit_task = "e",
+    delete_task = "d",
+    add_task = "a",
+    add_subtask = "o",
+    search_tasks = "/",
+    sort_by_date = "sd",
+    sort_by_priority = "sp",
+  },
+  storage = {
+    path = vim.fn.stdpath("data") .. "/lazydo/tasks.json",
+    auto_save = true, -- Save on every change
+    backup = true,    -- Keep backup file
+  },
+  create_keymaps = true, -- Enable/disable default keymaps
+}
+
 -- Add visibility state
 LazyDo.is_visible = false
 
@@ -159,50 +204,6 @@ function LazyDo:quick_add_task()
     end
   end)
 end
-
--- Default options for the plugin
-LazyDo.default_opts = {
-  icons = {
-    task_pending = "󰄱",
-    task_done = "󰄵",
-    task_overdue = "󰄮",
-    due_date = "󰃰",
-    note = "󰏫",
-    priority = {
-      high = "󰀦",
-      medium = "󰀧",
-      low = "󰀨",
-    }
-  },
-  colors = {
-    header = "#89b4fa",
-    pending = "#cba6f7",
-    done = "#a6e3a1",
-    overdue = "#f38ba8",
-    note = "#94e2d5",
-    due_date = "#fab387",
-    priority = {
-      high = "#f38ba8",
-      medium = "#fab387",
-      low = "#a6e3a1",
-    }
-  },
-  keymaps = {
-    toggle_done = "<Space>",
-    edit_task = "e",
-    delete_task = "d",
-    add_task = "a",
-    add_subtask = "o",
-    search_tasks = "/",
-    sort_by_date = "sd",
-    sort_by_priority = "sp",
-  },
-  storage = {
-    path = vim.fn.stdpath("data") .. "/lazydo/tasks.json",
-    auto_save = true, -- Save on every change
-    backup = true,    -- Keep backup file
-  }
-}
 
 ---Creates a new instance of LazyDo
 ---@param opts? table Optional user configuration
