@@ -273,19 +273,47 @@ function LazyDo:delete_task()
 end
 
 function LazyDo:set_note()
-    local task = self:get_current_task()
+    local task = self:get_current_task() -- Get the current active task
     if not task then
         vim.notify("No task selected", vim.log.levels.WARN)
         return
     end
 
-    vim.ui.input({ prompt = "Set note: ", default = task.notes }, function(input)
+    vim.ui.input({ prompt = "Set note: ", default = task.notes or "" }, function(input)
         if input ~= nil then
-            task:set_note(input) -- Ensure this method exists in the Task class
+            task.notes = input -- Set the note for the active task
+            task.updated_at = os.time() -- Update the timestamp
             if self.opts.storage.auto_save then
                 require("lazydo.storage").save_tasks(self)
             end
-            self:refresh_display()
+            self:refresh_display() -- Refresh the display to show the updated task
+        end
+    end)
+end
+
+function LazyDo:set_date()
+    local task = self:get_current_task() -- Get the current active task
+    if not task then
+        vim.notify("No task selected", vim.log.levels.WARN)
+        return
+    end
+
+    vim.ui.input({ prompt = "Set due date (YYYY-MM-DD or 'today'): ", default = task.due_date and os.date("%Y-%m-%d", task.due_date) or "" }, function(input)
+        if input ~= nil then
+            if input == "today" then
+                task.due_date = os.time() -- Set due date to today
+            else
+                task.due_date = utils.parse_date(input) -- Use your existing date parsing logic
+                if not task.due_date then
+                    vim.notify("Invalid date format", vim.log.levels.WARN)
+                    return
+                end
+            end
+            task.updated_at = os.time() -- Update the timestamp
+            if self.opts.storage.auto_save then
+                require("lazydo.storage").save_tasks(self)
+            end
+            self:refresh_display() -- Refresh the display to show the updated task
         end
     end)
 end
