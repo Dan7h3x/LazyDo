@@ -79,4 +79,3 @@ M.defaults = {
 }
 
 return M
-

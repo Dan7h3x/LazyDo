@@ -33,7 +33,7 @@ local M = {
 }
 
 -- Simplified wrap_with_auto_save function
-local function wrap_with_auto_save(instance)
+function LazyDo:wrap_with_auto_save(instance)
 	if not instance then
 		return nil
 	end
@@ -86,7 +86,7 @@ function M.setup(opts)
 	end
 
 	-- Ensure we load the default config
-	local default_config = require("lazydo.config").defaults
+	local default_config = config.defaults
 
 	-- Merge configurations with proper deep extend
 	instance.opts = vim.tbl_deep_extend("force", default_config, opts or {})
@@ -99,7 +99,7 @@ function M.setup(opts)
 	end
 
 	-- Wrap instance with auto-save
-	instance = wrap_with_auto_save(instance)
+	instance = LazyDo.wrap_with_auto_save(instance)
 	if not instance then
 		error("Failed to wrap instance with auto-save")
 	end
