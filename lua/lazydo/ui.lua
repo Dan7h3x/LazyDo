@@ -1,7 +1,5 @@
 local M = {}
 local utils = require("lazydo.utils")
-local core = require("lazydo.core")
-local Tasker = require("lazydo.task")
 -- Add animations and transitions
 M.ANIMATIONS = {
 	FADE_FRAMES = 10,
@@ -276,16 +274,16 @@ function M.setup_buffer_keymaps(lazydo, buf)
 	end, "Edit task")
 
 	safe_map(lazydo.opts.keymaps.add_task or "a", function(opts)
-		core.add_task(opts.args)
+		lazydo.add_task(opts.args)
 	end, "Add task")
 	safe_map(lazydo.opts.keymaps.add_subtask or "A", function()
-		core.get_current_task(lazydo).add_subtask()
+		lazydo.add_subtask()
 	end, "Add subtask")
 	safe_map(lazydo.opts.keymaps.move_up or "K", function()
-		core.move_task(core.get_current_task(lazydo), 1)
+		lazydo.move_task(lazydo.get_current_task(), 1)
 	end, "Move task down")
 	safe_map(lazydo.opts.keymaps.move_down or "J", function()
-		core.move_task(core.get_current_task(lazydo), -1)
+		lazydo.move_task(lazydo.get_current_task(), -1)
 	end, "Move task up")
 	safe_map(lazydo.opts.keymaps.quick_note or "n", function()
 		M.set_note()
@@ -303,7 +301,6 @@ function M.setup_buffer_keymaps(lazydo, buf)
 		end
 	end, "Close window")
 
-	-- Add other keymaps as needed...
 end
 
 function M.setup_highlights(lazydo)
