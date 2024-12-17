@@ -320,28 +320,49 @@ function LazyDo:setup_highlights()
   end
 end
 
----Sets up keymaps for the LazyDo buffer
-function LazyDo:setup_keymaps()
-  local function map(key, func)
-    vim.keymap.set('n', key, func, { buffer = self.buf, silent = true })
+---Sets up buffer-specific keymaps
+function LazyDo:setup_buffer_keymaps()
+  if not self.buf or not vim.api.nvim_buf_is_valid(self.buf) then
+    return
   end
 
-  map(self.opts.keymaps.toggle_done, function() self:toggle_task() end)
-  map(self.opts.keymaps.edit_task, function() self:edit_task() end)
-  map(self.opts.keymaps.delete_task, function() self:delete_task() end)
-  map(self.opts.keymaps.add_task, function() self:add_task() end)
-  map(self.opts.keymaps.add_subtask, function() self:add_subtask() end)
-  map(self.opts.keymaps.search_tasks, function() self:search_tasks() end)
-  map(self.opts.keymaps.sort_by_date, function() self:sort_by_date() end)
-  map(self.opts.keymaps.sort_by_priority, function() self:sort_by_priority() end)
-  map(self.opts.keymaps.toggle_expand, function() self:toggle_expand() end)
-  map(self.opts.keymaps.move_up, function() self:move_task_up() end)
-  map(self.opts.keymaps.move_down, function() self:move_task_down() end)
-  map(self.opts.keymaps.increase_priority, function() self:change_priority(1) end)
-  map(self.opts.keymaps.decrease_priority, function() self:change_priority(-1) end)
-  map(self.opts.keymaps.quick_note, function() self:quick_note() end)
-  map(self.opts.keymaps.quick_date, function() self:quick_date() end)
-  map("<CR>", function() self:quick_actions() end)
+  local function map(key, fn)
+    vim.keymap.set('n', key, fn, {
+      buffer = self.buf,
+      silent = true,
+      nowait = true,
+      desc = "LazyDo: " .. key
+    })
+  end
+
+  -- Clear existing keymaps for this buffer
+  pcall(vim.api.nvim_buf_clear_namespace, self.buf, 0, 0, -1)
+
+  -- Core task management
+  for key, mapping in pairs(self.opts.keymaps) do
+    local fn = self[key] -- Get the corresponding method
+    if fn then
+      map(mapping, function()
+        -- Ensure we're in the LazyDo buffer
+        if vim.api.nvim_get_current_buf() == self.buf then
+          fn(self)
+        end
+      end)
+    end
+  end
+
+  -- Additional special mappings
+  map('<CR>', function()
+    if vim.api.nvim_get_current_buf() == self.buf then
+      self:quick_actions()
+    end
+  end)
+  
+  map('?', function()
+    if vim.api.nvim_get_current_buf() == self.buf then
+      self:show_help()
+    end
+  end)
 end
 
 ---@class Task
@@ -529,51 +550,6 @@ function LazyDo:render_tasks()
 
   return lines, highlights
 end
-
----Updates the render method to include tasks
--- function LazyDo:render()
---   -- Ensure we have a valid buffer
---   if not self.buf or not vim.api.nvim_buf_is_valid(self.buf) then
---     vim.notify("Invalid buffer for rendering", vim.log.levels.ERROR)
---     return
---   end
---
---   local ok, err = pcall(function()
---     -- Make buffer modifiable
---     vim.api.nvim_buf_set_option(self.buf, 'modifiable', true)
---
---     -- Clear buffer
---     vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, {})
---
---     -- Render header
---     local header = [[
--- ╭──────────────────╮
--- │      LazyDo      │
--- ╰──────────────────╯
--- ]]
---     local header_lines = vim.split(header, "\n")
---     vim.api.nvim_buf_set_lines(self.buf, 0, #header_lines, false, header_lines)
---
---     -- Render tasks
---     local lines, highlights = self:render_tasks()
---     vim.api.nvim_buf_set_lines(self.buf, 3, -2, false, lines)
---
---     -- Render footer
---     local footer = "Press: " ..
---         self.opts.keymaps.add_task .. " to add task | " ..
---         self.opts.keymaps.toggle_done .. " to toggle | " ..
---         self.opts.keymaps.search_tasks .. " to search"
---
---     vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, { footer })
---
---     -- Make buffer non-modifiable again
---     vim.api.nvim_buf_set_option(self.buf, 'modifiable', false)
---   end)
---
---   if not ok then
---     vim.notify("Failed to render buffer: " .. err, vim.log.levels.ERROR)
---   end
--- end
 
 ---Adds a subtask to the current task
 function LazyDo:add_subtask()
@@ -877,30 +853,6 @@ function LazyDo:wrap_with_auto_save(self)
   end
 end
 
----Deletes a task
--- function LazyDo:delete_task()
---   local cursor = vim.api.nvim_win_get_cursor(self.win)
---   local task = self:get_task_at_line(cursor[1])
---   if not task then return end
---
---   vim.ui.select({ "Yes", "No" }, {
---     prompt = "Delete task?",
---   }, function(choice)
---     if choice == "Yes" then
---       local index = self:get_task_index(task)
---       if index then
---         -- Also remove any subtasks
---         local i = index + 1
---         while i <= #self.tasks and self.tasks[i].indent > task.indent do
---           table.remove(self.tasks, i)
---         end
---         table.remove(self.tasks, index)
---         self:render()
---       end
---     end
---   end)
--- end
-
 -- Add cleanup function
 function LazyDo:cleanup()
   if self.win and vim.api.nvim_win_is_valid(self.win) then
@@ -1163,55 +1115,134 @@ end
 
 -- Enhanced render function with statistics and help
 function LazyDo:render()
-  if not self.buf or not vim.api.nvim_buf_is_valid(self.buf) then return end
-
-  local lines = {}
-  local highlights = {}
-
-  -- Add header
-  table.insert(lines, "╭" .. string.rep("─", 50) .. "╮")
-  table.insert(lines, "│" .. utils.center("LazyDo Task Manager", 50) .. "│")
-  table.insert(lines, "╰" .. string.rep("─", 50) .. "╯")
-
-  -- Add statistics
-  table.insert(lines, "")
-  table.insert(lines, self:render_statistics())
-  table.insert(lines, "")
-
-  -- Filter tasks if needed
-  local tasks_to_render = self.current_filter and
-      self:filter_tasks(self.current_filter) or self.tasks
-
-  -- Render tasks
-  local task_lines, task_highlights = self:render_tasks(tasks_to_render)
-  vim.list_extend(lines, task_lines)
-  vim.list_extend(highlights, task_highlights)
-
-  -- Add help footer if enabled
-  if self.opts.render.show_help then
-    table.insert(lines, "")
-    table.insert(lines, "── Commands ──")
-    table.insert(lines, string.format(
-      "%s:Toggle | %s:Edit | %s:Add | %s:Delete | %s:Filter | %s:Sort",
-      self.opts.keymaps.toggle_done,
-      self.opts.keymaps.edit_task,
-      self.opts.keymaps.add_task,
-      self.opts.keymaps.delete_task,
-      self.opts.keymaps.search_tasks,
-      self.opts.keymaps.sort_by_priority
-    ))
+  if not self.buf or not vim.api.nvim_buf_is_valid(self.buf) then
+    return
   end
 
-  -- Update buffer content
-  vim.api.nvim_buf_set_option(self.buf, 'modifiable', true)
-  vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, lines)
-  vim.api.nvim_buf_set_option(self.buf, 'modifiable', false)
+  local ok, err = pcall(function()
+    -- Make buffer modifiable
+    vim.api.nvim_buf_set_option(self.buf, 'modifiable', true)
 
-  -- Apply highlights
-  for _, hl in ipairs(highlights) do
-    vim.api.nvim_buf_add_highlight(
-      self.buf, -1, hl.hl_group, hl.line, hl.col_start, hl.col_end
-    )
+    -- Clear existing highlights
+    vim.api.nvim_buf_clear_namespace(self.buf, -1, 0, -1)
+
+    local lines = {}
+    local highlights = {}
+
+    -- Add header
+    local header = {
+      "╭" .. string.rep("─", 50) .. "╮",
+      "│" .. utils.center("LazyDo Task Manager", 50) .. "│",
+      "╰" .. string.rep("─", 50) .. "╯",
+      ""
+    }
+    vim.list_extend(lines, header)
+
+    -- Add statistics
+    local stats_line = self:render_statistics()
+    table.insert(lines, stats_line)
+    table.insert(lines, "")
+
+    -- Filter tasks if needed
+    local tasks_to_render = self.current_filter and
+        self:filter_tasks(self.current_filter) or self.tasks
+
+    -- Render tasks with proper indentation and icons
+    for i, task in ipairs(tasks_to_render) do
+      local line_nr = #lines + 1
+      local indent = string.rep("  ", task.indent)
+      
+      -- Build task line
+      local status_icon = task.done and self.opts.icons.task_done or
+          (task.due_date and task.due_date < os.time()) and self.opts.icons.task_overdue or
+          self.opts.icons.task_pending
+
+      local priority_icon = task.priority == 1 and self.opts.icons.priority.high or
+          task.priority == 2 and self.opts.icons.priority.medium or
+          self.opts.icons.priority.low
+
+      local line = string.format("%s%s %s %s",
+        indent,
+        status_icon,
+        priority_icon,
+        task.content
+      )
+
+      -- Add metadata
+      if task.due_date then
+        line = line .. " " .. self.opts.icons.due_date .. " " .. 
+               os.date("%Y-%m-%d", task.due_date)
+      end
+
+      if task.notes then
+        line = line .. " " .. self.opts.icons.note
+      end
+
+      table.insert(lines, line)
+
+      -- Add highlights
+      local col_start = #indent
+      local status_color = task.done and "LazyDoDone" or
+          (task.due_date and task.due_date < os.time()) and "LazyDoOverdue" or
+          "LazyDoPending"
+
+      table.insert(highlights, {
+        line = line_nr,
+        col_start = col_start,
+        col_end = col_start + #status_icon,
+        hl_group = status_color
+      })
+
+      -- Priority highlight
+      local priority_col = col_start + #status_icon + 1
+      local priority_color = task.priority == 1 and "LazyDoPriorityHigh" or
+          task.priority == 2 and "LazyDoPriorityMedium" or
+          "LazyDoPriorityLow"
+
+      table.insert(highlights, {
+        line = line_nr,
+        col_start = priority_col,
+        col_end = priority_col + #priority_icon,
+        hl_group = priority_color
+      })
+    end
+
+    -- Add footer
+    if self.opts.render.show_help then
+      table.insert(lines, "")
+      table.insert(lines, "── Commands ──")
+      local help = string.format(
+        "%s:Toggle │ %s:Edit │ %s:Add │ %s:Delete │ %s:Search │ ?:Help",
+        self.opts.keymaps.toggle_done,
+        self.opts.keymaps.edit_task,
+        self.opts.keymaps.add_task,
+        self.opts.keymaps.delete_task,
+        self.opts.keymaps.search_tasks
+      )
+      table.insert(lines, help)
+    end
+
+    -- Update buffer content
+    vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, lines)
+
+    -- Apply highlights
+    for _, hl in ipairs(highlights) do
+      vim.api.nvim_buf_add_highlight(
+        self.buf,
+        -1,
+        hl.hl_group,
+        hl.line - 1,
+        hl.col_start,
+        hl.col_end
+      )
+    end
+
+    -- Make buffer non-modifiable again
+    vim.api.nvim_buf_set_option(self.buf, 'modifiable', false)
+  end)
+
+  if not ok then
+    vim.notify("Failed to render buffer: " .. err, vim.log.levels.ERROR)
   end
 end
 
@@ -1942,181 +1973,6 @@ function LazyDo:sort_tasks_by(criteria)
   end
 end
 
--- Add buffer-local keymaps setup
-function LazyDo:setup_buffer_keymaps()
-  local function map(key, fn)
-    vim.keymap.set('n', key, fn, {
-      buffer = self.buf,
-      silent = true,
-      nowait = true,
-      desc = "LazyDo: " .. key
-    })
-  end
-
-  -- Core task management
-  map(self.opts.keymaps.toggle_done, function() self:toggle_task() end)
-  map(self.opts.keymaps.edit_task, function() self:edit_task() end)
-  map(self.opts.keymaps.add_task, function() self:add_task() end)
-  map(self.opts.keymaps.delete_task, function() self:delete_task() end)
-
-  -- Task organization
-  map(self.opts.keymaps.move_up, function() self:move_task_up() end)
-  map(self.opts.keymaps.move_down, function() self:move_task_down() end)
-  map(self.opts.keymaps.toggle_expand, function() self:toggle_expand() end)
-
-  -- Task properties
-  map(self.opts.keymaps.increase_priority, function() self:change_priority(-1) end)
-  map(self.opts.keymaps.decrease_priority, function() self:change_priority(1) end)
-  map(self.opts.keymaps.quick_note, function() self:quick_note() end)
-  map(self.opts.keymaps.quick_date, function() self:quick_date() end)
-
-  -- Task filtering and search
-  map(self.opts.keymaps.search_tasks, function() self:advanced_search() end)
-  map(self.opts.keymaps.sort_by_priority, function() self:show_sort_menu() end)
-
-  -- Additional features
-  map('<CR>', function() self:quick_actions() end)
-  map('?', function() self:show_help() end)
-end
-
--- Improved task toggle
-function LazyDo:toggle_task()
-  local cursor = vim.api.nvim_win_get_cursor(self.win)
-  local task = self:get_task_at_line(cursor[1])
-  if not task then return end
-
-  task.done = not task.done
-
-  -- Handle dependent tasks
-  if task.done then
-    -- Check if all dependencies are completed
-    local all_deps_done = true
-    for _, dep_id in ipairs(task.dependencies or {}) do
-      local dep = self:get_task_by_id(dep_id)
-      if dep and not dep.done then
-        all_deps_done = false
-        break
-      end
-    end
-
-    if not all_deps_done then
-      vim.notify("Cannot complete task: dependencies not done", vim.log.levels.WARN)
-      task.done = false
-      return
-    end
-  else
-    -- Uncompleting a task should uncheck dependent tasks
-    self:uncheck_dependent_tasks(task)
-  end
-
-  self:render()
-end
-
--- Improved task editing
--- function LazyDo:edit_task()
---   local cursor = vim.api.nvim_win_get_cursor(self.win)
---   local task = self:get_task_at_line(cursor[1])
---   if not task then return end
---
---   vim.ui.input({
---     prompt = "Edit task: ",
---     default = task.content,
---     completion = "custom,v:lua.LazyDo_completion",
---   }, function(input)
---     if input and input ~= "" then
---       task.content = input
---       self:render()
---     end
---   end)
--- end
-
--- Safe task addition
--- function LazyDo:add_task()
---   vim.ui.input({
---     prompt = "New task: ",
---     completion = "custom,v:lua.LazyDo_completion",
---   }, function(input)
---     if input and input ~= "" then
---       local cursor = vim.api.nvim_win_get_cursor(self.win)
---       local current_task = self:get_task_at_line(cursor[1])
---
---       local new_task = {
---         id = tostring(os.time()) .. math.random(1000, 9999),
---         content = input,
---         done = false,
---         priority = 3,
---         indent = current_task and current_task.indent or 0,
---         tags = {},
---         subtasks = {},
---         dependencies = {},
---       }
---
---       table.insert(self.tasks, cursor[1] - 3, new_task)
---       self:render()
---     end
---   end)
--- end
-
--- Safe task deletion
-function LazyDo:delete_task()
-  local cursor = vim.api.nvim_win_get_cursor(self.win)
-  local task = self:get_task_at_line(cursor[1])
-  if not task then return end
-
-  -- Check if task has dependents
-  local has_dependents = false
-  for _, t in ipairs(self.tasks) do
-    if vim.tbl_contains(t.dependencies or {}, task.id) then
-      has_dependents = true
-      break
-    end
-  end
-
-  if has_dependents then
-    vim.ui.select({ "Yes", "No" }, {
-      prompt = "Task has dependents. Delete anyway?",
-    }, function(choice)
-      if choice == "Yes" then
-        self:remove_task_and_subtasks(task)
-      end
-    end)
-  else
-    self:remove_task_and_subtasks(task)
-  end
-end
-
--- Helper function to remove task and its subtasks
-function LazyDo:remove_task_and_subtasks(task)
-  local to_remove = { task.id }
-
-  -- Collect all subtask IDs
-  local function collect_subtasks(t)
-    for _, subtask in ipairs(t.subtasks or {}) do
-      table.insert(to_remove, subtask.id)
-      collect_subtasks(subtask)
-    end
-  end
-
-  collect_subtasks(task)
-
-  -- Remove tasks
-  self.tasks = vim.tbl_filter(function(t)
-    return not vim.tbl_contains(to_remove, t.id)
-  end, self.tasks)
-
-  self:render()
-end
-
--- Helper function to uncheck dependent tasks
-function LazyDo:uncheck_dependent_tasks(task)
-  for _, t in ipairs(self.tasks) do
-    if vim.tbl_contains(t.dependencies or {}, task.id) then
-      t.done = false
-      self:uncheck_dependent_tasks(t)
-    end
-  end
-end
-
 -- Show sort menu
 function LazyDo:show_sort_menu()
   local options = {
@@ -2191,6 +2047,26 @@ function LazyDo:show_help()
   -- Close help window with q or <Esc>
   vim.keymap.set('n', 'q', '<cmd>close<CR>', { buffer = buf, silent = true })
   vim.keymap.set('n', '<Esc>', '<cmd>close<CR>', { buffer = buf, silent = true })
+end
+
+---Gets the task at the current cursor position
+---@return Task?
+function LazyDo:get_current_task()
+  if not self.win or not vim.api.nvim_win_is_valid(self.win) then
+    return nil
+  end
+
+  local cursor = vim.api.nvim_win_get_cursor(self.win)
+  local line_nr = cursor[1]
+  local col = cursor[2]
+
+  -- Account for header lines and validate line number
+  if line_nr < 4 or line_nr > #self.tasks + 4 then
+    return nil
+  end
+
+  local task_idx = line_nr - 4
+  return self.tasks[task_idx]
 end
 
 return LazyDo
