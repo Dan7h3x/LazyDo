@@ -75,8 +75,14 @@ function M.setup(opts)
     error("Failed to create LazyDo instance")
   end
 
-  -- Merge configurations
-  instance.opts = vim.tbl_deep_extend("force", M.default_opts, opts or {})
+  -- Ensure we load the default config
+  local default_config = require('lazydo.config').defaults
+  
+  -- Merge configurations with proper deep extend
+  instance.opts = vim.tbl_deep_extend("force", 
+    default_config,
+    opts or {}
+  )
 
   -- Initialize storage
   local storage = require('lazydo.storage')

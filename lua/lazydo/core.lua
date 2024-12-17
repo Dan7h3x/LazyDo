@@ -238,9 +238,32 @@ function LazyDo:move_task(task, direction)
 end
 
 function LazyDo:setup_highlights()
+  -- Ensure we have opts and colors
+  if not self.opts then
+    self.opts = require('lazydo.config').defaults
+  end
+  
   local colors = self.opts.colors
+  if not colors then
+    -- Fallback colors if none provided
+    colors = {
+      header = "#7aa2f7",
+      border = "#3b4261",
+      pending = "#7aa2f7",
+      done = "#9ece6a",
+      overdue = "#f7768e",
+      note = "#e0af68",
+      due_date = "#bb9af7",
+      priority = {
+        high = "#f7768e",
+        medium = "#e0af68",
+        low = "#9ece6a",
+      },
+      subtask = "#7dcfff",
+    }
+  end
 
-  -- Define highlight groups
+  -- Define highlight groups with error handling
   local highlights = {
     LazyDoBorder = { fg = colors.border },
     LazyDoHeader = { fg = colors.header, bold = true },
@@ -249,14 +272,16 @@ function LazyDo:setup_highlights()
     LazyDoOverdue = { fg = colors.overdue },
     LazyDoNote = { fg = colors.note },
     LazyDoDueDate = { fg = colors.due_date },
-    LazyDoPriorityHigh = { fg = colors.priority.high },
-    LazyDoPriorityMedium = { fg = colors.priority.medium },
-    LazyDoPriorityLow = { fg = colors.priority.low },
+    LazyDoPriorityHigh = { fg = colors.priority and colors.priority.high or colors.overdue },
+    LazyDoPriorityMedium = { fg = colors.priority and colors.priority.medium or colors.note },
+    LazyDoPriorityLow = { fg = colors.priority and colors.priority.low or colors.done },
     LazyDoSubtask = { fg = colors.subtask },
+    LazyDoStatusLine = { fg = colors.header },
   }
 
+  -- Safely set highlights
   for group, settings in pairs(highlights) do
-    vim.api.nvim_set_hl(0, group, settings)
+    pcall(vim.api.nvim_set_hl, 0, group, settings)
   end
 end
 
