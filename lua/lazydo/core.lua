@@ -105,7 +105,7 @@ function LazyDo:refresh_display()
 		end
 
 		ui.setup_task_highlights(self)
-		-- self:highlight_active_task()
+		self:highlight_active_task()
 
 		-- Update buffer
 	end)
