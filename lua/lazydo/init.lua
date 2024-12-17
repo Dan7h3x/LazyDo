@@ -62,26 +62,31 @@ function LazyDo.setup(opts)
     self.opts = vim.tbl_deep_extend("force", LazyDo.default_opts, opts or {})
     self.tasks = {}
     self.is_visible = false
+    self.buf = nil
+    self.win = nil
     LazyDo.instance = self
-
+    
     -- Initialize storage
     self:ensure_storage_dir(self.opts.storage.path)
     self:load_tasks()
-
+    
     -- Create commands and keymaps
     self:create_commands()
-
+    
     -- Setup highlights
     self:setup_highlights()
   end
-
+  
   return LazyDo.instance
 end
 
 -- Add toggle function
 function LazyDo:toggle()
   if self.is_visible and self.win and vim.api.nvim_win_is_valid(self.win) then
-    vim.api.nvim_win_close(self.win, true)
+    local ok, err = pcall(vim.api.nvim_win_close, self.win, true)
+    if not ok then
+      vim.notify("Failed to close window: " .. err, vim.log.levels.ERROR)
+    end
     self.is_visible = false
   else
     self:show()
@@ -91,8 +96,9 @@ end
 -- Add show function
 function LazyDo:show()
   -- Ensure buffer is set up
-  if not self.buf or not vim.api.nvim_buf_is_valid(self.buf) then
-    self:setup()
+  if not self:setup() then
+    vim.notify("Failed to setup LazyDo buffer", vim.log.levels.ERROR)
+    return
   end
 
   -- Create or reuse window
@@ -112,7 +118,13 @@ function LazyDo:show()
       border = 'rounded',
     }
 
-    self.win = vim.api.nvim_open_win(self.buf, true, opts)
+    local ok, win_or_err = pcall(vim.api.nvim_open_win, self.buf, true, opts)
+    if not ok then
+      vim.notify("Failed to create window: " .. win_or_err, vim.log.levels.ERROR)
+      return
+    end
+    
+    self.win = win_or_err
     self:setup_window_options()
   end
 
@@ -126,31 +138,37 @@ function LazyDo:setup_window_options()
     return
   end
 
-  -- Set window-local options
-  vim.wo[self.win].number = false
-  vim.wo[self.win].relativenumber = false
-  vim.wo[self.win].cursorline = true
-  vim.wo[self.win].signcolumn = "no"
-  vim.wo[self.win].wrap = false
+  local ok, err = pcall(function()
+    -- Set window-local options
+    vim.wo[self.win].number = false
+    vim.wo[self.win].relativenumber = false
+    vim.wo[self.win].cursorline = true
+    vim.wo[self.win].signcolumn = "no"
+    vim.wo[self.win].wrap = false
 
-  -- Add autocmd to close on certain events
-  vim.api.nvim_create_autocmd({"BufLeave", "BufWinLeave"}, {
-    buffer = self.buf,
-    callback = function()
-      if self.is_visible then
-        self:toggle()
-      end
-    end,
-  })
-
-  -- Add autocmd for auto-save
-  if self.opts.storage.auto_save then
-    vim.api.nvim_create_autocmd("BufLeave", {
+    -- Add autocmd to close on certain events
+    vim.api.nvim_create_autocmd({"BufLeave", "BufWinLeave"}, {
       buffer = self.buf,
       callback = function()
-        self:save_tasks()
-      end
+        if self.is_visible then
+          self:toggle()
+        end
+      end,
     })
+
+    -- Add autocmd for auto-save
+    if self.opts.storage.auto_save then
+      vim.api.nvim_create_autocmd("BufLeave", {
+        buffer = self.buf,
+        callback = function()
+          self:save_tasks()
+        end
+      })
+    end
+  end)
+
+  if not ok then
+    vim.notify("Failed to setup window options: " .. err, vim.log.levels.ERROR)
   end
 end
 
@@ -159,23 +177,29 @@ function LazyDo:create_commands()
   local self = self -- Capture self reference
 
   -- Create user commands
-  vim.api.nvim_create_user_command("LazyDoToggle", function()
-    self:toggle()
-  end, {})
-
-  vim.api.nvim_create_user_command("LazyDoQuickAdd", function()
-    self:quick_add_task()
-  end, {})
-
-  -- Create default keymaps if enabled
-  if self.opts.create_keymaps ~= false then
-    vim.keymap.set('n', '<leader>td', function()
+  local ok, err = pcall(function()
+    vim.api.nvim_create_user_command("LazyDoToggle", function()
       self:toggle()
-    end, { desc = "Toggle LazyDo" })
+    end, {})
 
-    vim.keymap.set('n', '<leader>ta', function()
+    vim.api.nvim_create_user_command("LazyDoQuickAdd", function()
       self:quick_add_task()
-    end, { desc = "Quick Add Task" })
+    end, {})
+
+    -- Create default keymaps if enabled
+    if self.opts.create_keymaps ~= false then
+      vim.keymap.set('n', '<leader>td', function()
+        self:toggle()
+      end, { desc = "Toggle LazyDo" })
+
+      vim.keymap.set('n', '<leader>ta', function()
+        self:quick_add_task()
+      end, { desc = "Quick Add Task" })
+    end
+  end)
+
+  if not ok then
+    vim.notify("Failed to create commands: " .. err, vim.log.levels.ERROR)
   end
 end
 
@@ -426,37 +450,44 @@ end
 function LazyDo:render()
   -- Ensure we have a valid buffer
   if not self.buf or not vim.api.nvim_buf_is_valid(self.buf) then
+    vim.notify("Invalid buffer for rendering", vim.log.levels.ERROR)
     return
   end
 
-  -- Make buffer modifiable
-  vim.api.nvim_buf_set_option(self.buf, 'modifiable', true)
+  local ok, err = pcall(function()
+    -- Make buffer modifiable
+    vim.api.nvim_buf_set_option(self.buf, 'modifiable', true)
 
-  -- Clear buffer
-  vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, {})
+    -- Clear buffer
+    vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, {})
 
-  -- Render header
-  local header = [[
+    -- Render header
+    local header = [[
 ╭──────────────────╮
 │      LazyDo      │
 ╰──────────────────╯
 ]]
-  local header_lines = vim.split(header, "\n")
-  vim.api.nvim_buf_set_lines(self.buf, 0, #header_lines, false, header_lines)
+    local header_lines = vim.split(header, "\n")
+    vim.api.nvim_buf_set_lines(self.buf, 0, #header_lines, false, header_lines)
 
-  -- Render tasks
-  self:render_tasks()
+    -- Render tasks
+    self:render_tasks()
 
-  -- Render footer
-  local footer = "Press: " ..
-      self.opts.keymaps.add_task .. " to add task | " ..
-      self.opts.keymaps.toggle_done .. " to toggle | " ..
-      self.opts.keymaps.search_tasks .. " to search"
+    -- Render footer
+    local footer = "Press: " ..
+        self.opts.keymaps.add_task .. " to add task | " ..
+        self.opts.keymaps.toggle_done .. " to toggle | " ..
+        self.opts.keymaps.search_tasks .. " to search"
 
-  vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, { footer })
+    vim.api.nvim_buf_set_lines(self.buf, -1, -1, false, { footer })
 
-  -- Make buffer non-modifiable again
-  vim.api.nvim_buf_set_option(self.buf, 'modifiable', false)
+    -- Make buffer non-modifiable again
+    vim.api.nvim_buf_set_option(self.buf, 'modifiable', false)
+  end)
+
+  if not ok then
+    vim.notify("Failed to render buffer: " .. err, vim.log.levels.ERROR)
+  end
 end
 
 ---Adds a subtask to the current task
@@ -783,6 +814,21 @@ function LazyDo:delete_task()
       end
     end
   end)
+end
+
+-- Add cleanup function
+function LazyDo:cleanup()
+  if self.win and vim.api.nvim_win_is_valid(self.win) then
+    vim.api.nvim_win_close(self.win, true)
+  end
+  
+  if self.buf and vim.api.nvim_buf_is_valid(self.buf) then
+    vim.api.nvim_buf_delete(self.buf, { force = true })
+  end
+  
+  self.win = nil
+  self.buf = nil
+  self.is_visible = false
 end
 
 return LazyDo
