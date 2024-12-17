@@ -117,15 +117,16 @@ function LazyDo:wrap_with_auto_save()
   }
 
   for _, func_name in ipairs(functions_to_wrap) do
-    local original = self[func_name]
-    self[func_name] = function(...)
-      local result = original(self, ...)
-      if self.opts.storage.auto_save then
-        self:save_tasks()
+    if self[func_name] then -- Check if function exists
+      local original = self[func_name]
+      self[func_name] = function(self, ...)
+        local result = original(self, ...)
+        if self.opts.storage.auto_save then
+          self:save_tasks()
+        end
+        self:render()
+        return result
       end
-      -- Ensure rendering after any task modification
-      self:render()
-      return result
     end
   end
 end
@@ -1198,44 +1199,39 @@ function LazyDo:render()
   end
 
   local ok, err = pcall(function()
-    -- Create render namespace if it doesn't exist
     if not self.render_ns then
       self.render_ns = vim.api.nvim_create_namespace('lazydo_render')
     end
 
-    -- Clear existing highlights and virtual text
     vim.api.nvim_buf_clear_namespace(self.buf, self.render_ns, 0, -1)
-
-    -- Make buffer modifiable
     vim.api.nvim_buf_set_option(self.buf, 'modifiable', true)
 
-    -- Prepare lines and highlights
     local lines = {}
     local highlights = {}
 
-    -- Add header
+    -- Header
     local header = {
-      "╭" .. string.rep("─", 50) .. "╮",
-      "│" .. utils.center("LazyDo Task Manager", 50) .. "│",
-      "╰" .. string.rep("─", 50) .. "╯",
+      "╭" .. string.rep("─", 60) .. "╮",
+      "│" .. utils.center("LazyDo Task Manager", 60) .. "│",
+      "╰" .. string.rep("─", 60) .. "╯",
       ""
     }
     vim.list_extend(lines, header)
 
-    -- Add statistics
+    -- Statistics
     local stats_line = self:render_statistics()
     table.insert(lines, stats_line)
     table.insert(lines, "")
 
-    -- Filter and render tasks
+    -- Tasks
     local tasks_to_render = self.current_filter and
         self:filter_tasks(self.current_filter) or self.tasks
 
     for i, task in ipairs(tasks_to_render) do
-      local line_nr = #lines + 1
+      local block_start = #lines + 1
       local indent = string.rep("  ", task.indent)
       
-      -- Build task line with proper icons and formatting
+      -- Task block header
       local status_icon = task.done and self.opts.icons.task_done or
           (task.due_date and task.due_date < os.time()) and self.opts.icons.task_overdue or
           self.opts.icons.task_pending
@@ -1244,50 +1240,74 @@ function LazyDo:render()
           task.priority == 2 and self.opts.icons.priority.medium or
           self.opts.icons.priority.low
 
-      -- Format task line
-      local line = string.format("%s%s %s %s",
+      -- Task header line
+      local header_line = string.format("%s┌─ %s %s %s",
         indent,
         status_icon,
         priority_icon,
         task.content
       )
+      table.insert(lines, header_line)
 
-      -- Add metadata
+      -- Due date
       if task.due_date then
-        line = line .. " " .. self.opts.icons.due_date .. " " .. 
-               os.date("%Y-%m-%d", task.due_date)
+        local date_line = string.format("%s│  %s %s",
+          indent,
+          self.opts.icons.due_date,
+          os.date("%Y-%m-%d", task.due_date)
+        )
+        table.insert(lines, date_line)
       end
 
+      -- Notes
       if task.notes then
-        line = line .. " " .. self.opts.icons.note
+        local notes_line = string.format("%s│  %s %s",
+          indent,
+          self.opts.icons.note,
+          task.notes
+        )
+        table.insert(lines, notes_line)
       end
 
-      table.insert(lines, line)
+      -- Subtasks
+      if #task.subtasks > 0 then
+        table.insert(lines, string.format("%s│  Subtasks:", indent))
+        for _, subtask in ipairs(task.subtasks) do
+          local subtask_line = string.format("%s│    %s %s",
+            indent,
+            subtask.done and self.opts.icons.task_done or self.opts.icons.task_pending,
+            subtask.content
+          )
+          table.insert(lines, subtask_line)
+        end
+      end
 
-      -- Add highlights for this line
-      local col_start = #indent
+      -- Block footer
+      table.insert(lines, string.format("%s└%s", indent, string.rep("─", 50)))
+
+      -- Add highlights
       local status_color = task.done and "LazyDoDone" or
           (task.due_date and task.due_date < os.time()) and "LazyDoOverdue" or
           "LazyDoPending"
 
+      -- Highlight task header
       table.insert(highlights, {
-        line = line_nr - 1,
-        col_start = col_start,
-        col_end = col_start + #status_icon,
-        hl_group = status_color
+        line = block_start - 1,
+        hl_group = status_color,
+        col_start = #indent + 3,
+        col_end = #indent + 4
       })
 
       -- Priority highlight
-      local priority_col = col_start + #status_icon + 1
       local priority_color = task.priority == 1 and "LazyDoPriorityHigh" or
           task.priority == 2 and "LazyDoPriorityMedium" or
           "LazyDoPriorityLow"
 
       table.insert(highlights, {
-        line = line_nr - 1,
-        col_start = priority_col,
-        col_end = priority_col + #priority_icon,
-        hl_group = priority_color
+        line = block_start - 1,
+        hl_group = priority_color,
+        col_start = #indent + 5,
+        col_end = #indent + 6
       })
     end
 
@@ -1306,17 +1326,7 @@ function LazyDo:render()
       )
     end
 
-    -- Make buffer non-modifiable again
     vim.api.nvim_buf_set_option(self.buf, 'modifiable', false)
-
-    -- Ensure proper window options
-    if self.win and vim.api.nvim_win_is_valid(self.win) then
-      vim.wo[self.win].wrap = false
-      vim.wo[self.win].number = false
-      vim.wo[self.win].relativenumber = false
-      vim.wo[self.win].signcolumn = "no"
-      vim.wo[self.win].cursorline = true
-    end
   end)
 
   if not ok then
@@ -2153,18 +2163,20 @@ function LazyDo:get_current_task()
   if not self.win or not vim.api.nvim_win_is_valid(self.win) then
     return nil
   end
-
+  
   local cursor = vim.api.nvim_win_get_cursor(self.win)
   local line_nr = cursor[1]
-  local col = cursor[2]
-
-  -- Account for header lines and validate line number
-  if line_nr < 4 or line_nr > #self.tasks + 4 then
-    return nil
-  end
-
+  
+  -- Account for header lines (title + stats)
+  if line_nr <= 4 then return nil end
+  
+  -- Convert to task index
   local task_idx = line_nr - 4
-  return self.tasks[task_idx]
+  if task_idx > 0 and task_idx <= #self.tasks then
+    return self.tasks[task_idx]
+  end
+  
+  return nil
 end
 
 -- Add refresh function for external updates
@@ -2172,6 +2184,58 @@ function LazyDo:refresh()
   if self.is_visible then
     self:load_tasks()
     self:render()
+  end
+end
+
+-- Add task block navigation
+function LazyDo:get_task_block_bounds()
+  local cursor = vim.api.nvim_win_get_cursor(self.win)
+  local current_line = cursor[1]
+  
+  -- Find block start
+  local block_start = current_line
+  while block_start > 4 do
+    local line = vim.api.nvim_buf_get_lines(self.buf, block_start - 1, block_start, true)[1]
+    if line:match("^%s*┌") then
+      break
+    end
+    block_start = block_start - 1
+  end
+  
+  -- Find block end
+  local block_end = current_line
+  local total_lines = vim.api.nvim_buf_line_count(self.buf)
+  while block_end < total_lines do
+    local line = vim.api.nvim_buf_get_lines(self.buf, block_end - 1, block_end, true)[1]
+    if line:match("^%s*└") then
+      break
+    end
+    block_end = block_end + 1
+  end
+  
+  return block_start, block_end
+end
+
+-- Add task block selection
+function LazyDo:select_task_block()
+  local block_start, block_end = self:get_task_block_bounds()
+  if block_start and block_end then
+    vim.api.nvim_win_set_cursor(self.win, {block_start, 0})
+    vim.cmd('normal! V')
+    vim.api.nvim_win_set_cursor(self.win, {block_end, 0})
+  end
+end
+
+-- Add task block folding
+function LazyDo:toggle_fold()
+  local block_start, block_end = self:get_task_block_bounds()
+  if block_start and block_end then
+    local is_folded = vim.fn.foldclosed(block_start) ~= -1
+    if is_folded then
+      vim.cmd(string.format('%d,%dfoldopen', block_start, block_end))
+    else
+      vim.cmd(string.format('%d,%dfold', block_start, block_end))
+    end
   end
 end
 
