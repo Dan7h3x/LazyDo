@@ -101,9 +101,37 @@ LazyDo.default_opts = {
 -- Add visibility state
 LazyDo.is_visible = false
 
--- Add setup function for initialization
----@param opts? table
-function LazyDo.setup(opts)
+-- Add auto-save wrapper function
+function LazyDo:wrap_with_auto_save()
+  local functions_to_wrap = {
+    'add_task',
+    'edit_task',
+    'delete_task',
+    'toggle_task',
+    'move_task_up',
+    'move_task_down',
+    'change_priority',
+    'quick_note',
+    'quick_date',
+    'add_subtask'
+  }
+
+  for _, func_name in ipairs(functions_to_wrap) do
+    local original = self[func_name]
+    self[func_name] = function(...)
+      local result = original(self, ...)
+      if self.opts.storage.auto_save then
+        self:save_tasks()
+      end
+      -- Ensure rendering after any task modification
+      self:render()
+      return result
+    end
+  end
+end
+
+-- Add setup function to initialize persistence
+function LazyDo:setup(opts)
   -- Create singleton instance if it doesn't exist
   if not LazyDo.instance then
     local self = setmetatable({}, { __index = LazyDo })
@@ -114,15 +142,25 @@ function LazyDo.setup(opts)
     self.win = nil
     LazyDo.instance = self
 
-    -- Initialize storage
-    self:ensure_storage_dir(self.opts.storage.path)
+    -- Initialize storage and wrap functions
+    self:wrap_with_auto_save()
     self:load_tasks()
 
-    -- Create commands and keymaps
+    -- Create commands and setup highlights
     self:create_commands()
-    self:setup_buffer_keymaps()
-    -- Setup highlights
     self:setup_highlights()
+
+    -- Setup auto-save on buffer leave if enabled
+    if self.opts.storage.auto_save then
+      vim.api.nvim_create_autocmd("BufLeave", {
+        pattern = "*",
+        callback = function()
+          if self.is_visible then
+            self:save_tasks()
+          end
+        end
+      })
+    end
   end
 
   return LazyDo.instance
@@ -143,34 +181,25 @@ end
 
 -- Add show function
 function LazyDo:show()
-  -- Ensure buffer is set up
   if not self.buf or not vim.api.nvim_buf_is_valid(self.buf) then
     local ok, buf = pcall(vim.api.nvim_create_buf, false, true)
     if not ok then
       vim.notify("Failed to create buffer: " .. buf, vim.log.levels.ERROR)
-      return false
+      return
     end
-    self.buf = buf -- Store the buffer number
+    self.buf = buf
 
-    -- Set buffer options
-    ok, err = pcall(function()
+    -- Set up buffer
+    pcall(function()
       vim.api.nvim_buf_set_option(self.buf, 'buftype', 'nofile')
       vim.api.nvim_buf_set_option(self.buf, 'bufhidden', 'hide')
       vim.api.nvim_buf_set_option(self.buf, 'swapfile', false)
       vim.api.nvim_buf_set_option(self.buf, 'filetype', 'lazydo')
-      vim.api.nvim_buf_set_option(self.buf, 'modifiable', true)
     end)
-    if not ok then
-      vim.notify("Failed to set buffer options: " .. err, vim.log.levels.ERROR)
-      return false
-    end
-    self:setup_highlights()
-  end
 
-  -- Verify buffer is valid before creating window
-  if not vim.api.nvim_buf_is_valid(self.buf) then
-    vim.notify("Invalid buffer", vim.log.levels.ERROR)
-    return
+    -- Setup buffer-specific keymaps and highlights
+    self:setup_buffer_keymaps()
+    self:setup_highlights()
   end
 
   -- Create or reuse window
@@ -180,28 +209,27 @@ function LazyDo:show()
     local row = math.floor((vim.o.lines - height) / 2)
     local col = math.floor((vim.o.columns - width) / 2)
 
-    local opts = {
+    local win_opts = {
       relative = 'editor',
       width = width,
       height = height,
       row = row,
       col = col,
       style = 'minimal',
-      border = 'rounded',
+      border = 'rounded'
     }
 
-    local ok, win_or_err = pcall(vim.api.nvim_open_win, self.buf, true, opts)
+    local ok, win = pcall(vim.api.nvim_open_win, self.buf, true, win_opts)
     if not ok then
-      vim.notify("Failed to create window: " .. win_or_err, vim.log.levels.ERROR)
+      vim.notify("Failed to create window: " .. win, vim.log.levels.ERROR)
       return
     end
-
-    self.win = win_or_err
+    self.win = win
     self:setup_window_options()
   end
 
   self.is_visible = true
-  self:render()
+  self:refresh()
 end
 
 -- Add window options setup
@@ -298,6 +326,9 @@ function LazyDo.new(opts)
   self.opts = vim.tbl_deep_extend("force", LazyDo.default_opts, opts or {})
   LazyDo.wrap_with_auto_save(self)
   self:setup()
+  self:setup_highlights()
+  self:setup_buffer_keymaps()
+  self:render()
   return self
 end
 
@@ -320,64 +351,62 @@ function LazyDo:setup_highlights()
   end
 end
 
----Sets up buffer-specific keymaps
+-- Fix buffer-specific keymaps setup
 function LazyDo:setup_buffer_keymaps()
   if not self.buf or not vim.api.nvim_buf_is_valid(self.buf) then
     return
   end
 
-  -- Create buffer-local autocommand group
-  local augroup = vim.api.nvim_create_augroup("LazyDoBuffer" .. self.buf, { clear = true })
+  -- Create buffer-local keymaps namespace if it doesn't exist
+  if not self.keymap_ns then
+    self.keymap_ns = vim.api.nvim_create_namespace('lazydo_keymaps')
+  end
 
-  -- Setup autocommands for dynamic updates
-  vim.api.nvim_create_autocmd({"CursorMoved", "CursorMovedI"}, {
-    group = augroup,
-    buffer = self.buf,
-    callback = function()
-      self:highlight_current_task()
-    end
-  })
+  -- Clear existing keymaps for this buffer
+  for _, keymap in ipairs(vim.api.nvim_buf_get_keymap(self.buf, 'n')) do
+    pcall(vim.keymap.del, 'n', keymap.lhs, { buffer = self.buf })
+  end
 
-  local function map(key, fn, opts)
-    opts = vim.tbl_extend("force", {
+  local function safe_map(key, fn, desc)
+    vim.keymap.set('n', key, function()
+      -- Ensure we're in the LazyDo buffer before executing
+      if vim.api.nvim_get_current_buf() == self.buf then
+        -- Wrap in pcall for safety
+        local ok, err = pcall(fn)
+        if not ok then
+          vim.notify("LazyDo action failed: " .. err, vim.log.levels.ERROR)
+        end
+      end
+    end, {
       buffer = self.buf,
       silent = true,
       nowait = true,
-    }, opts or {})
-    
-    vim.keymap.set('n', key, function()
-      -- Ensure we're in the LazyDo buffer
-      if vim.api.nvim_get_current_buf() == self.buf then
-        fn()
-      end
-    end, opts)
+      desc = desc
+    })
   end
 
-  -- Clear existing keymaps
-  pcall(vim.api.nvim_buf_clear_namespace, self.buf, 0, 0, -1)
-
   -- Core task management
-  map(self.opts.keymaps.toggle_done, function() self:toggle_task() end)
-  map(self.opts.keymaps.edit_task, function() self:edit_task() end)
-  map(self.opts.keymaps.add_task, function() self:add_task() end)
-  map(self.opts.keymaps.delete_task, function() self:delete_task() end)
-  map(self.opts.keymaps.add_subtask, function() self:add_subtask() end)
-  map(self.opts.keymaps.search_tasks, function() self:search_tasks() end)
-  map(self.opts.keymaps.sort_by_date, function() self:sort_by_date() end)
-  map(self.opts.keymaps.sort_by_priority, function() self:sort_by_priority() end)
-  map(self.opts.keymaps.toggle_expand, function() self:toggle_expand() end)
-  map(self.opts.keymaps.move_up, function() self:move_task_up() end)
-  map(self.opts.keymaps.move_down, function() self:move_task_down() end)
-  map(self.opts.keymaps.increase_priority, function() self:change_priority(-1) end)
-  map(self.opts.keymaps.decrease_priority, function() self:change_priority(1) end)
-  map(self.opts.keymaps.quick_note, function() self:quick_note() end)
-  map(self.opts.keymaps.quick_date, function() self:quick_date() end)
+  safe_map(self.opts.keymaps.toggle_done, function() self:toggle_task() end, "Toggle task status")
+  safe_map(self.opts.keymaps.edit_task, function() self:edit_task() end, "Edit task")
+  safe_map(self.opts.keymaps.add_task, function() self:add_task() end, "Add new task")
+  safe_map(self.opts.keymaps.delete_task, function() self:delete_task() end, "Delete task")
+  safe_map(self.opts.keymaps.add_subtask, function() self:add_subtask() end, "Add subtask")
+  safe_map(self.opts.keymaps.search_tasks, function() self:search_tasks() end, "Search tasks")
+  safe_map(self.opts.keymaps.sort_by_date, function() self:sort_by_date() end, "Sort by date")
+  safe_map(self.opts.keymaps.sort_by_priority, function() self:sort_by_priority() end, "Sort by priority")
+  safe_map(self.opts.keymaps.toggle_expand, function() self:toggle_expand() end, "Toggle expand")
+  safe_map(self.opts.keymaps.move_up, function() self:move_task_up() end, "Move task up")
+  safe_map(self.opts.keymaps.move_down, function() self:move_task_down() end, "Move task down")
+  safe_map(self.opts.keymaps.increase_priority, function() self:change_priority(-1) end, "Increase priority")
+  safe_map(self.opts.keymaps.decrease_priority, function() self:change_priority(1) end, "Decrease priority")
+  safe_map(self.opts.keymaps.quick_note, function() self:quick_note() end, "Quick note")
+  safe_map(self.opts.keymaps.quick_date, function() self:quick_date() end, "Quick date")
 
   -- Additional special mappings
-  map('<CR>', function() self:quick_actions() end)
-  map('?', function() self:show_help() end)
-  map('q', function() self:toggle() end)
-  map('<Esc>', function() self:toggle() end)
+  safe_map('<CR>', function() self:quick_actions() end, "Quick actions")
+  safe_map('?', function() self:show_help() end, "Show help")
+  safe_map('q', function() self:toggle() end, "Close panel")
+  safe_map('<Esc>', function() self:toggle() end, "Close panel")
 end
 
 ---Highlight current task under cursor
@@ -813,98 +842,93 @@ function LazyDo:ensure_storage_dir(path)
   end
 end
 
----Saves tasks to storage
----@param self LazyDo
+-- Enhance save_tasks with error handling and backup
 function LazyDo:save_tasks()
-  LazyDo.ensure_storage_dir(self.opts.storage.path)
+  local ok, err = pcall(function()
+    -- Ensure storage directory exists
+    local dir = vim.fn.fnamemodify(self.opts.storage.path, ":h")
+    if vim.fn.isdirectory(dir) == 0 then
+      vim.fn.mkdir(dir, "p")
+    end
 
-  -- Create backup if enabled
-  if self.opts.storage.backup and vim.fn.filereadable(self.opts.storage.path) == 1 then
-    local backup_path = self.opts.storage.path .. ".bak"
-    vim.fn.rename(self.opts.storage.path, backup_path)
-  end
+    -- Create backup if enabled
+    if self.opts.storage.backup and vim.fn.filereadable(self.opts.storage.path) == 1 then
+      local backup_path = self.opts.storage.path .. ".bak"
+      vim.fn.rename(self.opts.storage.path, backup_path)
+    end
 
-  -- Prepare tasks for serialization
-  local serializable_tasks = vim.deepcopy(self.tasks)
+    -- Serialize tasks
+    local serializable_tasks = vim.deepcopy(self.tasks)
+    local json_str = vim.json.encode(serializable_tasks)
 
-  -- Write to file
-  local file = io.open(self.opts.storage.path, "w")
-  if file then
-    file:write(vim.json.encode(serializable_tasks))
-    file:close()
+    -- Write to file
+    local file = io.open(self.opts.storage.path, "w")
+    if file then
+      file:write(json_str)
+      file:close()
+    else
+      error("Could not open file for writing: " .. self.opts.storage.path)
+    end
+  end)
+
+  if not ok then
+    vim.notify("Failed to save tasks: " .. err, vim.log.levels.ERROR)
   end
 end
 
----Loads tasks from storage
----@param self LazyDo
+-- Enhance load_tasks with better error handling and recovery
 function LazyDo:load_tasks()
-  if vim.fn.filereadable(self.opts.storage.path) == 0 then
-    self.tasks = {}
-    return
-  end
+  local ok, err = pcall(function()
+    if vim.fn.filereadable(self.opts.storage.path) == 0 then
+      self.tasks = {}
+      return
+    end
 
-  local file = io.open(self.opts.storage.path, "r")
-  if not file then
-    self.tasks = {}
-    return
-  end
+    local file = io.open(self.opts.storage.path, "r")
+    if not file then
+      error("Could not open file for reading: " .. self.opts.storage.path)
+    end
 
-  local content = file:read("*all")
-  file:close()
+    local content = file:read("*all")
+    file:close()
 
-  local ok, decoded = pcall(vim.json.decode, content)
-  if ok then
+    local decoded = vim.json.decode(content)
+    if type(decoded) ~= "table" then
+      error("Invalid task data format")
+    end
+
     self.tasks = decoded
-  else
-    -- Try to load from backup if main file is corrupted
-    local backup_path = self.opts.storage.path .. ".bak"
-    if vim.fn.filereadable(backup_path) == 1 then
-      file = io.open(backup_path, "r")
-      if file then
-        content = file:read("*all")
-        file:close()
-        ok, decoded = pcall(vim.json.decode, content)
-        if ok then
-          self.tasks = decoded
-          -- Save recovered data to main file
-          self:save_tasks()
-          vim.notify("Recovered tasks from backup file", vim.log.levels.INFO)
-          return
+  end)
+
+  if not ok then
+    -- Try to recover from backup
+    if self.opts.storage.backup then
+      local backup_path = self.opts.storage.path .. ".bak"
+      if vim.fn.filereadable(backup_path) == 1 then
+        local backup_ok, backup_err = pcall(function()
+          local file = io.open(backup_path, "r")
+          if file then
+            local content = file:read("*all")
+            file:close()
+            self.tasks = vim.json.decode(content)
+            vim.notify("Recovered tasks from backup file", vim.log.levels.INFO)
+          end
+        end)
+        if not backup_ok then
+          vim.notify("Failed to recover from backup: " .. backup_err, vim.log.levels.ERROR)
+          self.tasks = {}
         end
+      else
+        self.tasks = {}
       end
-    end
-    self.tasks = {}
-    vim.notify("Failed to load tasks: " .. decoded, vim.log.levels.ERROR)
-  end
-end
-
--- Update task modification functions to auto-save
-function LazyDo:with_auto_save(self, func, ...)
-  local result = func(...)
-  if self.opts.storage.auto_save then
-    self:save_tasks()
-  end
-  return result
-end
-
--- Wrap task modification functions with auto-save
-function LazyDo:wrap_with_auto_save(self)
-  local functions_to_wrap = {
-    "add_task",
-    "add_subtask",
-    "edit_task",
-    "toggle_task",
-    "delete_task",
-    "sort_by_date",
-    "sort_by_priority"
-  }
-
-  for _, func_name in ipairs(functions_to_wrap) do
-    local original = self[func_name]
-    self[func_name] = function(...)
-      return LazyDo.with_auto_save(self, original, ...)
+    else
+      vim.notify("Failed to load tasks: " .. err, vim.log.levels.ERROR)
+      self.tasks = {}
     end
   end
+
+  -- Ensure rendering after loading tasks
+  self:render()
 end
 
 -- Add cleanup function
@@ -1174,12 +1198,18 @@ function LazyDo:render()
   end
 
   local ok, err = pcall(function()
+    -- Create render namespace if it doesn't exist
+    if not self.render_ns then
+      self.render_ns = vim.api.nvim_create_namespace('lazydo_render')
+    end
+
+    -- Clear existing highlights and virtual text
+    vim.api.nvim_buf_clear_namespace(self.buf, self.render_ns, 0, -1)
+
     -- Make buffer modifiable
     vim.api.nvim_buf_set_option(self.buf, 'modifiable', true)
 
-    -- Clear existing highlights
-    vim.api.nvim_buf_clear_namespace(self.buf, -1, 0, -1)
-
+    -- Prepare lines and highlights
     local lines = {}
     local highlights = {}
 
@@ -1197,16 +1227,15 @@ function LazyDo:render()
     table.insert(lines, stats_line)
     table.insert(lines, "")
 
-    -- Filter tasks if needed
+    -- Filter and render tasks
     local tasks_to_render = self.current_filter and
         self:filter_tasks(self.current_filter) or self.tasks
 
-    -- Render tasks with proper indentation and icons
     for i, task in ipairs(tasks_to_render) do
       local line_nr = #lines + 1
       local indent = string.rep("  ", task.indent)
       
-      -- Build task line
+      -- Build task line with proper icons and formatting
       local status_icon = task.done and self.opts.icons.task_done or
           (task.due_date and task.due_date < os.time()) and self.opts.icons.task_overdue or
           self.opts.icons.task_pending
@@ -1215,6 +1244,7 @@ function LazyDo:render()
           task.priority == 2 and self.opts.icons.priority.medium or
           self.opts.icons.priority.low
 
+      -- Format task line
       local line = string.format("%s%s %s %s",
         indent,
         status_icon,
@@ -1234,14 +1264,14 @@ function LazyDo:render()
 
       table.insert(lines, line)
 
-      -- Add highlights
+      -- Add highlights for this line
       local col_start = #indent
       local status_color = task.done and "LazyDoDone" or
           (task.due_date and task.due_date < os.time()) and "LazyDoOverdue" or
           "LazyDoPending"
 
       table.insert(highlights, {
-        line = line_nr,
+        line = line_nr - 1,
         col_start = col_start,
         col_end = col_start + #status_icon,
         hl_group = status_color
@@ -1254,26 +1284,11 @@ function LazyDo:render()
           "LazyDoPriorityLow"
 
       table.insert(highlights, {
-        line = line_nr,
+        line = line_nr - 1,
         col_start = priority_col,
         col_end = priority_col + #priority_icon,
         hl_group = priority_color
       })
-    end
-
-    -- Add footer
-    if self.opts.render.show_help then
-      table.insert(lines, "")
-      table.insert(lines, "── Commands ──")
-      local help = string.format(
-        "%s:Toggle │ %s:Edit │ %s:Add │ %s:Delete │ %s:Search │ ?:Help",
-        self.opts.keymaps.toggle_done,
-        self.opts.keymaps.edit_task,
-        self.opts.keymaps.add_task,
-        self.opts.keymaps.delete_task,
-        self.opts.keymaps.search_tasks
-      )
-      table.insert(lines, help)
     end
 
     -- Update buffer content
@@ -1283,9 +1298,9 @@ function LazyDo:render()
     for _, hl in ipairs(highlights) do
       vim.api.nvim_buf_add_highlight(
         self.buf,
-        -1,
+        self.render_ns,
         hl.hl_group,
-        hl.line - 1,
+        hl.line,
         hl.col_start,
         hl.col_end
       )
@@ -1293,11 +1308,40 @@ function LazyDo:render()
 
     -- Make buffer non-modifiable again
     vim.api.nvim_buf_set_option(self.buf, 'modifiable', false)
+
+    -- Ensure proper window options
+    if self.win and vim.api.nvim_win_is_valid(self.win) then
+      vim.wo[self.win].wrap = false
+      vim.wo[self.win].number = false
+      vim.wo[self.win].relativenumber = false
+      vim.wo[self.win].signcolumn = "no"
+      vim.wo[self.win].cursorline = true
+    end
   end)
 
   if not ok then
-    vim.notify("Failed to render buffer: " .. err, vim.log.levels.ERROR)
+    vim.notify("Failed to render LazyDo buffer: " .. err, vim.log.levels.ERROR)
   end
+end
+
+-- Add toggle_task function that was missing
+function LazyDo:toggle_task()
+  local task = self:get_current_task()
+  if not task then return end
+
+  task.done = not task.done
+  
+  -- Handle recurring tasks
+  if task.done and task.recurrence then
+    self:process_recurring_tasks()
+  end
+
+  -- Auto-save if enabled
+  if self.opts.storage.auto_save then
+    self:save_tasks()
+  end
+
+  self:render()
 end
 
 -- Add task tags and categories
@@ -2121,6 +2165,14 @@ function LazyDo:get_current_task()
 
   local task_idx = line_nr - 4
   return self.tasks[task_idx]
+end
+
+-- Add refresh function for external updates
+function LazyDo:refresh()
+  if self.is_visible then
+    self:load_tasks()
+    self:render()
+  end
 end
 
 return LazyDo
