@@ -84,7 +84,7 @@ function M.create_window(lazydo)
 		M.setup_auto_save(lazydo)
 		vim.schedule(function()
 			if vim.api.nvim_win_is_valid(win) then
-				M.render_footer(lazydo)
+				M.render_help_footer(lazydo)
 			end
 		end)
 		vim.keymap.set("n", "?", function()
@@ -184,27 +184,27 @@ function M.render_task_block(task, width, indent, icons)
 	-- 	end
 	-- end
 
-    -- Notes with better formatting (multiline support)
-    if task.notes then
-        local wrapped_notes = utils.word_wrap(task.notes, block_width - 6)
-        table.insert(
-            lines,
-            indent
-                .. M.CONSTANTS.BLOCK.VERTICAL
-                .. utils.pad_right("  " .. icons.note .. " Notes:", block_width - 2)
-                .. M.CONSTANTS.BLOCK.VERTICAL
-        )
+	-- Notes with better formatting (multiline support)
+	if task.notes then
+		local wrapped_notes = utils.word_wrap(task.notes, block_width - 6)
+		table.insert(
+			lines,
+			indent
+				.. M.CONSTANTS.BLOCK.VERTICAL
+				.. utils.pad_right("  " .. icons.note .. " Notes:", block_width - 2)
+				.. M.CONSTANTS.BLOCK.VERTICAL
+		)
 
-        for _, note_line in ipairs(wrapped_notes) do
-            table.insert(
-                lines,
-                indent
-                    .. M.CONSTANTS.BLOCK.VERTICAL
-                    .. utils.pad_right("    " .. note_line, block_width - 2)
-                    .. M.CONSTANTS.BLOCK.VERTICAL
-            )
-        end
-    end
+		for _, note_line in ipairs(wrapped_notes) do
+			table.insert(
+				lines,
+				indent
+					.. M.CONSTANTS.BLOCK.VERTICAL
+					.. utils.pad_right("    " .. note_line, block_width - 2)
+					.. M.CONSTANTS.BLOCK.VERTICAL
+			)
+		end
+	end
 	-- Subtasks with progress bar
 	if #task.subtasks > 0 then
 		-- Add subtask header with progress
@@ -300,7 +300,7 @@ function M.setup_buffer_keymaps(lazydo, buf)
 	safe_map(lazydo.opts.keymaps.add_subtask or "A", function()
 		local task = lazydo.get_current_task(lazydo)
 		if task then
-			lazydo.add_subtask(lazydo,task)
+			lazydo.add_subtask(lazydo, task)
 		else
 			vim.notify("No active task to add a subtask to", vim.log.levels.WARN)
 		end
@@ -308,7 +308,7 @@ function M.setup_buffer_keymaps(lazydo, buf)
 	safe_map(lazydo.opts.keymaps.add_subtask or "E", function()
 		local task = lazydo.get_current_task(lazydo)
 		if task then
-			lazydo.edit_subtask(lazydo,task)
+			lazydo.edit_subtask(lazydo, task)
 		else
 			vim.notify("No active task to add a subtask to", vim.log.levels.WARN)
 		end
@@ -316,7 +316,7 @@ function M.setup_buffer_keymaps(lazydo, buf)
 	safe_map(lazydo.opts.keymaps.move_up or "K", function()
 		local task = lazydo.get_current_task(lazydo)
 		if task then
-			lazydo.move_task(lazydo,task, 1)
+			lazydo.move_task(lazydo, task, 1)
 		else
 			vim.notify("No active task selected", vim.log.levels.WARN)
 		end
@@ -324,7 +324,7 @@ function M.setup_buffer_keymaps(lazydo, buf)
 	safe_map(lazydo.opts.keymaps.move_down or "J", function()
 		local task = lazydo.get_current_task(lazydo)
 		if task then
-			lazydo.move_task(lazydo,task, -1)
+			lazydo.move_task(lazydo, task, -1)
 		else
 			vim.notify("No active task selected", vim.log.levels.WARN)
 		end
@@ -332,7 +332,7 @@ function M.setup_buffer_keymaps(lazydo, buf)
 	safe_map(lazydo.opts.keymaps.quick_note or "n", function()
 		local task = lazydo.get_current_task(lazydo)
 		if task then
-			lazydo.set_note(lazydo,task)
+			lazydo.set_note(lazydo, task)
 		else
 			vim.notify("No active task selected", vim.log.levels.WARN)
 		end
@@ -673,8 +673,8 @@ function M.show_quick_edit_menu(lazydo)
 		{ text = "Change Priority", value = "priority" },
 		{ text = "Toggle Done", value = "toggle" },
 		{ text = "Delete Task", value = "delete" },
-		{ text = "Add Subtask", value = "add_subtask" }, 
-        { text = "Edit Subtask", value = "edit_subtask" }, 
+		{ text = "Add Subtask", value = "add_subtask" },
+		{ text = "Edit Subtask", value = "edit_subtask" },
 	}
 
 	vim.ui.select(items, {
@@ -695,9 +695,9 @@ function M.show_quick_edit_menu(lazydo)
 		elseif choice.value == "delete" then
 			lazydo:delete_task()
 		elseif choice.value == "add_subtask" then
-            lazydo:add_subtask() -- Call the method to add a subtask
-        elseif choice.value == "edit_subtask" then
-            lazydo:edit_subtask() -- Call the method to edit a subtask
+			lazydo:add_subtask() -- Call the method to add a subtask
+		elseif choice.value == "edit_subtask" then
+			lazydo:edit_subtask() -- Call the method to edit a subtask
 		else
 			M.edit_task_component(lazydo, choice.value)
 		end
@@ -765,103 +765,6 @@ function M.render_status_line(lazydo)
 		virt_text = { { status_line, "LazyDoStatusLine" } },
 		virt_text_pos = "overlay",
 	})
-end
-
-function M.render_footer(lazydo)
-	if not lazydo or not lazydo.buf then
-		return
-	end
-	vim.api.nvim_buf_set_option(lazydo.buf, "modifiable", true)
-	local width
-	if lazydo.win and vim.api.nvim_win_is_valid(lazydo.win) then
-		width = vim.api.nvim_win_get_width(lazydo.win)
-	else
-		width = math.floor(vim.o.columns * (lazydo.opts.ui.width or 0.8))
-	end
-	local footer_lines = {}
-
-	-- Create help sections
-	local sections = {
-		{
-			title = "Navigation",
-			items = {
-				{ key = "j/k", desc = "Move up/down" },
-				{ key = "h/l", desc = "Collapse/Expand" },
-				{ key = "gg/G", desc = "Go to top/bottom" },
-			},
-		},
-		{
-			title = "Task Actions",
-			items = {
-				{ key = "<Space>", desc = "Toggle done" },
-				{ key = "e", desc = "Edit task" },
-				{ key = "dd", desc = "Delete task" },
-				{ key = "a", desc = "Add task" },
-				{ key = "A", desc = "Add subtask" },
-			},
-		},
-		{
-			title = "Quick Actions",
-			items = {
-				{ key = "n", desc = "Add note" },
-				{ key = "d", desc = "Set due date" },
-				{ key = "</>", desc = "Change priority" },
-				{ key = "q", desc = "Close window" },
-				{ key = "?", desc = "Toggle help" },
-			},
-		},
-	}
-
-	-- Render footer
-	table.insert(footer_lines, string.rep("─", width))
-
-	-- Create compact help line
-	local help_items = {}
-	for _, section in ipairs(sections) do
-		for _, item in ipairs(section.items) do
-			table.insert(help_items, string.format("%s:%s", item.key, item.desc))
-		end
-	end
-
-	-- Split help items into multiple lines if needed
-	local help_text = table.concat(help_items, " │ ")
-	local wrapped_help = utils.word_wrap(help_text, width - 4)
-
-	for _, line in ipairs(wrapped_help) do
-		table.insert(footer_lines, "  " .. line)
-	end
-	local ok, err = pcall(function()
-		local buf_line_count = vim.api.nvim_buf_line_count(lazydo.buf)
-		vim.api.nvim_buf_set_lines(lazydo.buf, buf_line_count, -1, false, footer_lines)
-		local ns = vim.api.nvim_create_namespace("lazydo_footer")
-		for i, line in ipairs(wrapped_help) do
-			for key in line:gmatch("([^:]+):") do
-				local start_col = line:find(key, 1, true) - 1
-				vim.api.nvim_buf_add_highlight(
-					lazydo.buf,
-					ns,
-					"LazyDoKey",
-					buf_line_count + i,
-					start_col,
-					start_col + #key
-				)
-			end
-			for sep_start in line:gmatch("()│") do
-				vim.api.nvim_buf_add_highlight(
-					lazydo.buf,
-					ns,
-					"LazyDoSeparator",
-					buf_line_count + i,
-					sep_start - 1,
-					sep_start
-				)
-			end
-		end
-	end)
-	vim.api.nvim_buf_set_option(lazydo.buf, "modifiable", false)
-	if not ok then
-		vim.notify("Error rendering footer: " .. tostring(err), vim.log.levels.ERROR)
-	end
 end
 
 function M.setup_auto_save(lazydo)
