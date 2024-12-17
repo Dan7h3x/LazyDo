@@ -105,6 +105,7 @@ function LazyDo:refresh_display()
 		end
 
 		ui.setup_task_highlights(self)
+		self:highlight_active_task()
 
 		-- Add help if enabled
 		if self.show_help then
@@ -131,7 +132,7 @@ function LazyDo:render_content()
 	local lines = {}
 
 	-- Add header
-	table.insert(lines, utils.center(" LazyDo ", width))
+	table.insert(lines, utils.center(" {  LazyDo  } ", width))
 	table.insert(lines, string.rep("═", width))
 
 	-- Add statistics
@@ -184,28 +185,55 @@ function LazyDo:get_current_task()
 		return nil
 	end
 
-	local cursor = vim.api.nvim_win_get_cursor(self.win)
-	local line_nr = cursor[1]
+	local cursor = vim.api.nvim_win_get_cursor(self.win)[1] - 1
+	local lines = vim.api.nvim_buf_get_lines(self.buf, 0, -1, false)
+	local line_nr = cursor
 
 	-- Skip header (title + separator + stats + empty line)
 	if line_nr <= 4 then
 		return nil
 	end
 
-	local current_task = nil
-	local current_line = line_nr
-	local task_start = 5 -- First task starts after header
-
-	for _, task in ipairs(self.tasks) do
-		local task_height = self:get_task_block_height(task)
-		if current_line >= task_start and current_line < task_start + task_height then
-			current_task = task
-			break
+	for i, line in ipairs(lines) do
+		if line:match("^%s*%*") then
+			if i == cursor then
+				return self.tasks[i]
+			end
 		end
-		task_start = task_start + task_height + 1 -- +1 for spacing
+	end
+	return nil
+
+	-- local current_task = nil
+	-- local current_line = line_nr
+	-- local task_start = 5 -- First task starts after header
+
+	-- for _, task in ipairs(self.tasks) do
+	-- 	local task_height = self:get_task_block_height(task)
+	-- 	if current_line >= task_start and current_line < task_start + task_height then
+	-- 		current_task = task
+	-- 		break
+	-- 	end
+	-- 	task_start = task_start + task_height + 1 -- +1 for spacing
+	-- end
+
+	-- return current_task
+end
+
+function LazyDo:highlight_active_task()
+	local task = self:get_current_task()
+	if not task then
+		return
 	end
 
-	return current_task
+	-- Clear previous highlights
+	vim.api.nvim_buf_clear_namespace(self.buf, self.ns.highlight, 0, -1)
+
+	-- Highlight the active task block
+	local task_line = task.line_number -- Assuming each task has a line_number property
+	local task_end_line = task_line + task.subtask_count -- Adjust based on how many lines the task spans
+
+	vim.api.nvim_buf_add_highlight(self.buf, self.ns.highlight, "LazyDoActiveTask", task_line, 0, -1)
+	vim.api.nvim_buf_add_highlight(self.buf, self.ns.highlight, "LazyDoActiveTask", task_end_line, 0, -1)
 end
 
 function LazyDo:get_task_block_height(task)

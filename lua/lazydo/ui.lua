@@ -274,7 +274,25 @@ function M.setup_buffer_keymaps(lazydo, buf)
 		M.show_quick_edit_menu(lazydo)
 	end, "Edit task")
 
-	safe_map(lazydo.opts.keymaps.delete_task or "dd", function()
+	safe_map(lazydo.opts.keymaps.add_task or "a", function()
+		M.add_task()
+	end, "Add task")
+	safe_map(lazydo.opts.keymaps.add_subtask or "A", function()
+		M.add_subtask()
+	end, "Add subtask")
+	safe_map(lazydo.opts.keymaps.move_up or "K", function()
+		M.move_task(M.get_current_task(), 1)
+	end, "Move task down")
+	safe_map(lazydo.opts.keymaps.move_down or "J", function()
+		M.move_task(M.get_current_task(), -1)
+	end, "Move task up")
+	safe_map(lazydo.opts.keymaps.quick_note or "n", function()
+		M.set_note()
+	end, "Add Note")
+	safe_map(lazydo.opts.keymaps.quick_date or "D", function()
+		M.set_date()
+	end, "Add Date")
+	safe_map(lazydo.opts.keymaps.delete_task or "d", function()
 		lazydo:delete_task()
 	end, "Delete task")
 
@@ -696,7 +714,7 @@ function M.render_footer(lazydo)
 	if not lazydo or not lazydo.buf then
 		return
 	end
-	vim.api.nvim_buf_set_option(lazydo.buf,"modifiable",true)
+	vim.api.nvim_buf_set_option(lazydo.buf, "modifiable", true)
 	local width
 	if lazydo.win and vim.api.nvim_win_is_valid(lazydo.win) then
 		width = vim.api.nvim_win_get_width(lazydo.win)
@@ -783,7 +801,7 @@ function M.render_footer(lazydo)
 			end
 		end
 	end)
-	vim.api.nvim_buf_set_option(lazydo.buf,"modifiable",false)
+	vim.api.nvim_buf_set_option(lazydo.buf, "modifiable", false)
 	if not ok then
 		vim.notify("Error rendering footer: " .. tostring(err), vim.log.levels.ERROR)
 	end
