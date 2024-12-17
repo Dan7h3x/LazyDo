@@ -16,8 +16,8 @@ local M = {
 			width = 0.8,
 			height = 0.8,
 			border = "rounded",
-			winblend = 0,
-			title = " LazyDo ",
+			winblend = 5,
+			title = " A Lazy Todo Manager ",
 		},
 		features = {
 			recurring_tasks = true,
@@ -99,7 +99,7 @@ function M.setup(opts)
 	end
 
 	-- Wrap instance with auto-save
-	-- instance = wrap_with_auto_save(instance)
+	instance = wrap_with_auto_save(instance)
 	if not instance then
 		error("Failed to wrap instance with auto-save")
 	end
