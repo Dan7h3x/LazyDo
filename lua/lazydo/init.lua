@@ -4,6 +4,30 @@
 ---@field buf number? Buffer handle
 ---@field is_visible boolean Visibility state
 local LazyDo = {}
+local utils = {}
+
+-- Fix string.center function
+function utils.center(text, width)
+  local padding = width - vim.fn.strdisplaywidth(text)
+  if padding <= 0 then return text end
+  local left_pad = math.floor(padding / 2)
+  local right_pad = padding - left_pad
+  return string.rep(" ", left_pad) .. text .. string.rep(" ", right_pad)
+end
+
+-- Safe table access
+function utils.get_or_create(tbl, key, default)
+  if tbl[key] == nil then
+    tbl[key] = default
+  end
+  return tbl[key]
+end
+
+-- Safe string operations
+function utils.safe_sub(str, start_idx, end_idx)
+  if not str then return "" end
+  return string.sub(str or "", start_idx, end_idx)
+end
 
 -- Move default options to the top of the file, before any function definitions
 LazyDo.default_opts = {
@@ -1146,7 +1170,7 @@ function LazyDo:render()
 
   -- Add header
   table.insert(lines, "╭" .. string.rep("─", 50) .. "╮")
-  table.insert(lines, "│" .. string.center("LazyDo Task Manager", 50) .. "│")
+  table.insert(lines, "│" .. utils.center("LazyDo Task Manager", 50) .. "│")
   table.insert(lines, "╰" .. string.rep("─", 50) .. "╯")
 
   -- Add statistics
@@ -1533,29 +1557,6 @@ function LazyDo:show_analytics()
     style = 'minimal',
     border = 'rounded',
   })
-end
-
--- Fix string.center function that might be missing
-local function center_text(text, width)
-  local padding = width - #text
-  if padding <= 0 then return text end
-  local left_pad = math.floor(padding / 2)
-  local right_pad = padding - left_pad
-  return string.rep(" ", left_pad) .. text .. string.rep(" ", right_pad)
-end
-
--- Fix task hierarchy management
-function LazyDo:get_task_hierarchy(task_idx)
-  local subtasks = {}
-  local indent = self.tasks[task_idx].indent
-  local i = task_idx + 1
-
-  while i <= #self.tasks and self.tasks[i].indent > indent do
-    table.insert(subtasks, i)
-    i = i + 1
-  end
-
-  return subtasks
 end
 
 -- Fix move_task functions to handle subtasks correctly
