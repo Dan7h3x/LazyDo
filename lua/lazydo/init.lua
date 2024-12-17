@@ -407,7 +407,6 @@ function LazyDo:setup_buffer_keymaps()
   safe_map('<CR>', function() self:quick_actions() end, "Quick actions")
   safe_map('?', function() self:show_help() end, "Show help")
   safe_map('q', function() self:toggle() end, "Close panel")
-  safe_map('<Esc>', function() self:toggle() end, "Close panel")
 end
 
 ---Highlight current task under cursor
@@ -2100,8 +2099,15 @@ function LazyDo:show_sort_menu()
   end)
 end
 
--- Show help
+-- Enhance show_help function
 function LazyDo:show_help()
+  -- Check if help window already exists
+  if self.help_win and vim.api.nvim_win_is_valid(self.help_win) then
+    vim.api.nvim_win_close(self.help_win, true)
+    self.help_win = nil
+    return
+  end
+
   local help_lines = {
     "LazyDo Keybindings",
     "═════════════════",
@@ -2111,6 +2117,7 @@ function LazyDo:show_help()
     string.format("  %s - Edit task", self.opts.keymaps.edit_task),
     string.format("  %s - Add new task", self.opts.keymaps.add_task),
     string.format("  %s - Delete task", self.opts.keymaps.delete_task),
+    string.format("  %s - Add subtask", self.opts.keymaps.add_subtask),
     "",
     "Organization:",
     string.format("  %s - Move task up", self.opts.keymaps.move_up),
@@ -2123,24 +2130,46 @@ function LazyDo:show_help()
     string.format("  %s - Add/edit note", self.opts.keymaps.quick_note),
     string.format("  %s - Set due date", self.opts.keymaps.quick_date),
     "",
-    "Other:",
+    "Navigation & Search:",
     string.format("  %s - Search tasks", self.opts.keymaps.search_tasks),
-    string.format("  %s - Sort tasks", self.opts.keymaps.sort_by_priority),
+    string.format("  %s - Sort by date", self.opts.keymaps.sort_by_date),
+    string.format("  %s - Sort by priority", self.opts.keymaps.sort_by_priority),
+    "",
+    "Other:",
     "  <CR> - Quick actions menu",
-    "  ?    - Show this help",
+    "  ?    - Toggle this help window",
+    "  q    - Close help window",
   }
 
-  local buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, help_lines)
-  vim.api.nvim_buf_set_option(buf, 'modifiable', false)
-  vim.api.nvim_buf_set_option(buf, 'filetype', 'help')
+  -- Create help buffer if it doesn't exist
+  if not self.help_buf or not vim.api.nvim_buf_is_valid(self.help_buf) then
+    self.help_buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_lines(self.help_buf, 0, -1, false, help_lines)
+    
+    -- Set help buffer options
+    local help_options = {
+      modifiable = false,
+      modified = false,
+      readonly = true,
+      buftype = 'nofile',
+      bufhidden = 'wipe',
+      swapfile = false,
+      filetype = 'lazydo-help'
+    }
+    
+    for option, value in pairs(help_options) do
+      vim.api.nvim_buf_set_option(self.help_buf, option, value)
+    end
+  end
 
+  -- Calculate window dimensions
   local width = 60
   local height = #help_lines
   local row = math.floor((vim.o.lines - height) / 2)
   local col = math.floor((vim.o.columns - width) / 2)
 
-  local opts = {
+  -- Create help window
+  local win_opts = {
     relative = 'editor',
     width = width,
     height = height,
@@ -2148,13 +2177,44 @@ function LazyDo:show_help()
     col = col,
     style = 'minimal',
     border = 'rounded',
+    title = ' LazyDo Help ',
+    title_pos = 'center',
   }
 
-  local win = vim.api.nvim_open_win(buf, true, opts)
+  self.help_win = vim.api.nvim_open_win(self.help_buf, false, win_opts)
 
-  -- Close help window with q or <Esc>
-  vim.keymap.set('n', 'q', '<cmd>close<CR>', { buffer = buf, silent = true })
-  vim.keymap.set('n', '<Esc>', '<cmd>close<CR>', { buffer = buf, silent = true })
+  -- Set help window options
+  local win_options = {
+    wrap = false,
+    cursorline = true,
+    winblend = 10,
+    number = false,
+    relativenumber = false,
+    signcolumn = "no"
+  }
+
+  for option, value in pairs(win_options) do
+    vim.api.nvim_win_set_option(self.help_win, option, value)
+  end
+
+  -- Set help window keymaps
+  local function set_help_keymap(key, action)
+    vim.keymap.set('n', key, action, { buffer = self.help_buf, silent = true, nowait = true })
+  end
+
+  set_help_keymap('q', function() 
+    if self.help_win and vim.api.nvim_win_is_valid(self.help_win) then
+      vim.api.nvim_win_close(self.help_win, true)
+      self.help_win = nil
+    end
+  end)
+  
+  set_help_keymap('<Esc>', function() 
+    if self.help_win and vim.api.nvim_win_is_valid(self.help_win) then
+      vim.api.nvim_win_close(self.help_win, true)
+      self.help_win = nil
+    end
+  end)
 end
 
 ---Gets the task at the current cursor position
