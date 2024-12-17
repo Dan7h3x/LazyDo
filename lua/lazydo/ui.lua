@@ -162,28 +162,49 @@ function M.render_task_block(task, width, indent, icons)
 		table.insert(lines, date_line)
 	end
 
-	-- Notes with better formatting
-	if task.notes then
-		local wrapped_notes = utils.word_wrap(task.notes, block_width - 6)
-		table.insert(
-			lines,
-			indent
-				.. M.CONSTANTS.BLOCK.VERTICAL
-				.. utils.pad_right("  " .. icons.note .. " Notes:", block_width - 2)
-				.. M.CONSTANTS.BLOCK.VERTICAL
-		)
+	-- -- Notes with better formatting
+	-- if task.notes then
+	-- 	local wrapped_notes = utils.word_wrap(task.notes, block_width - 6)
+	-- 	table.insert(
+	-- 		lines,
+	-- 		indent
+	-- 			.. M.CONSTANTS.BLOCK.VERTICAL
+	-- 			.. utils.pad_right("  " .. icons.note .. " Notes:", block_width - 2)
+	-- 			.. M.CONSTANTS.BLOCK.VERTICAL
+	-- 	)
 
-		for _, note_line in ipairs(wrapped_notes) do
-			table.insert(
-				lines,
-				indent
-					.. M.CONSTANTS.BLOCK.VERTICAL
-					.. utils.pad_right("    " .. note_line, block_width - 2)
-					.. M.CONSTANTS.BLOCK.VERTICAL
-			)
-		end
-	end
+	-- 	for _, note_line in ipairs(wrapped_notes) do
+	-- 		table.insert(
+	-- 			lines,
+	-- 			indent
+	-- 				.. M.CONSTANTS.BLOCK.VERTICAL
+	-- 				.. utils.pad_right("    " .. note_line, block_width - 2)
+	-- 				.. M.CONSTANTS.BLOCK.VERTICAL
+	-- 		)
+	-- 	end
+	-- end
 
+    -- Notes with better formatting (multiline support)
+    if task.notes then
+        local wrapped_notes = utils.word_wrap(task.notes, block_width - 6)
+        table.insert(
+            lines,
+            indent
+                .. M.CONSTANTS.BLOCK.VERTICAL
+                .. utils.pad_right("  " .. icons.note .. " Notes:", block_width - 2)
+                .. M.CONSTANTS.BLOCK.VERTICAL
+        )
+
+        for _, note_line in ipairs(wrapped_notes) do
+            table.insert(
+                lines,
+                indent
+                    .. M.CONSTANTS.BLOCK.VERTICAL
+                    .. utils.pad_right("    " .. note_line, block_width - 2)
+                    .. M.CONSTANTS.BLOCK.VERTICAL
+            )
+        end
+    end
 	-- Subtasks with progress bar
 	if #task.subtasks > 0 then
 		-- Add subtask header with progress
@@ -483,7 +504,7 @@ function M.setup_task_highlights(lazydo)
 
 	-- Get current task block bounds
 	local current_task = lazydo:get_current_task()
-	local cursor_line = vim.api.nvim_win_get_cursor(lazydo.win)[1] - 1
+	local cursor_line = vim.api.nvim_win_get_cursor(lazydo.win)[1] + 1
 
 	-- Iterate through lines and add highlights
 	local lines = vim.api.nvim_buf_get_lines(lazydo.buf, 0, -1, false)
@@ -507,7 +528,7 @@ function M.setup_task_highlights(lazydo)
 		if in_task_block then
 			-- Highlight block borders
 			add_highlight(line_idx, block_indent, block_indent + 1, "LazyDoBorder")
-			add_highlight(line_idx, #line - 1, #line, "LazyDoBorder")
+			add_highlight(line_idx, #line + 1, #line, "LazyDoBorder")
 
 			-- Highlight task status icon
 			local status_match = content:match("([󰄱󰄵󰄮])")

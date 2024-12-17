@@ -107,11 +107,6 @@ function LazyDo:refresh_display()
 		ui.setup_task_highlights(self)
 		self:highlight_active_task()
 
-		-- Add help if enabled
-		if self.show_help then
-			vim.list_extend(lines, self:render_help())
-		end
-
 		-- Add footer
 		ui.render_footer(self)
 
@@ -152,6 +147,7 @@ function LazyDo:render_content()
 		local task_lines = ui.render_task_block(task, width, "", self.opts.icons)
 		vim.list_extend(lines, task_lines)
 	end
+	self:render_help_footer(lines)
 
 	vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, lines)
 	vim.api.nvim_buf_set_option(self.buf, "modifiable", false)
@@ -220,10 +216,11 @@ function LazyDo:highlight_active_task()
 
 	-- Highlight the active task block
 	local task_line = task.line_number -- Assuming each task has a line_number property
-	local task_end_line = task_line + task.subtask_count + 1 -- Adjust based on how many lines the task spans
+	local task_end_line = self:get_task_block_height(task) -- Adjust based on how many lines the task spans
 
-	vim.api.nvim_buf_add_highlight(self.buf, self.ns.highlight, "LazyDoActiveTask", task_line, 0, -1)
-	vim.api.nvim_buf_add_highlight(self.buf, self.ns.highlight, "LazyDoActiveTask", task_end_line, 0, -1)
+	for i = task_line, task_line + task_height - 1 do
+        vim.api.nvim_buf_add_highlight(self.buf, self.ns.highlight, "LazyDoActiveTask", i, 0, -1)
+    end
 end
 
 function LazyDo:get_task_block_height(task)
@@ -296,6 +293,10 @@ function LazyDo:add_subtask(task)
         return
     end
 
+	if #task.subtasks = 0 then
+		task:add_subtask("Subtask 1")
+	end
+
     vim.ui.input({ prompt = "Enter subtask content: " }, function(input)
         if input and input ~= "" then
             task:add_subtask(input) -- Assuming task has an add_subtask method
@@ -312,7 +313,9 @@ function LazyDo:edit_subtask(task)
         vim.notify("No subtasks available to edit", vim.log.levels.WARN)
         return
     end
-
+	if #task.subtasks = 0 then
+		task:add_subtask("Subtask 1")
+	end
     -- Assuming you have a way to select a subtask to edit
     local subtask_items = {}
     for i, subtask in ipairs(task.subtasks) do
@@ -451,75 +454,34 @@ function LazyDo:create_commands()
 	end, { nargs = "?" })
 end
 
-function LazyDo:render_help()
-	if not self.show_help then
-		return {}
-	end
 
-	local width = vim.api.nvim_win_get_width(self.win)
-	local lines = {}
 
-	-- Help header
-	table.insert(lines, string.rep("─", width))
-	table.insert(lines, utils.center(" Help ", width))
-	table.insert(lines, string.rep("─", width))
 
-	-- Help content
-	local help_sections = {
-		{
-			title = "Navigation",
-			content = {
-				"j/k        - Move cursor up/down",
-				"h/l        - Collapse/Expand task",
-				"gg/G       - Go to top/bottom",
-				"<C-u>/<C-d> - Page up/down",
-			},
-		},
-		{
-			title = "Task Management",
-			content = {
-				"<Space>    - Toggle task completion",
-				"e         - Edit task",
-				"dd        - Delete task",
-				"a         - Add new task",
-				"A         - Add subtask to current task",
-			},
-		},
-		{
-			title = "Quick Actions",
-			content = {
-				"n         - Add/edit note",
-				"d         - Set due date",
-				">/<       - Increase/decrease priority",
-				"t         - Add tag",
-				"s         - Sort tasks",
-				"f         - Filter tasks",
-			},
-		},
-		{
-			title = "Other",
-			content = {
-				"q         - Close window",
-				"?         - Toggle this help",
-				":LazyDoAdd - Add task from command line",
-				":LazyDoToggle - Toggle window",
-			},
-		},
-	}
+function LazyDo:render_help_footer(lines)
+    local width = vim.api.nvim_win_get_width(self.win)
+    local help_lines = {
+        string.rep("─", width),
+        utils.center(" Help ", width),
+        string.rep("─", width),
+        " j/k        - Move cursor up/down",
+        " h/l        - Collapse/Expand task",
+        " gg/G       - Go to top/bottom",
+        " <C-u>/<C-d> - Page up/down",
+        " <Space>    - Toggle task completion",
+        " e          - Edit task",
+        " dd         - Delete task",
+        " a          - Add new task",
+        " A          - Add subtask to current task",
+        " n          - Add/edit note",
+        " d          - Set due date",
+        " >/<        - Increase/decrease priority",
+        " q          - Close window",
+        " ?          - Toggle this help",
+        " :LazyDoAdd - Add task from command line",
+        " :LazyDoToggle - Toggle window",
+    }
 
-	-- Render help sections
-	for _, section in ipairs(help_sections) do
-		table.insert(lines, "")
-		table.insert(lines, " " .. section.title)
-		table.insert(lines, " " .. string.rep("─", #section.title))
-		for _, line in ipairs(section.content) do
-			table.insert(lines, "   " .. line)
-		end
-	end
-
-	table.insert(lines, "")
-	table.insert(lines, string.rep("─", width))
-	return lines
+    -- Add help lines to the end of the existing lines
+    vim.list_extend(lines, help_lines)
 end
-
 return LazyDo
