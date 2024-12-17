@@ -1,6 +1,5 @@
 local M = {}
 local utils = require("lazydo.utils")
-local core = require("lazydo.setup")
 -- Add animations and transitions
 M.ANIMATIONS = {
 	FADE_FRAMES = 10,
@@ -280,7 +279,7 @@ function M.setup_buffer_keymaps(lazydo, buf)
 		vim.cmd("LazyDoAdd")
 	end, "Add task")
 	safe_map(lazydo.opts.keymaps.add_subtask or "A", function()
-		local task = core.get_current_task(lazydo)
+		local task = lazydo.get_current_task(lazydo)
 		if task then
 			task.add_subtask()
 		else
@@ -288,39 +287,39 @@ function M.setup_buffer_keymaps(lazydo, buf)
 		end
 	end, "Add subtask")
 	safe_map(lazydo.opts.keymaps.move_up or "K", function()
-		local task = core.get_current_task(lazydo)
+		local task = lazydo.get_current_task(lazydo)
 		if task then
-			core.move_task(task, 1)
+			lazydo.move_task(task, 1)
 		else
 			vim.notify("No active task selected", vim.log.levels.WARN)
 		end
 	end, "Move task down")
 	safe_map(lazydo.opts.keymaps.move_down or "J", function()
-		local task = core.get_current_task(lazydo)
+		local task = lazydo.get_current_task(lazydo)
 		if task then
-			core.move_task(task, -1)
+			lazydo.move_task(task, -1)
 		else
 			vim.notify("No active task selected", vim.log.levels.WARN)
 		end
 	end, "Move task up")
 	safe_map(lazydo.opts.keymaps.quick_note or "n", function()
-		local task = core.get_current_task(lazydo)
+		local task = lazydo.get_current_task(lazydo)
 		if task then
-			core.set_note(task)
+			lazydo.set_note(task)
 		else
 			vim.notify("No active task selected", vim.log.levels.WARN)
 		end
 	end, "Add Note")
 	safe_map(lazydo.opts.keymaps.quick_date or "D", function()
-		local task = core.get_current_task(lazydo)
+		local task = lazydo.get_current_task(lazydo)
 		if task then
-			core.set_date(lazydo, task)
+			lazydo.set_date(lazydo, task)
 		else
 			vim.notify("No active task selected", vim.log.levels.WARN)
 		end
 	end, "Add Date")
 	safe_map(lazydo.opts.keymaps.delete_task or "d", function()
-		core:delete_task()
+		lazydo:delete_task()
 	end, "Delete task")
 
 	safe_map("q", function()
