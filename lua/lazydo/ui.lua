@@ -1,6 +1,6 @@
 local M = {}
 local utils = require("lazydo.utils")
-local core = require("lazydo.core")
+local core = require("lazydo.setup")
 -- Add animations and transitions
 M.ANIMATIONS = {
 	FADE_FRAMES = 10,
