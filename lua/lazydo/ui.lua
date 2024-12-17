@@ -74,7 +74,7 @@ function M.create_window(lazydo)
     col = col,
     style = 'minimal',
     border = lazydo.opts.ui.border or 'rounded',
-    title = lazydo.opts.ui.title or ' LazyDo ',
+    title = lazydo.opts.ui.title or ' LazyDo : Lazy Todo Manager',
     title_pos = 'center',
   })
 
