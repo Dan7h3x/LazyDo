@@ -399,8 +399,22 @@ function M.setup_task_highlights(lazydo)
 						hl_group = "LazyDoOverdue"
 					end
 					-- Highlight icon and corresponding text
-					vim.api.nvim_buf_add_highlight(lazydo.buf, ns, hl_group, line_idx, icon_start - 1, icon_start + #status_match - 1)
-					vim.api.nvim_buf_add_highlight(lazydo.buf, ns, hl_group, line_idx, icon_start + #status_match, #line) -- Highlight text after icon
+					vim.api.nvim_buf_add_highlight(
+						lazydo.buf,
+						ns,
+						hl_group,
+						line_idx,
+						icon_start - 1,
+						icon_start + #status_match - 1
+					)
+					vim.api.nvim_buf_add_highlight(
+						lazydo.buf,
+						ns,
+						hl_group,
+						line_idx,
+						icon_start + #status_match,
+						#line
+					) -- Highlight text after icon
 				end
 			end
 
@@ -414,23 +428,51 @@ function M.setup_task_highlights(lazydo)
 				elseif priority_count == 1 then
 					hl_group = "LazyDoPriorityLow"
 				end
-				vim.api.nvim_buf_add_highlight(lazydo.buf, ns, hl_group, line_idx, priority_start - 1, priority_start + priority_count - 1)
+				vim.api.nvim_buf_add_highlight(
+					lazydo.buf,
+					ns,
+					hl_group,
+					line_idx,
+					priority_start - 1,
+					priority_start + priority_count - 1
+				)
 			end
 
 			-- Highlight due date
 			local date_icon = lazydo.opts.icons.due_date
 			local date_start = line:find(date_icon, 1, true)
 			if date_start then
-				vim.api.nvim_buf_add_highlight(lazydo.buf, ns, "LazyDoDueDate", line_idx, date_start - 1, date_start + #date_icon - 1)
+				vim.api.nvim_buf_add_highlight(
+					lazydo.buf,
+					ns,
+					"LazyDoDueDate",
+					line_idx,
+					date_start - 1,
+					date_start + #date_icon - 1
+				)
 				local date_text_start = date_start + #date_icon + 1
-				vim.api.nvim_buf_add_highlight(lazydo.buf, ns, "LazyDoDueDate", line_idx, date_text_start - 1, #line - 1)
+				vim.api.nvim_buf_add_highlight(
+					lazydo.buf,
+					ns,
+					"LazyDoDueDate",
+					line_idx,
+					date_text_start - 1,
+					#line - 1
+				)
 			end
 
 			-- Highlight notes
 			local note_icon = lazydo.opts.icons.note
 			local note_start = line:find(note_icon, 1, true)
 			if note_start then
-				vim.api.nvim_buf_add_highlight(lazydo.buf, ns, "LazyDoNote", line_idx, note_start - 1, note_start + #note_icon - 1)
+				vim.api.nvim_buf_add_highlight(
+					lazydo.buf,
+					ns,
+					"LazyDoNote",
+					line_idx,
+					note_start - 1,
+					note_start + #note_icon - 1
+				)
 				local note_text_start = note_start + #note_icon + 1
 				vim.api.nvim_buf_add_highlight(lazydo.buf, ns, "LazyDoNote", line_idx, note_text_start - 1, #line - 1)
 			end

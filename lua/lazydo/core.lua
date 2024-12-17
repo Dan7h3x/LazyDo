@@ -199,9 +199,9 @@ function LazyDo:get_current_task()
 	end
 
 	-- If the cursor is below the last task, return nil
-	if current_line >= task_start then
-		return nil
-	end
+	-- if current_line >= task_start then
+	-- 	return nil
+	-- end
 
 	return current_task
 end
@@ -219,8 +219,26 @@ function LazyDo:highlight_active_task()
 	local task_line = task.line_number -- Assuming each task has a line_number property
 	local task_end_line = self:get_task_block_height(task) -- Adjust based on how many lines the task spans
 
-	for i = task_line, task_line + task_end_line do
+	for i = task_line, task_line + task_end_line + 1 do
 		vim.api.nvim_buf_add_highlight(self.buf, self.ns.highlight, "LazyDoActiveTask", i, 0, -1)
+	end
+	-- Highlight task components
+	if task.due_date then
+		local due_date_line = task_line + 1 -- Assuming due date is on the next line
+		vim.api.nvim_buf_add_highlight(self.buf, self.ns.highlight, "LazyDoDueDate", due_date_line, 0, -1)
+	end
+
+	if task.notes then
+		local notes_line = task_line + 2 -- Assuming notes are on the line after due date
+		vim.api.nvim_buf_add_highlight(self.buf, self.ns.highlight, "LazyDoNote", notes_line, 0, -1)
+	end
+
+	-- Highlight subtasks
+	for _, subtask in ipairs(task.subtasks) do
+		if not subtask.hidden then
+			local subtask_line = task_line + 3 + subtask.index -- Adjust based on the index of the subtask
+			vim.api.nvim_buf_add_highlight(self.buf, self.ns.highlight, "LazyDoSubtask", subtask_line, 0, -1)
+		end
 	end
 end
 
