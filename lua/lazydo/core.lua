@@ -220,7 +220,7 @@ function LazyDo:highlight_active_task()
 
 	-- Highlight the active task block
 	local task_line = task.line_number -- Assuming each task has a line_number property
-	local task_end_line = task_line + task.subtask_count -- Adjust based on how many lines the task spans
+	local task_end_line = task_line + task.subtask_count + 1 -- Adjust based on how many lines the task spans
 
 	vim.api.nvim_buf_add_highlight(self.buf, self.ns.highlight, "LazyDoActiveTask", task_line, 0, -1)
 	vim.api.nvim_buf_add_highlight(self.buf, self.ns.highlight, "LazyDoActiveTask", task_end_line, 0, -1)
@@ -272,50 +272,51 @@ function LazyDo:delete_task()
 	return false
 end
 
-function LazyDo:set_note()
-    local task = self:get_current_task() -- Get the current active task
-    if not task then
-        vim.notify("No task selected", vim.log.levels.WARN)
-        return
-    end
+function LazyDo:set_note(task)
+	if not task then
+		vim.notify("No task selected", vim.log.levels.WARN)
+		return
+	end
 
-    vim.ui.input({ prompt = "Set note: ", default = task.notes or "" }, function(input)
-        if input ~= nil then
-            task.notes = input -- Set the note for the active task
-            task.updated_at = os.time() -- Update the timestamp
-            if self.opts.storage.auto_save then
-                require("lazydo.storage").save_tasks(self)
-            end
-            self:refresh_display() -- Refresh the display to show the updated task
-        end
-    end)
+	vim.ui.input({ prompt = "Set note: ", default = task.notes or "" }, function(input)
+		if input ~= nil then
+			task.notes = input -- Set the note for the active task
+			task.updated_at = os.time() -- Update the timestamp
+			if self.opts.storage.auto_save then
+				require("lazydo.storage").save_tasks(self)
+			end
+			self:refresh_display() -- Refresh the display to show the updated task
+		end
+	end)
 end
 
-function LazyDo:set_date()
-    local task = self:get_current_task() -- Get the current active task
-    if not task then
-        vim.notify("No task selected", vim.log.levels.WARN)
-        return
-    end
+function LazyDo:set_date(task)
+	if not task then
+		vim.notify("No task selected", vim.log.levels.WARN)
+		return
+	end
 
-    vim.ui.input({ prompt = "Set due date (YYYY-MM-DD or 'today'): ", default = task.due_date and os.date("%Y-%m-%d", task.due_date) or "" }, function(input)
-        if input ~= nil then
-            if input == "today" then
-                task.due_date = os.time() -- Set due date to today
-            else
-                task.due_date = utils.parse_date(input) -- Use your existing date parsing logic
-                if not task.due_date then
-                    vim.notify("Invalid date format", vim.log.levels.WARN)
-                    return
-                end
-            end
-            task.updated_at = os.time() -- Update the timestamp
-            if self.opts.storage.auto_save then
-                require("lazydo.storage").save_tasks(self)
-            end
-            self:refresh_display() -- Refresh the display to show the updated task
-        end
-    end)
+	vim.ui.input({
+		prompt = "Set due date (YYYY-MM-DD or 'today'): ",
+		default = task.due_date and os.date("%Y-%m-%d", task.due_date) or "",
+	}, function(input)
+		if input ~= nil then
+			if input == "today" then
+				task.due_date = os.time() -- Set due date to today
+			else
+				task.due_date = utils.parse_date(input) -- Use your existing date parsing logic
+				if not task.due_date then
+					vim.notify("Invalid date format", vim.log.levels.WARN)
+					return
+				end
+			end
+			task.updated_at = os.time() -- Update the timestamp
+			if self.opts.storage.auto_save then
+				require("lazydo.storage").save_tasks(self)
+			end
+			self:refresh_display() -- Refresh the display to show the updated task
+		end
+	end)
 end
 
 function LazyDo:move_task(task, direction)
