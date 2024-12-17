@@ -33,7 +33,7 @@ M.CONSTANTS = {
 
 function M.create_buffer(lazydo)
   local buf = vim.api.nvim_create_buf(false, true)
-  
+
   -- Set buffer options
   local buf_opts = {
     modifiable = false,
@@ -44,14 +44,14 @@ function M.create_buffer(lazydo)
     swapfile = false,
     filetype = 'lazydo'
   }
-  
+
   for opt, val in pairs(buf_opts) do
     vim.api.nvim_buf_set_option(buf, opt, val)
   end
 
   -- Setup buffer-specific keymaps
   M.setup_buffer_keymaps(lazydo, buf)
-  
+
   return buf
 end
 
@@ -75,7 +75,7 @@ function M.create_window(lazydo)
   }
 
   local win = vim.api.nvim_open_win(lazydo.buf, true, win_opts)
-  
+
   -- Set window options
   local win_opts = {
     wrap = false,
@@ -96,7 +96,7 @@ end
 function M.render_task_block(task, width, indent, icons)
   local lines = {}
   local highlights = {}
-  
+
   -- Calculate task completion for subtasks
   local total_subtasks = #task.subtasks
   local completed_subtasks = 0
@@ -112,8 +112,8 @@ function M.render_task_block(task, width, indent, icons)
       icons.task_pending
 
   local priority_icon = task.priority == 3 and icons.priority.high or
-                       task.priority == 2 and icons.priority.medium or
-                       icons.priority.low
+      task.priority == 2 and icons.priority.medium or
+      icons.priority.low
 
   -- Add visual tags
   local tags_str = ""
@@ -143,9 +143,9 @@ function M.render_task_block(task, width, indent, icons)
     local days_left = math.floor((task.due_date - os.time()) / 86400)
     local date_str = os.date("Due: %Y-%m-%d", task.due_date)
     local countdown = days_left > 0 and string.format("(%d days left)", days_left) or
-                     days_left == 0 and "(Due today)" or
-                     string.format("(%d days overdue)", math.abs(days_left))
-    
+        days_left == 0 and "(Due today)" or
+        string.format("(%d days overdue)", math.abs(days_left))
+
     local date_line = indent .. M.CONSTANTS.BLOCK.VERTICAL ..
         utils.pad_right(string.format("  %s %s %s",
           icons.due_date, date_str, countdown), block_width - 2) ..
@@ -157,13 +157,13 @@ function M.render_task_block(task, width, indent, icons)
   if task.notes then
     local wrapped_notes = utils.word_wrap(task.notes, block_width - 6)
     table.insert(lines, indent .. M.CONSTANTS.BLOCK.VERTICAL ..
-        utils.pad_right("  " .. icons.note .. " Notes:", block_width - 2) ..
-        M.CONSTANTS.BLOCK.VERTICAL)
-    
+      utils.pad_right("  " .. icons.note .. " Notes:", block_width - 2) ..
+      M.CONSTANTS.BLOCK.VERTICAL)
+
     for _, note_line in ipairs(wrapped_notes) do
       table.insert(lines, indent .. M.CONSTANTS.BLOCK.VERTICAL ..
-          utils.pad_right("    " .. note_line, block_width - 2) ..
-          M.CONSTANTS.BLOCK.VERTICAL)
+        utils.pad_right("    " .. note_line, block_width - 2) ..
+        M.CONSTANTS.BLOCK.VERTICAL)
     end
   end
 
@@ -173,21 +173,21 @@ function M.render_task_block(task, width, indent, icons)
     local progress_width = 20
     local progress_bar = M.render_progress_bar(total_subtasks, completed_subtasks, progress_width)
     local progress_text = string.format("Subtasks (%d/%d) ", completed_subtasks, total_subtasks)
-    
+
     table.insert(lines, indent .. M.CONSTANTS.BLOCK.VERTICAL ..
-        utils.pad_right("  " .. progress_text .. progress_bar, block_width - 2) ..
-        M.CONSTANTS.BLOCK.VERTICAL)
-    
+      utils.pad_right("  " .. progress_text .. progress_bar, block_width - 2) ..
+      M.CONSTANTS.BLOCK.VERTICAL)
+
     -- Render subtasks
     for i, subtask in ipairs(task.subtasks) do
       local is_last = i == #task.subtasks
       local prefix = is_last and M.CONSTANTS.BLOCK.SUBTASK_LAST or
           M.CONSTANTS.BLOCK.SUBTASK_BRANCH
       local subtask_status = subtask.done and icons.task_done or icons.task_pending
-      
+
       local subtask_line = indent .. M.CONSTANTS.BLOCK.VERTICAL ..
           utils.pad_right("  " .. prefix .. " " .. subtask_status ..
-          " " .. subtask.content, block_width - 2) ..
+            " " .. subtask.content, block_width - 2) ..
           M.CONSTANTS.BLOCK.VERTICAL
       table.insert(lines, subtask_line)
     end
@@ -201,11 +201,11 @@ function M.render_task_block(task, width, indent, icons)
   if task.last_completed then
     table.insert(metadata, string.format("Completed: %s", os.date("%Y-%m-%d", task.last_completed)))
   end
-  
+
   local metadata_str = table.concat(metadata, " " .. M.CONSTANTS.BLOCK.SEPARATOR .. " ")
   table.insert(lines, indent .. M.CONSTANTS.BLOCK.VERTICAL ..
-      utils.pad_right("  " .. metadata_str, block_width - 2) ..
-      M.CONSTANTS.BLOCK.VERTICAL)
+    utils.pad_right("  " .. metadata_str, block_width - 2) ..
+    M.CONSTANTS.BLOCK.VERTICAL)
 
   -- Block footer
   local bottom = indent .. M.CONSTANTS.BLOCK.BOTTOM_LEFT ..
@@ -255,8 +255,8 @@ function M.setup_buffer_keymaps(lazydo, buf)
   -- Navigation and view
   safe_map(lazydo.opts.keymaps.toggle_expand, function() lazydo:toggle_expand() end, "Toggle expand")
   safe_map(lazydo.opts.keymaps.search_tasks, function() lazydo:search_tasks() end, "Search tasks")
-  safe_map('?', function() lazydo:show_help() end, "Show help")
-  safe_map('q', function() lazydo:close_window() end, "Close LazyDo")
+  safe_map('?', function() M.show_help() end, "Show help")
+  safe_map('q', function() M.close_window() end, "Close LazyDo")
 
   -- Add quick edit menu
   safe_map('<CR>', function()
@@ -328,7 +328,7 @@ function M.show_help(lazydo)
   if not lazydo.help_buf or not vim.api.nvim_buf_is_valid(lazydo.help_buf) then
     lazydo.help_buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_set_lines(lazydo.help_buf, 0, -1, false, help_lines)
-    
+
     local help_opts = {
       modifiable = false,
       modified = false,
@@ -338,7 +338,7 @@ function M.show_help(lazydo)
       swapfile = false,
       filetype = 'lazydo-help'
     }
-    
+
     for opt, val in pairs(help_opts) do
       vim.api.nvim_buf_set_option(lazydo.help_buf, opt, val)
     end
@@ -384,14 +384,14 @@ function M.show_help(lazydo)
     vim.keymap.set('n', key, action, { buffer = lazydo.help_buf, silent = true, nowait = true })
   end
 
-  set_help_keymap('q', function() 
+  set_help_keymap('q', function()
     if lazydo.help_win and vim.api.nvim_win_is_valid(lazydo.help_win) then
       vim.api.nvim_win_close(lazydo.help_win, true)
       lazydo.help_win = nil
     end
   end)
-  
-  set_help_keymap('<Esc>', function() 
+
+  set_help_keymap('<Esc>', function()
     if lazydo.help_win and vim.api.nvim_win_is_valid(lazydo.help_win) then
       vim.api.nvim_win_close(lazydo.help_win, true)
       lazydo.help_win = nil
@@ -402,10 +402,10 @@ end
 -- Add highlight groups for task components
 function M.setup_task_highlights(lazydo)
   local ns = vim.api.nvim_create_namespace('lazydo_task_highlights')
-  
+
   -- Clear existing highlights
   vim.api.nvim_buf_clear_namespace(lazydo.buf, ns, 0, -1)
-  
+
   local function add_highlight(line, col_start, col_end, hl_group)
     vim.api.nvim_buf_add_highlight(lazydo.buf, ns, hl_group, line, col_start, col_end)
   end
@@ -527,7 +527,7 @@ function M.edit_task_component(lazydo, component)
           return
         end
       end
-      
+
       if lazydo.opts.storage.auto_save then
         lazydo:save_tasks()
       end
@@ -559,12 +559,12 @@ function M.show_quick_edit_menu(lazydo)
   if not task then return end
 
   local items = {
-    { text = "Edit Content", value = "content" },
-    { text = "Edit Note", value = "note" },
-    { text = "Set Due Date", value = "due_date" },
+    { text = "Edit Content",    value = "content" },
+    { text = "Edit Note",       value = "note" },
+    { text = "Set Due Date",    value = "due_date" },
     { text = "Change Priority", value = "priority" },
-    { text = "Toggle Done", value = "toggle" },
-    { text = "Delete Task", value = "delete" },
+    { text = "Toggle Done",     value = "toggle" },
+    { text = "Delete Task",     value = "delete" },
   }
 
   vim.ui.select(items, {
@@ -574,7 +574,7 @@ function M.show_quick_edit_menu(lazydo)
     end,
   }, function(choice)
     if not choice then return end
-    
+
     if choice.value == "toggle" then
       task:toggle()
     elseif choice.value == "delete" then
@@ -590,9 +590,9 @@ function M.render_progress_bar(total, completed, width)
   local progress = completed / total
   local filled_width = math.floor(width * progress)
   local empty_width = width - filled_width
-  
+
   return string.rep(M.CONSTANTS.BLOCK.PROGRESS_FULL, filled_width) ..
-         string.rep(M.CONSTANTS.BLOCK.PROGRESS_EMPTY, empty_width)
+      string.rep(M.CONSTANTS.BLOCK.PROGRESS_EMPTY, empty_width)
 end
 
 -- Add floating window animations
@@ -605,12 +605,12 @@ function M.animate_window_open(win, opts)
   for i = 1, M.ANIMATIONS.SLIDE_FRAMES do
     local current_width = math.floor(start_width + (width_step * i))
     local current_height = math.floor(start_height + (height_step * i))
-    
+
     vim.api.nvim_win_set_config(win, {
       width = current_width,
       height = current_height,
     })
-    
+
     vim.cmd("redraw")
     vim.loop.sleep(M.ANIMATIONS.SLIDE_DURATION_MS / M.ANIMATIONS.SLIDE_FRAMES)
   end
@@ -620,27 +620,28 @@ end
 function M.render_status_line(lazydo)
   local stats = lazydo:get_task_statistics()
   local total_width = vim.api.nvim_win_get_width(lazydo.win)
-  
+
   -- Create progress bar
   local progress_width = 20
   local progress = stats.done / (stats.total > 0 and stats.total or 1)
   local progress_bar = M.render_progress_bar(stats.total, stats.done, progress_width)
-  
+
   -- Format statistics
   local stats_text = string.format(
     "Tasks: %d │ Done: %d │ Pending: %d │ Overdue: %d │ Progress: ",
     stats.total, stats.done, stats.pending, stats.overdue
   )
-  
+
   -- Combine elements
   local status_line = stats_text .. progress_bar
-  
+
   -- Add to virtual text
   vim.api.nvim_buf_clear_namespace(lazydo.buf, lazydo.ns.virtual, 0, -1)
   vim.api.nvim_buf_set_extmark(lazydo.buf, lazydo.ns.virtual, 0, 0, {
-    virt_text = {{status_line, "LazyDoStatusLine"}},
+    virt_text = { { status_line, "LazyDoStatusLine" } },
     virt_text_pos = "overlay",
   })
 end
 
-return M 
+return M
+
