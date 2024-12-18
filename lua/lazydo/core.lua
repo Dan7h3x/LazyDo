@@ -5,9 +5,6 @@ local storage = require("lazydo.storage")
 local Tasker = require("lazydo.task")
 local config = require("lazydo.config")
 
-
-
-
 -- Core functionality and state management
 LazyDo.instance = nil
 LazyDo.is_visible = false
@@ -489,10 +486,10 @@ function LazyDo:setup_highlights()
 			fg = colors.border,
 			nocombine = true,
 		},
-		LazyDoProgressRed =  { fg = '#ff5555' },
-		LazyDoProgressOrange =  { fg = '#ffb86c' },
-		LazyDoProgressGreen =  { fg = '#50fa7b' },
-		LazyDoProgressEmpty =  { fg = '#44475a' },
+		LazyDoProgressRed = { fg = "#ff5555" },
+		LazyDoProgressOrange = { fg = "#ffb86c" },
+		LazyDoProgressGreen = { fg = "#50fa7b" },
+		LazyDoProgressEmpty = { fg = "#44475a" },
 
 		-- Subtask elements
 		LazyDoSubtaskBullet = {
@@ -752,9 +749,12 @@ function LazyDo:create_commands()
 
 	vim.api.nvim_create_user_command("LazyDoSort", function(opts)
 		self:sort_tasks(opts.args)
-	end, { nargs = 1, complete = function()
-		return { "priority", "due_date", "created", "updated" }
-	end })
+	end, {
+		nargs = 1,
+		complete = function()
+			return { "priority", "due_date", "created", "updated" }
+		end,
+	})
 
 	vim.api.nvim_create_user_command("LazyDoTemplate", function(opts)
 		if opts.args == "save" then
@@ -762,9 +762,12 @@ function LazyDo:create_commands()
 		else
 			self:create_from_template()
 		end
-	end, { nargs = "?", complete = function()
-		return { "save", "load" }
-	end })
+	end, {
+		nargs = "?",
+		complete = function()
+			return { "save", "load" }
+		end,
+	})
 end
 
 function LazyDo:create_task_prompt()

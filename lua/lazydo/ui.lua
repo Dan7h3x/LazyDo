@@ -1,7 +1,6 @@
 local M = {}
 local utils = require("lazydo.utils")
 
-
 -- Add animations and transitions
 M.ANIMATIONS = {
 	FADE_FRAMES = 10,
@@ -374,7 +373,11 @@ function M.render_task_block(task, width, indent, icons)
 					if current_line ~= "" then
 						table.insert(
 							lines,
-							indent .. box.VERTICAL .. "  " .. utils.pad_right(current_line, inner_width - 2) .. box.VERTICAL
+							indent
+								.. box.VERTICAL
+								.. "  "
+								.. utils.pad_right(current_line, inner_width - 2)
+								.. box.VERTICAL
 						)
 						current_line = ""
 					end
@@ -394,7 +397,11 @@ function M.render_task_block(task, width, indent, icons)
 					if #potential_line > max_width then
 						table.insert(
 							lines,
-							indent .. box.VERTICAL .. "  " .. utils.pad_right(current_line, inner_width - 2) .. box.VERTICAL
+							indent
+								.. box.VERTICAL
+								.. "  "
+								.. utils.pad_right(current_line, inner_width - 2)
+								.. box.VERTICAL
 						)
 						current_line = word
 					else
@@ -488,8 +495,55 @@ function M.setup_buffer_keymaps(lazydo, buf)
 	end, { buffer = buf, desc = "Add new task", silent = true })
 
 	vim.keymap.set("n", lazydo.opts.keymaps.toggle_done, function()
-		lazydo:toggle_current_task()
+		local task = lazydo:get_current_task()
+		if task then
+			task:toggle()
+			if lazydo.opts.storage.auto_save then
+				require("lazydo.storage").save_tasks(lazydo)
+			end
+			lazydo:refresh_display()
+		end
 	end, { buffer = buf, desc = "Toggle task completion", silent = true })
+
+	-- Task movement
+	vim.keymap.set("n", lazydo.opts.keymaps.move_up, function()
+		local task = lazydo:get_current_task()
+		if task then
+			lazydo:move_task(task, -1)
+		end
+	end, { buffer = buf, desc = "Move task up", silent = true })
+
+	vim.keymap.set("n", lazydo.opts.keymaps.move_down, function()
+		local task = lazydo:get_current_task()
+		if task then
+			lazydo:move_task(task, 1)
+		end
+	end, { buffer = buf, desc = "Move task down", silent = true })
+
+	-- Priority management
+	vim.keymap.set("n", lazydo.opts.keymaps.increase_priority, function()
+		local task = lazydo:get_current_task()
+		if task and task.priority < 3 then
+			task.priority = task.priority + 1
+			task.updated_at = os.time()
+			if lazydo.opts.storage.auto_save then
+				require("lazydo.storage").save_tasks(lazydo)
+			end
+			lazydo:refresh_display()
+		end
+	end, { buffer = buf, desc = "Increase priority", silent = true })
+
+	vim.keymap.set("n", lazydo.opts.keymaps.decrease_priority, function()
+		local task = lazydo:get_current_task()
+		if task and task.priority > 1 then
+			task.priority = task.priority - 1
+			task.updated_at = os.time()
+			if lazydo.opts.storage.auto_save then
+				require("lazydo.storage").save_tasks(lazydo)
+			end
+			lazydo:refresh_display()
+		end
+	end, { buffer = buf, desc = "Decrease priority", silent = true })
 
 	vim.keymap.set("n", lazydo.opts.keymaps.add_subtask, function()
 		lazydo:add_subtask()
@@ -544,7 +598,7 @@ function M.setup_buffer_keymaps(lazydo, buf)
 	end, { buffer = buf, desc = "Set due date", silent = true })
 
 	vim.keymap.set("n", lazydo.opts.keymaps.edit_task, function()
-		lazydo:show_quick_edit_menu()
+		M.show_quick_edit_menu(lazydo)
 	end, { buffer = buf, desc = "Edit task", silent = true })
 
 	-- Task movement
@@ -567,7 +621,7 @@ function M.setup_buffer_keymaps(lazydo, buf)
 
 	-- UI controls
 	vim.keymap.set("n", lazydo.opts.keymaps.toggle_help, function()
-		lazydo:toggle_help()
+		M.toggle_help(lazydo)
 	end, { buffer = buf, desc = "Toggle help", silent = true })
 
 	vim.keymap.set("n", lazydo.opts.keymaps.close_window, function()
@@ -603,7 +657,43 @@ function M.setup_buffer_keymaps(lazydo, buf)
 
 	-- Toggle subtask completion
 	vim.keymap.set("n", lazydo.opts.keymaps.toggle_subtask or "<C-Space>", function()
-		lazydo:toggle_subtask_at_cursor()
+		local task = lazydo:get_current_task()
+		if task then
+			-- Get the cursor position
+			local cursor = vim.api.nvim_win_get_cursor(lazydo.win)
+			local current_line = cursor[1]
+
+			-- Find which subtask is under cursor by checking the rendered lines
+			local lines = vim.api.nvim_buf_get_lines(lazydo.buf, 0, -1, false)
+			local line_content = lines[current_line]
+
+			-- Check if we're on a subtask line
+			if line_content and (line_content:match("└─") or line_content:match("├─")) then
+				-- Find which subtask this is by counting subtask lines from the task start
+				local subtask_count = 0
+				local found_subtask = false
+
+				-- Count backwards until we find the task start
+				for i = current_line - 1, 1, -1 do
+					local line = lines[i]
+					if line:match("^%s*╭") then -- Found task start
+						break
+					elseif line:match("└─") or line:match("├─") then
+						subtask_count = subtask_count + 1
+					end
+				end
+
+				-- Toggle the correct subtask
+				if subtask_count > 0 and subtask_count <= #task.subtasks then
+					local subtask_index = #task.subtasks - subtask_count + 1
+					task:toggle_subtask(subtask_index)
+					if lazydo.opts.storage.auto_save then
+						require("lazydo.storage").save_tasks(lazydo)
+					end
+					lazydo:refresh_display()
+				end
+			end
+		end
 	end, { buffer = buf, desc = "Toggle subtask completion", silent = true })
 
 	-- Backup controls
@@ -615,7 +705,6 @@ function M.setup_buffer_keymaps(lazydo, buf)
 		lazydo:restore_from_backup()
 	end, { buffer = buf, desc = "Restore from backup", silent = true })
 end
-
 
 function M.setup_task_highlights(lazydo)
 	local ns = vim.api.nvim_create_namespace("lazydo_task_highlights")
@@ -1007,29 +1096,33 @@ function M.show_quick_edit_menu(lazydo)
 	end)
 end
 
--- Add progress bar rendering with gradient colors
+-- Simplified progress bar rendering with direct hex colors
 function M.render_progress_bar(total, completed, width)
+	if total == 0 then
+		return string.rep("░", width)
+	end
+
 	local progress = completed / total
-	local percentage = math.floor(progress * 100)
-	local display_width = width - 4  -- Subtract space for percentage display
-	local filled_width = math.floor(display_width * progress)
-	local empty_width = display_width - filled_width
-	
+	local filled_width = math.floor(width * progress)
+	local empty_width = width - filled_width
+
 	-- Define color based on progress percentage
-	local color = progress <= 0.33 and "%#LazyDoProgressRed#"
-		or progress <= 0.66 and "%#LazyDoProgressOrange#"
-		or "%#LazyDoProgressGreen#"
-	
-	-- Create progress segments with color and percentage
-	local filled = string.rep(color .. "█", filled_width)
-	local empty = string.rep("%#LazyDoProgressEmpty#░", empty_width)
-	
-	-- Format with percentage at the end
-	return string.format("%s%s %3d%%", filled, empty, percentage)
+	local color
+	if progress <= 0.33 then
+		color = "#ff5555" -- Red for low progress
+	elseif progress <= 0.66 then
+		color = "#ffb86c" -- Orange for medium progress
+	else
+		color = "#50fa7b" -- Green for high progress
+	end
+
+	-- Create progress bar using simple squares with direct hex colors
+	local filled = string.format("%%#0x%s#%s", color:sub(2), string.rep("█", filled_width))
+	local empty = string.format("%%#0x44475a#%s", string.rep("░", empty_width))
+
+	-- Return the combined progress bar
+	return filled .. empty
 end
-
-
-
 
 -- Add floating window animations
 function M.animate_window_open(win, opts)
