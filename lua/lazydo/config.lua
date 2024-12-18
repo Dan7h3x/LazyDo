@@ -3,9 +3,30 @@ local M = {}
 M.defaults = {
 	version = "1.0.0",
 	storage = {
-		path = vim.fn.stdpath("data") .. "/lazydo/tasks.json",
-		backup = true,
+		-- Allow custom directory or default to data directory
+		directory = nil, -- Will be set to vim.fn.stdpath("data") .. "/lazydo" if nil
+		filename = "tasks.json",
 		auto_save = true,
+		save_interval = 30, -- Auto-save interval in seconds
+	},
+	performance = {
+		debounce_refresh = 100, -- Debounce UI refresh in ms
+		cache_enabled = true, -- Enable task caching
+		lazy_loading = true, -- Load tasks only when needed
+	},
+	features = {
+		recurring_tasks = true,
+		task_notes = true,
+		subtasks = true,
+		priorities = true,
+		due_dates = true,
+		tags = true,
+		sorting = true,
+		filtering = true,
+		search = true,
+		task_statistics = true,
+		task_history = true,
+		task_templates = true,
 	},
 	icons = {
 		task_pending = "󰄱",
@@ -26,6 +47,10 @@ M.defaults = {
 		bullet = "•",
 		expand = "▸",
 		collapse = "▾",
+		search = "󰍉",
+		filter = "󰈲",
+		sort = "󰒿",
+		template = "󰗀",
 	},
 	colors = {
 		header = "#7aa2f7",
@@ -41,30 +66,32 @@ M.defaults = {
 			low = "#9ece6a",
 		},
 		subtask = "#7dcfff",
-		activetask = "#2D3343", -- Subtle background for active task
-		tag = "#89ddff", -- Tag color
-		metadata = "#565f89", -- Metadata text color
+		activetask = "#2D3343",
+		tag = "#89ddff",
+		metadata = "#565f89",
 		progress = {
-			full = "#9ece6a", -- Same as done color
-			empty = "#3b4261", -- Same as border color
+			full = "#9ece6a",
+			empty = "#3b4261",
 		},
 		subtask_bullet = "#7dcfff",
+		search_highlight = "#bb9af7",
+		filter_active = "#7aa2f7",
 	},
 	keymaps = {
 		-- Task management
 		toggle_done = "<Space>",
 		edit_task = "e",
-		delete_task = "dd", -- Changed to dd for consistency
+		delete_task = "dd",
 		add_task = "a",
 		add_subtask = "A",
-		edit_subtask = "E", -- Added explicit subtask edit
-		quick_add = "o", -- Quick add task
+		edit_subtask = "E",
+		quick_add = "o",
 		add_below = "O",
 
 		-- Movement
 		move_up = "K",
 		move_down = "J",
-		next_task = "j", -- Added explicit task navigation
+		next_task = "j",
 		prev_task = "k",
 
 		-- Priority management
@@ -74,17 +101,17 @@ M.defaults = {
 		-- Quick actions
 		quick_note = "n",
 		quick_date = "D",
-		toggle_expand = "za", -- For future expandable tasks
+		toggle_expand = "za",
 
 		-- Search and sort
-		search_tasks = "/",
-		sort_by_date = "sd",
-		sort_by_priority = "sp",
-
-		-- UI controls
-		toggle_help = "<C-s>",
-		close_window = "q",
-		refresh_view = "R", -- Added refresh view
+		search = "/",
+		advanced_search = "?",
+		filter = "f",
+		clear_filter = "F",
+		sort_menu = "s",
+		templates = "t",
+		quick_stats = "S",
+		task_history = "H",
 	},
 	ui = {
 		width = 0.8,
@@ -93,19 +120,12 @@ M.defaults = {
 		winblend = 5,
 		title = " LazyDo ",
 		highlight = {
-			blend = 10, -- Background blend percentage
-			cursorline = true, -- Highlight cursor line
+			blend = 10,
+			cursorline = true,
 		},
-	},
-	features = {
-		recurring_tasks = true,
-		task_notes = true,
-		subtasks = true,
-		priorities = true,
-		due_dates = true,
-		tags = true,
-		sorting = true,
-		filtering = true,
+		animations = true, -- Enable/disable animations
+		show_progress = true, -- Show progress bars
+		show_stats = true, -- Show statistics
 	},
 }
 

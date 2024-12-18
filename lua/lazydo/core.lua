@@ -444,78 +444,273 @@ function LazyDo:move_task(task, direction)
 end
 
 function LazyDo:setup_highlights()
-    local colors = self.opts.colors or config.defaults.colors
+	local colors = self.opts.colors or config.defaults.colors
 
-    local highlights = {
-        -- Basic UI elements
-        LazyDoBorder = { fg = colors.border },
-        LazyDoHeader = { fg = colors.header, bold = true },
-        LazyDoSeparator = { fg = colors.border },
-        LazyDoStatusLine = { fg = colors.header },
-        
-        -- Task states
-        LazyDoPending = { fg = colors.pending },
-        LazyDoDone = { fg = colors.done },
-        LazyDoOverdue = { fg = colors.overdue },
-        
-        -- Task components
-        LazyDoNote = { fg = colors.note },
-        LazyDoDueDate = { fg = colors.due_date },
-        LazyDoTag = { fg = colors.tag, italic = true },
-        LazyDoMetadata = { fg = colors.metadata },
-        
-        -- Priority levels
-		LazyDoPriorityHigh = { 
-            fg = colors.priority.high,
-            bold = true,
-            italic = true
-        },
-        LazyDoPriorityMedium = { 
-            fg = colors.priority.medium,
-            bold = true
-        },
-        LazyDoPriorityLow = { 
-            fg = colors.priority.low
-        },
+	local highlights = {
+		-- Basic UI elements
+		LazyDoBorder = { fg = colors.border },
+		LazyDoHeader = { fg = colors.header, bold = true },
+		LazyDoSeparator = { fg = colors.border },
+		LazyDoStatusLine = { fg = colors.header },
+
+		-- Task states
+		LazyDoPending = { fg = colors.pending },
+		LazyDoDone = { fg = colors.done },
+		LazyDoOverdue = { fg = colors.overdue },
+
+		-- Task components
+		LazyDoNote = { fg = colors.note },
+		LazyDoDueDate = { fg = colors.due_date },
+		LazyDoTag = { fg = colors.tag, italic = true },
+		LazyDoMetadata = { fg = colors.metadata },
+
+		-- Priority levels
+		LazyDoPriorityHigh = {
+			fg = colors.priority.high,
+			bold = true,
+			italic = true,
+		},
+		LazyDoPriorityMedium = {
+			fg = colors.priority.medium,
+			bold = true,
+		},
+		LazyDoPriorityLow = {
+			fg = colors.priority.low,
+		},
 		-- Progress indicators
-        LazyDoProgressFull = { 
-            fg = colors.done,
-            bold = true
-        },
-        LazyDoProgressEmpty = { 
-            fg = colors.border,
-            nocombine = true
-        },
-        
-        -- Subtask elements
-        LazyDoSubtaskBullet = { 
-            fg = colors.subtask,
-            bold = true
-        },
-        LazyDoSubtaskProgress = { 
-            fg = colors.done,
-            bold = true
-        },
-        
-        -- Subtasks
-        LazyDoSubtask = { fg = colors.subtask },
-        LazyDoSubtaskDone = { fg = colors.done },
-        
-        -- Active task
-        LazyDoActiveTask = { 
-            bg = colors.activetask,
-            blend = self.opts.ui.highlight.blend or 10
-        },
-        
-        -- Help window
-        LazyDoHelp = { fg = colors.note },
-        LazyDoHelpHeader = { fg = colors.header, bold = true },
-        LazyDoHelpKey = { fg = colors.header, bold = true },
-    }
+		LazyDoProgressFull = {
+			fg = colors.done,
+			bold = true,
+		},
+		LazyDoProgressEmpty = {
+			fg = colors.border,
+			nocombine = true,
+		},
 
-    for group, settings in pairs(highlights) do
-        pcall(vim.api.nvim_set_hl, 0, group, settings)
-    end
+		-- Subtask elements
+		LazyDoSubtaskBullet = {
+			fg = colors.subtask,
+			bold = true,
+		},
+		LazyDoSubtaskProgress = {
+			fg = colors.done,
+			bold = true,
+		},
+
+		-- Subtasks
+		LazyDoSubtask = { fg = colors.subtask },
+		LazyDoSubtaskDone = { fg = colors.done },
+
+		-- Active task
+		LazyDoActiveTask = {
+			bg = colors.activetask,
+			blend = self.opts.ui.highlight.blend or 10,
+		},
+
+		-- Help window
+		LazyDoHelp = { fg = colors.note },
+		LazyDoHelpHeader = { fg = colors.header, bold = true },
+		LazyDoHelpKey = { fg = colors.header, bold = true },
+	}
+
+	for group, settings in pairs(highlights) do
+		pcall(vim.api.nvim_set_hl, 0, group, settings)
+	end
+end
+
+-- Search functionality
+function LazyDo:search_tasks(query)
+	if not query or query == "" then
+		return self.tasks
+	end
+
+	local results = {}
+	local query_lower = query:lower()
+	
+	for _, task in ipairs(self.tasks) do
+		if task.content:lower():find(query_lower) or
+		   (task.notes and task.notes:lower():find(query_lower)) or
+		   vim.tbl_contains(vim.tbl_map(function(tag) return tag:lower() end, task.tags), query_lower) then
+			table.insert(results, task)
+		end
+	end
+	
+	return results
+end
+
+-- Advanced filtering
+function LazyDo:filter_tasks(filters)
+	local filtered = vim.deepcopy(self.tasks)
+	
+	if filters.status then
+		filtered = vim.tbl_filter(function(task)
+			return (filters.status == "done" and task.done) or
+				   (filters.status == "pending" and not task.done) or
+				   (filters.status == "overdue" and task:is_overdue())
+		end, filtered)
+	end
+
+	if filters.priority then
+		filtered = vim.tbl_filter(function(task)
+			return task.priority == filters.priority
+		end, filtered)
+	end
+
+	if filters.tags and #filters.tags > 0 then
+		filtered = vim.tbl_filter(function(task)
+			for _, tag in ipairs(filters.tags) do
+				if not vim.tbl_contains(task.tags, tag) then
+					return false
+				end
+			end
+			return true
+		end, filtered)
+	end
+
+	return filtered
+end
+
+-- Task sorting
+function LazyDo:sort_tasks(method)
+	local sorters = {
+		priority = function(a, b) return a.priority > b.priority end,
+		due_date = function(a, b)
+			if not a.due_date then return false end
+			if not b.due_date then return true end
+			return a.due_date < b.due_date
+		end,
+		created = function(a, b) return a.created_at > b.created_at end,
+		updated = function(a, b) return a.updated_at > b.updated_at end,
+	}
+
+	if sorters[method] then
+		table.sort(self.tasks, sorters[method])
+		self:refresh_display()
+	end
+end
+
+-- Task templates
+function LazyDo:save_as_template(task)
+	if not self.templates then
+		self.templates = {}
+	end
+	
+	local template = vim.deepcopy(task)
+	template.id = nil
+	template.created_at = nil
+	template.updated_at = nil
+	
+	vim.ui.input({
+		prompt = "Template name: ",
+	}, function(name)
+		if name and name ~= "" then
+			self.templates[name] = template
+			storage.mark_dirty()
+			vim.notify("Template saved: " .. name)
+		end
+	end)
+end
+
+function LazyDo:create_from_template()
+	if not self.templates or vim.tbl_isempty(self.templates) then
+		vim.notify("No templates available")
+		return
+	end
+
+	local template_names = vim.tbl_keys(self.templates)
+	vim.ui.select(template_names, {
+		prompt = "Select template:",
+	}, function(choice)
+		if choice then
+			local new_task = vim.deepcopy(self.templates[choice])
+			new_task.created_at = os.time()
+			new_task.updated_at = os.time()
+			new_task.id = tostring(os.time()) .. math.random(1000, 9999)
+			table.insert(self.tasks, new_task)
+			self:refresh_display()
+		end
+	end)
+end
+
+-- Task statistics
+function LazyDo:get_detailed_statistics()
+	local stats = {
+		total = #self.tasks,
+		done = 0,
+		pending = 0,
+		overdue = 0,
+		priority = { high = 0, medium = 0, low = 0 },
+		tags = {},
+		completion_rate = 0,
+		average_completion_time = 0,
+	}
+
+	local completion_times = {}
+	
+	for _, task in ipairs(self.tasks) do
+		if task.done then
+			stats.done = stats.done + 1
+			if task.last_completed and task.created_at then
+				table.insert(completion_times, task.last_completed - task.created_at)
+			end
+		else
+			stats.pending = stats.pending + 1
+			if task:is_overdue() then
+				stats.overdue = stats.overdue + 1
+			end
+		end
+
+		-- Priority stats
+		if task.priority == 3 then
+			stats.priority.high = stats.priority.high + 1
+		elseif task.priority == 2 then
+			stats.priority.medium = stats.priority.medium + 1
+		else
+			stats.priority.low = stats.priority.low + 1
+		end
+
+		-- Tag stats
+		for _, tag in ipairs(task.tags) do
+			stats.tags[tag] = (stats.tags[tag] or 0) + 1
+		end
+	end
+
+	-- Calculate completion rate and average time
+	stats.completion_rate = stats.total > 0 and (stats.done / stats.total) * 100 or 0
+	if #completion_times > 0 then
+		local sum = 0
+		for _, time in ipairs(completion_times) do
+			sum = sum + time
+		end
+		stats.average_completion_time = sum / #completion_times
+	end
+
+	return stats
+end
+
+-- Performance optimization for task operations
+function LazyDo:wrap_with_auto_save()
+	local original_add = self.add_task
+	local original_delete = self.delete_task
+	local original_move = self.move_task
+
+	self.add_task = function(self, ...)
+		local result = original_add(self, ...)
+		storage.mark_dirty()
+		return result
+	end
+
+	self.delete_task = function(self, ...)
+		local result = original_delete(self, ...)
+		storage.mark_dirty()
+		return result
+	end
+
+	self.move_task = function(self, ...)
+		local result = original_move(self, ...)
+		storage.mark_dirty()
+		return result
+	end
 end
 
 function LazyDo:create_commands()
@@ -529,62 +724,64 @@ function LazyDo:create_commands()
 end
 
 function LazyDo:create_task_prompt()
-    local function create_task(input)
-        if not input or input == "" then
-            return
-        end
+	local function create_task(input)
+		if not input or input == "" then
+			return
+		end
 
-        -- Parse priority from input (e.g., "!high Task description" or "!3 Task description")
-        local priority = 2  -- default medium priority
-        local content = input
-        
-        -- Priority patterns: !high/!h, !medium/!m, !low/!l or !3, !2, !1
-        local prio_pattern = "^!(%w+)%s+(.+)$"
-        local prio_str, rest = input:match(prio_pattern)
-        
-        if prio_str then
-            content = rest
-            if prio_str:match("^[hH]") or prio_str == "3" then
-                priority = 3
-            elseif prio_str:match("^[lL]") or prio_str == "1" then
-                priority = 1
-            end
-        end
+		-- Parse priority from input (e.g., "!high Task description" or "!3 Task description")
+		local priority = 2 -- default medium priority
+		local content = input
 
-        -- Parse tags from content (e.g., "Task description #tag1 #tag2")
-        local tags = {}
-        content = content:gsub("#(%w+)", function(tag)
-            table.insert(tags, tag)
-            return ""
-        end):gsub("%s+$", "")  -- Remove trailing spaces
+		-- Priority patterns: !high/!h, !medium/!m, !low/!l or !3, !2, !1
+		local prio_pattern = "^!(%w+)%s+(.+)$"
+		local prio_str, rest = input:match(prio_pattern)
 
-        -- Create the task
-        local task = self:add_task(content, {
-            priority = priority,
-            tags = tags
-        })
+		if prio_str then
+			content = rest
+			if prio_str:match("^[hH]") or prio_str == "3" then
+				priority = 3
+			elseif prio_str:match("^[lL]") or prio_str == "1" then
+				priority = 1
+			end
+		end
 
-        -- Optionally prompt for due date
-        vim.ui.input({
-            prompt = "Set due date? (YYYY-MM-DD/today/Xd/n): ",
-        }, function(date_input)
-            if date_input and date_input ~= "" and date_input ~= "n" then
-                local due_date = require("lazydo.utils").parse_date(date_input)
-                if due_date then
-                    task.due_date = due_date
-                    self:refresh_display()
-                else
-                    vim.notify("Invalid date format", vim.log.levels.WARN)
-                end
-            end
-        end)
+		-- Parse tags from content (e.g., "Task description #tag1 #tag2")
+		local tags = {}
+		content = content
+			:gsub("#(%w+)", function(tag)
+				table.insert(tags, tag)
+				return ""
+			end)
+			:gsub("%s+$", "") -- Remove trailing spaces
 
-        self:refresh_display()
-    end
+		-- Create the task
+		local task = self:add_task(content, {
+			priority = priority,
+			tags = tags,
+		})
 
-    vim.ui.input({
-        prompt = "New task (!high/!medium/!low or !3/!2/!1 for priority): ",
-        completion = "customlist,TaskComplete",
-    }, create_task)
+		-- Optionally prompt for due date
+		vim.ui.input({
+			prompt = "Set due date? (YYYY-MM-DD/today/Xd/n): ",
+		}, function(date_input)
+			if date_input and date_input ~= "" and date_input ~= "n" then
+				local due_date = require("lazydo.utils").parse_date(date_input)
+				if due_date then
+					task.due_date = due_date
+					self:refresh_display()
+				else
+					vim.notify("Invalid date format", vim.log.levels.WARN)
+				end
+			end
+		end)
+
+		self:refresh_display()
+	end
+
+	vim.ui.input({
+		prompt = "New task (!high/!medium/!low or !3/!2/!1 for priority): ",
+		completion = "customlist,TaskComplete",
+	}, create_task)
 end
 return LazyDo
