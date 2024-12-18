@@ -32,14 +32,13 @@ M.CONSTANTS = {
 
 -- Add this helper function at the top of ui.lua
 local function find_index(list, value)
-    for i, v in ipairs(list) do
-        if v == value then
-            return i
-        end
-    end
-    return nil
+	for i, v in ipairs(list) do
+		if v == value then
+			return i
+		end
+	end
+	return nil
 end
-
 
 function M.create_buffer(lazydo)
 	local buf = vim.api.nvim_create_buf(false, true)
@@ -490,34 +489,34 @@ end
 -- end
 
 function M.setup_buffer_keymaps(lazydo, buf)
-    if not lazydo or not buf then
-        vim.notify("Invalid arguments for setup_buffer_keymaps", vim.log.levels.ERROR)
-        return
-    end
+	if not lazydo or not buf then
+		vim.notify("Invalid arguments for setup_buffer_keymaps", vim.log.levels.ERROR)
+		return
+	end
 
-    local function safe_map(key, fn, desc)
-        vim.keymap.set("n", key, function()
-            local status, err = pcall(fn)
-            if not status then
-                vim.notify("LazyDo action failed: " .. tostring(err), vim.log.levels.ERROR)
-            end
-        end, { buffer = buf, desc = desc, silent = true })
-    end
+	local function safe_map(key, fn, desc)
+		vim.keymap.set("n", key, function()
+			local status, err = pcall(fn)
+			if not status then
+				vim.notify("LazyDo action failed: " .. tostring(err), vim.log.levels.ERROR)
+			end
+		end, { buffer = buf, desc = desc, silent = true })
+	end
 
 	safe_map(lazydo.opts.keymaps.add_task, function()
-        lazydo:create_task_prompt()
-    end, "Add new task")
+		lazydo:create_task_prompt()
+	end, "Add new task")
 
 	safe_map(lazydo.opts.keymaps.quick_add or "o", function()
-        vim.ui.input({
-            prompt = "Quick task: ",
-        }, function(input)
-            if input and input ~= "" then
-                lazydo:add_task(input, { priority = 2 })
-                lazydo:refresh_display()
-            end
-        end)
-    end, "Quick add task")
+		vim.ui.input({
+			prompt = "Quick task: ",
+		}, function(input)
+			if input and input ~= "" then
+				lazydo:add_task(input, { priority = 2 })
+				lazydo:refresh_display()
+			end
+		end)
+	end, "Quick add task")
 
 	safe_map(lazydo.opts.keymaps.add_below or "O", function()
 		local current = lazydo:get_current_task()
@@ -526,7 +525,7 @@ function M.setup_buffer_keymaps(lazydo, buf)
 		}, function(input)
 			if input and input ~= "" then
 				local task = lazydo:add_task(input, {
-					priority = current and current.priority or 2
+					priority = current and current.priority or 2,
 				})
 				if current then
 					-- Move the new task to position after current task
@@ -542,123 +541,123 @@ function M.setup_buffer_keymaps(lazydo, buf)
 			end
 		end)
 	end, "Add task below current")
-    -- Task Management
-    safe_map(lazydo.opts.keymaps.toggle_done, function()
-        local task = lazydo:get_current_task()
-        if task then
-            task:toggle()
-            if lazydo.opts.storage.auto_save then
-                require("lazydo.storage").save_tasks(lazydo)
-            end
-            lazydo:refresh_display()
-        end
-    end, "Toggle task completion")
+	-- Task Management
+	safe_map(lazydo.opts.keymaps.toggle_done, function()
+		local task = lazydo:get_current_task()
+		if task then
+			task:toggle()
+			if lazydo.opts.storage.auto_save then
+				require("lazydo.storage").save_tasks(lazydo)
+			end
+			lazydo:refresh_display()
+		end
+	end, "Toggle task completion")
 
-    safe_map(lazydo.opts.keymaps.edit_task, function()
-        M.show_quick_edit_menu(lazydo)
-    end, "Edit task")
+	safe_map(lazydo.opts.keymaps.edit_task, function()
+		M.show_quick_edit_menu(lazydo)
+	end, "Edit task")
 
-    safe_map(lazydo.opts.keymaps.delete_task, function()
-        local task = lazydo:get_current_task()
-        if task then
-            vim.ui.input({
-                prompt = "Delete task? (y/n): ",
-            }, function(input)
-                if input and input:lower() == "y" then
-                    lazydo:delete_task()
-                end
-            end)
-        end
-    end, "Delete task")
+	safe_map(lazydo.opts.keymaps.delete_task, function()
+		local task = lazydo:get_current_task()
+		if task then
+			vim.ui.input({
+				prompt = "Delete task? (y/n): ",
+			}, function(input)
+				if input and input:lower() == "y" then
+					lazydo:delete_task()
+				end
+			end)
+		end
+	end, "Delete task")
 
-    -- Subtask Management
-    safe_map(lazydo.opts.keymaps.add_subtask, function()
-        lazydo:add_subtask()
-    end, "Add subtask")
+	-- Subtask Management
+	safe_map(lazydo.opts.keymaps.add_subtask, function()
+		lazydo:add_subtask()
+	end, "Add subtask")
 
-    safe_map(lazydo.opts.keymaps.edit_subtask, function()
-        lazydo:edit_subtask()
-    end, "Edit subtask")
+	safe_map(lazydo.opts.keymaps.edit_subtask, function()
+		lazydo:edit_subtask()
+	end, "Edit subtask")
 
-    -- Task Movement
-    safe_map(lazydo.opts.keymaps.move_up, function()
-        local task = lazydo:get_current_task()
-        if task then
-            lazydo:move_task(task, -1)
-        end
-    end, "Move task up")
+	-- Task Movement
+	safe_map(lazydo.opts.keymaps.move_up, function()
+		local task = lazydo:get_current_task()
+		if task then
+			lazydo:move_task(task, -1)
+		end
+	end, "Move task up")
 
-    safe_map(lazydo.opts.keymaps.move_down, function()
-        local task = lazydo:get_current_task()
-        if task then
-            lazydo:move_task(task, 1)
-        end
-    end, "Move task down")
+	safe_map(lazydo.opts.keymaps.move_down, function()
+		local task = lazydo:get_current_task()
+		if task then
+			lazydo:move_task(task, 1)
+		end
+	end, "Move task down")
 
-    -- Quick Actions
-    safe_map(lazydo.opts.keymaps.quick_note, function()
-        local task = lazydo:get_current_task()
-        if task then
-            lazydo:set_note(task)
-        end
-    end, "Add/edit note")
+	-- Quick Actions
+	safe_map(lazydo.opts.keymaps.quick_note, function()
+		local task = lazydo:get_current_task()
+		if task then
+			lazydo:set_note(task)
+		end
+	end, "Add/edit note")
 
-    safe_map(lazydo.opts.keymaps.quick_date, function()
-        local task = lazydo:get_current_task()
-        if task then
-            lazydo:set_date(task)
-        end
-    end, "Set due date")
+	safe_map(lazydo.opts.keymaps.quick_date, function()
+		local task = lazydo:get_current_task()
+		if task then
+			lazydo:set_date(task)
+		end
+	end, "Set due date")
 
-    -- Priority Management
-    safe_map(lazydo.opts.keymaps.increase_priority, function()
-        local task = lazydo:get_current_task()
-        if task then
-            task:change_priority(1)
-            lazydo:refresh_display()
-        end
-    end, "Increase priority")
+	-- Priority Management
+	safe_map(lazydo.opts.keymaps.increase_priority, function()
+		local task = lazydo:get_current_task()
+		if task then
+			task:change_priority(1)
+			lazydo:refresh_display()
+		end
+	end, "Increase priority")
 
-    safe_map(lazydo.opts.keymaps.decrease_priority, function()
-        local task = lazydo:get_current_task()
-        if task then
-            task:change_priority(-1)
-            lazydo:refresh_display()
-        end
-    end, "Decrease priority")
+	safe_map(lazydo.opts.keymaps.decrease_priority, function()
+		local task = lazydo:get_current_task()
+		if task then
+			task:change_priority(-1)
+			lazydo:refresh_display()
+		end
+	end, "Decrease priority")
 
-    -- UI Controls
-    safe_map(lazydo.opts.keymaps.toggle_help, function()
-        M.toggle_help(lazydo)
-    end, "Toggle help")
+	-- UI Controls
+	safe_map(lazydo.opts.keymaps.toggle_help, function()
+		M.toggle_help(lazydo)
+	end, "Toggle help")
 
-    safe_map(lazydo.opts.keymaps.close_window, function()
-        if lazydo.close_window then
-            lazydo:close_window()
-        end
-    end, "Close window")
+	safe_map(lazydo.opts.keymaps.close_window, function()
+		if lazydo.close_window then
+			lazydo:close_window()
+		end
+	end, "Close window")
 
-    safe_map(lazydo.opts.keymaps.refresh_view, function()
-        lazydo:refresh_display()
-    end, "Refresh view")
+	safe_map(lazydo.opts.keymaps.refresh_view, function()
+		lazydo:refresh_display()
+	end, "Refresh view")
 
-    -- Navigation improvements
-    vim.keymap.set("n", "j", function()
-        local line = vim.api.nvim_win_get_cursor(0)[1]
-        local max_lines = vim.api.nvim_buf_line_count(buf)
-        if line < max_lines then
-            vim.api.nvim_win_set_cursor(0, {line + 1, 0})
-            lazydo:refresh_display()
-        end
-    end, { buffer = buf, desc = "Next line" })
+	-- Navigation improvements
+	vim.keymap.set("n", "j", function()
+		local line = vim.api.nvim_win_get_cursor(0)[1]
+		local max_lines = vim.api.nvim_buf_line_count(buf)
+		if line < max_lines then
+			vim.api.nvim_win_set_cursor(0, { line + 1, 0 })
+			lazydo:refresh_display()
+		end
+	end, { buffer = buf, desc = "Next line" })
 
-    vim.keymap.set("n", "k", function()
-        local line = vim.api.nvim_win_get_cursor(0)[1]
-        if line > 1 then
-            vim.api.nvim_win_set_cursor(0, {line - 1, 0})
-            lazydo:refresh_display()
-        end
-    end, { buffer = buf, desc = "Previous line" })
+	vim.keymap.set("n", "k", function()
+		local line = vim.api.nvim_win_get_cursor(0)[1]
+		if line > 1 then
+			vim.api.nvim_win_set_cursor(0, { line - 1, 0 })
+			lazydo:refresh_display()
+		end
+	end, { buffer = buf, desc = "Previous line" })
 end
 
 function M.setup_task_highlights(lazydo)
@@ -739,7 +738,7 @@ function M.setup_task_highlights(lazydo)
 			-- 	[lazydo.opts.icons.priority.medium] = "LazyDoPriorityMedium",
 			-- 	[lazydo.opts.icons.priority.low] = "LazyDoPriorityLow"
 			-- }
-			
+
 			-- for icon, hl_group in pairs(priority_icons) do
 			-- 	local icon_start = line:find(vim.pesc(icon))
 			-- 	if icon_start then
@@ -792,24 +791,24 @@ function M.setup_task_highlights(lazydo)
 					end
 				end
 
-
-
-				  -- Progress bullets highlights
-				  local progress_icons = {
+				-- Progress bullets highlights
+				local progress_icons = {
 					[M.CONSTANTS.BLOCK.PROGRESS_FULL] = "LazyDoProgressFull",
-					[M.CONSTANTS.BLOCK.PROGRESS_EMPTY] = "LazyDoProgressEmpty"
+					[M.CONSTANTS.BLOCK.PROGRESS_EMPTY] = "LazyDoProgressEmpty",
 				}
-				
+
 				for icon, hl_group in pairs(progress_icons) do
 					local start_idx = 1
 					while true do
 						local icon_start = line:find(vim.pesc(icon), start_idx)
-						if not icon_start then break end
+						if not icon_start then
+							break
+						end
 						add_hl(lnum, icon_start - 1, icon_start + vim.fn.strdisplaywidth(icon), hl_group)
 						start_idx = icon_start + 1
 					end
 				end
-		
+
 				-- Subtask bullet highlights
 				if line:match("└─") or line:match("├─") then
 					local bullet_start = line:find("[└├]─")
@@ -817,7 +816,6 @@ function M.setup_task_highlights(lazydo)
 						add_hl(lnum, bullet_start - 1, bullet_start + 2, "LazyDoSubtaskBullet")
 					end
 				end
-			
 			end
 
 			-- Highlight due date line
@@ -851,7 +849,7 @@ function M.setup_task_highlights(lazydo)
 end
 -- In ui.lua
 function M.create_help_window(lazydo)
-	local help_width = math.floor(vim.o.columns * 0.6)
+	local help_width = math.floor(vim.o.columns * 0.5)
 	local help_height = 20
 	local row = math.floor((vim.o.lines - help_height) / 2)
 	local col = math.floor((vim.o.columns - help_width) / 2)
@@ -868,7 +866,7 @@ function M.create_help_window(lazydo)
 		row = row,
 		col = col,
 		style = "minimal",
-		border = "rounded",
+		border = lazydo.opts.ui.border or "solid",
 		title = " LazyDo Help ",
 		title_pos = "center",
 	})
