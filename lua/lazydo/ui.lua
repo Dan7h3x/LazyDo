@@ -407,17 +407,17 @@ function M.setup_buffer_keymaps(lazydo, buf)
 		vim.cmd("LazyDoAdd")
 	end, "Add task")
 	safe_map(lazydo.opts.keymaps.add_subtask or "A", function()
-		local task = lazydo.get_current_task(lazydo)
+		local task = lazydo.get_current_task()
 		if task then
-			lazydo.add_subtask(task)
+			lazydo.add_subtask()
 		else
 			vim.notify("No active task to add a subtask to", vim.log.levels.WARN)
 		end
 	end, "Add subtask")
 	safe_map(lazydo.opts.keymaps.add_subtask or "E", function()
-		local task = lazydo.get_current_task(lazydo)
+		local task = lazydo.get_current_task()
 		if task then
-			lazydo.edit_subtask(task)
+			lazydo.edit_subtask()
 		else
 			vim.notify("No active task to add a subtask to", vim.log.levels.WARN)
 		end
@@ -463,245 +463,177 @@ function M.setup_buffer_keymaps(lazydo, buf)
 			lazydo:close_window()
 		end
 	end, "Close window")
+	-- In setup_buffer_keymaps function
+	safe_map("?", function()
+    	M.toggle_help(lazydo)
+	end, "Toggle help window")
 end
 
--- -- Add highlight groups for task components
 function M.setup_task_highlights(lazydo)
-	local ns = vim.api.nvim_create_namespace("lazydo_task_highlights")
+    local ns = vim.api.nvim_create_namespace("lazydo_task_highlights")
+    vim.api.nvim_buf_clear_namespace(lazydo.buf, ns, 0, -1)
 
-	-- Clear existing highlights
-	vim.api.nvim_buf_clear_namespace(lazydo.buf, ns, 0, -1)
+    local function add_hl(line, col_start, col_end, group)
+        vim.api.nvim_buf_add_highlight(lazydo.buf, ns, group, line, col_start, col_end)
+    end
 
-	local function add_highlight(line, col_start, col_end, hl_group)
-		vim.api.nvim_buf_add_highlight(lazydo.buf, ns, hl_group, line, col_start, col_end)
-	end
+    local current_task = lazydo:get_current_task()
+    local lines = vim.api.nvim_buf_get_lines(lazydo.buf, 0, -1, false)
+    local in_task = false
+    local task_start = 0
 
-	-- Get current task block bounds
-	local current_task = lazydo:get_current_task()
-	local cursor_line = vim.api.nvim_win_get_cursor(lazydo.win)[1] - 1
+    for i, line in ipairs(lines) do
+        local lnum = i - 1
+        local content = line:gsub("^%s+", "")
 
-	-- Iterate through lines and add highlights
-	local lines = vim.api.nvim_buf_get_lines(lazydo.buf, 0, -1, false)
-	local in_task_block = false
-	local block_indent = 0
-	local task_start_line = 0
+        -- Highlight header
+        if lnum <= 3 then
+            add_hl(lnum, 0, -1, "LazyDoHeader")
+            goto continue
+        end
 
-	for i, line in ipairs(lines) do
-		local line_idx = i - 1
-		local content = line:gsub("^%s+", "")
+        -- Detect task boundaries
+        if content:match("^╭") then
+            in_task = true
+            task_start = lnum
+        elseif content:match("^╰") then
+            in_task = false
+        end
 
-		-- Detect task block boundaries
-		if content:match("^" .. M.CONSTANTS.BLOCK.TOP_LEFT) then
-			in_task_block = true
-			block_indent = #line - #content
-			task_start_line = line_idx
-		elseif content:match("^" .. M.CONSTANTS.BLOCK.BOTTOM_LEFT) then
-			in_task_block = false
-		end
+        if in_task then
+            -- Highlight task border
+            local border_match = line:match("^%s*[╭╮╰╯│├┤]")
+            if border_match then
+                add_hl(lnum, #line:match("^%s*"), #line:match("^%s*") + 1, "LazyDoBorder")
+                add_hl(lnum, #line - 1, #line, "LazyDoBorder")
+            end
 
-		if in_task_block then
-			-- Highlight block borders
-			add_highlight(line_idx, block_indent, block_indent + 1, "LazyDoBorder")
-			add_highlight(line_idx, #line - 1, #line, "LazyDoBorder")
+            -- Highlight current task with subtle background
+            if current_task and lnum >= task_start and lnum <= task_start + lazydo:get_task_block_height(current_task) then
+                add_hl(lnum, 0, #line, "LazyDoActiveTask")
+            end
 
-			-- Highlight task status icon
-			local status_match = content:match("([󰄱󰄵󰄮])")
-			if status_match then
-				local icon_start = line:find(status_match, 1, true)
-				if icon_start then
-					local hl_group = "LazyDoPending"
-					if status_match == lazydo.opts.icons.task_done then
-						hl_group = "LazyDoDone"
-					elseif status_match == lazydo.opts.icons.task_overdue then
-						hl_group = "LazyDoOverdue"
-					end
-					add_highlight(line_idx, icon_start - 1, icon_start + #status_match - 1, hl_group)
-				end
-			end
+            -- Highlight task components
+            local components = {
+                { pattern = icons.task_done, group = "LazyDoDone" },
+                { pattern = icons.task_pending, group = "LazyDoPending" },
+                { pattern = icons.task_overdue, group = "LazyDoOverdue" },
+                { pattern = icons.due_date, group = "LazyDoDueDate" },
+                { pattern = icons.note, group = "LazyDoNote" },
+            }
 
-			-- Highlight priority
-			local priority_start = line:find("!")
-			if priority_start then
-				local priority_count = line:match("!+"):len()
-				local hl_group = "LazyDoPriorityMedium"
-				if priority_count == 3 then
-					hl_group = "LazyDoPriorityHigh"
-				elseif priority_count == 1 then
-					hl_group = "LazyDoPriorityLow"
-				end
-				add_highlight(line_idx, priority_start - 1, priority_start + priority_count - 1, hl_group)
-			end
+            for _, comp in ipairs(components) do
+                local start = line:find(vim.pesc(comp.pattern))
+                if start then
+                    add_hl(lnum, start - 1, start + #comp.pattern - 1, comp.group)
+                end
+            end
 
-			-- Highlight due date
-			local date_icon = lazydo.opts.icons.due_date
-			local date_start = line:find(date_icon, 1, true)
-			if date_start then
-				add_highlight(line_idx, date_start - 1, date_start + #date_icon - 1, "LazyDoDueDate")
-				local date_text_start = date_start + #date_icon + 1
-				add_highlight(line_idx, date_text_start - 1, #line - 1, "LazyDoDueDate")
-			end
+            -- Highlight tags
+            for tag in line:gmatch("#%w+") do
+                local start = line:find(tag)
+                add_hl(lnum, start - 1, start + #tag - 1, "LazyDoTag")
+            end
 
-			-- Highlight notes
-			local note_icon = lazydo.opts.icons.note
-			local note_start = line:find(note_icon, 1, true)
-			if note_start then
-				add_highlight(line_idx, note_start - 1, note_start + #note_icon - 1, "LazyDoNote")
-				local note_text_start = note_start + #note_icon + 1
-				add_highlight(line_idx, note_text_start - 1, #line - 1, "LazyDoNote")
-			end
+            -- Highlight dates
+            local date_pattern = "%d%d%d%d%-%d%d%-%d%d"
+            local date_start = line:find(date_pattern)
+            if date_start then
+                add_hl(lnum, date_start - 1, date_start + 9, "LazyDoDueDate")
+            end
 
-			-- Highlight subtasks
-			if line:match("Subtasks:") then
-				add_highlight(line_idx, block_indent + 2, #line - 1, "LazyDoSubtask")
-			elseif line:match(M.CONSTANTS.BLOCK.SUBTASK_BRANCH) or line:match(M.CONSTANTS.BLOCK.SUBTASK_LAST) then
-				add_highlight(line_idx, block_indent + 2, #line - 1, "LazyDoSubtask")
-			end
+            -- Highlight subtasks
+            if line:match("└─") or line:match("├─") then
+                add_hl(lnum, 0, -1, "LazyDoSubtask")
+            end
+        end
 
-			-- Highlight current task block
-			if current_task and line_idx >= task_start_line and cursor_line >= task_start_line then
-				add_highlight(line_idx, 0, #line, "Visual")
-			end
-		end
-	end
+        ::continue::
+    end
 end
--- function M.setup_task_highlights(lazydo)
--- 	local ns = vim.api.nvim_create_namespace("lazydo_task_highlights")
 
--- 	-- Clear existing highlights
--- 	vim.api.nvim_buf_clear_namespace(lazydo.buf, ns, 0, -1)
 
--- 	-- Get current task block bounds
--- 	local current_task = lazydo:get_current_active_task()
--- 	local cursor_line = vim.api.nvim_win_get_cursor(lazydo.win)[1] + 1
+-- In ui.lua
+function M.create_help_window(lazydo)
+    local help_width = math.floor(vim.o.columns * 0.6)
+    local help_height = 20
+    local row = math.floor((vim.o.lines - help_height) / 2)
+    local col = math.floor((vim.o.columns - help_width) / 2)
 
--- 	-- Iterate through lines and add highlights
--- 	local lines = vim.api.nvim_buf_get_lines(lazydo.buf, 0, -1, false)
--- 	local in_task_block = false
--- 	local block_indent = 0
--- 	local task_start_line = 0
+    -- Create help buffer
+    local help_buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_option(help_buf, 'bufhidden', 'wipe')
 
--- 	for i, line in ipairs(lines) do
--- 		local line_idx = i - 1
--- 		local content = line:gsub("^%s+", "")
+    -- Create help window
+    local help_win = vim.api.nvim_open_win(help_buf, true, {
+        relative = 'editor',
+        width = help_width,
+        height = help_height,
+        row = row,
+        col = col,
+        style = 'minimal',
+        border = 'rounded',
+        title = ' LazyDo Help ',
+        title_pos = 'center',
+    })
 
--- 		-- Detect task block boundaries
--- 		if content:match("^" .. M.CONSTANTS.BLOCK.TOP_LEFT) then
--- 			in_task_block = true
--- 			block_indent = #line - #content
--- 			task_start_line = line_idx
--- 		elseif content:match("^" .. M.CONSTANTS.BLOCK.BOTTOM_LEFT) then
--- 			in_task_block = false
--- 		end
+    -- Set help window options
+    vim.api.nvim_win_set_option(help_win, 'winblend', 10)
+    vim.api.nvim_win_set_option(help_win, 'cursorline', true)
 
--- 		if in_task_block then
--- 			-- Highlight block borders
--- 			vim.api.nvim_buf_add_highlight(lazydo.buf, ns, "LazyDoBorder", line_idx, block_indent, block_indent + 1)
--- 			vim.api.nvim_buf_add_highlight(lazydo.buf, ns, "LazyDoBorder", line_idx, #line + 1, #line)
+    -- Add help content
+    local help_lines = {
+        "LazyDo Keybindings",
+        string.rep("─", help_width),
+        "",
+        " Navigation:",
+        " j/k        - Move cursor up/down",
+        " h/l        - Collapse/Expand task",
+        " gg/G       - Go to top/bottom",
+        " <C-u>/<C-d> - Page up/down",
+        "",
+        " Task Management:",
+        " <Space>    - Toggle task completion",
+        " e          - Edit task",
+        " dd         - Delete task",
+        " a          - Add new task",
+        " A          - Add subtask to current task",
+        " n          - Add/edit note",
+        " d          - Set due date",
+        " >/<        - Increase/decrease priority",
+        "",
+        " Press q to close this window"
+    }
 
--- 			-- Highlight task status icon
--- 			local status_match = content:match("([󰄱󰄵󰄮])")
--- 			if status_match then
--- 				local icon_start = line:find(status_match, 1, true)
--- 				if icon_start then
--- 					local hl_group = "LazyDoPending"
--- 					if status_match == lazydo.opts.icons.task_done then
--- 						hl_group = "LazyDoDone"
--- 					elseif status_match == lazydo.opts.icons.task_overdue then
--- 						hl_group = "LazyDoOverdue"
--- 					end
--- 					-- Highlight icon and corresponding text
--- 					vim.api.nvim_buf_add_highlight(
--- 						lazydo.buf,
--- 						ns,
--- 						hl_group,
--- 						line_idx,
--- 						icon_start - 1,
--- 						icon_start + #status_match - 1
--- 					)
--- 					vim.api.nvim_buf_add_highlight(
--- 						lazydo.buf,
--- 						ns,
--- 						hl_group,
--- 						line_idx,
--- 						icon_start + #status_match,
--- 						#line
--- 					) -- Highlight text after icon
--- 				end
--- 			end
+    vim.api.nvim_buf_set_lines(help_buf, 0, -1, false, help_lines)
+    vim.api.nvim_buf_set_option(help_buf, 'modifiable', false)
 
--- 			-- Highlight priority
--- 			local priority_start = line:find("!")
--- 			if priority_start then
--- 				local priority_count = line:match("!+"):len()
--- 				local hl_group = "LazyDoPriorityMedium"
--- 				if priority_count == 3 then
--- 					hl_group = "LazyDoPriorityHigh"
--- 				elseif priority_count == 1 then
--- 					hl_group = "LazyDoPriorityLow"
--- 				end
--- 				vim.api.nvim_buf_add_highlight(
--- 					lazydo.buf,
--- 					ns,
--- 					hl_group,
--- 					line_idx,
--- 					priority_start - 1,
--- 					priority_start + priority_count - 1
--- 				)
--- 			end
+    -- Add keymaps for help window
+    vim.keymap.set('n', 'q', function()
+        vim.api.nvim_win_close(help_win, true)
+        -- Restore focus to LazyDo window
+        if lazydo.win and vim.api.nvim_win_is_valid(lazydo.win) then
+            vim.api.nvim_set_current_win(lazydo.win)
+        end
+    end, { buffer = help_buf, nowait = true })
 
--- 			-- Highlight due date
--- 			local date_icon = lazydo.opts.icons.due_date
--- 			local date_start = line:find(date_icon, 1, true)
--- 			if date_start then
--- 				vim.api.nvim_buf_add_highlight(
--- 					lazydo.buf,
--- 					ns,
--- 					"LazyDoDueDate",
--- 					line_idx,
--- 					date_start - 1,
--- 					date_start + #date_icon - 1
--- 				)
--- 				local date_text_start = date_start + #date_icon + 1
--- 				vim.api.nvim_buf_add_highlight(
--- 					lazydo.buf,
--- 					ns,
--- 					"LazyDoDueDate",
--- 					line_idx,
--- 					date_text_start - 1,
--- 					#line - 1
--- 				)
--- 			end
+    return help_buf, help_win
+end
 
--- 			-- Highlight notes
--- 			local note_icon = lazydo.opts.icons.note
--- 			local note_start = line:find(note_icon, 1, true)
--- 			if note_start then
--- 				vim.api.nvim_buf_add_highlight(
--- 					lazydo.buf,
--- 					ns,
--- 					"LazyDoNote",
--- 					line_idx,
--- 					note_start - 1,
--- 					note_start + #note_icon - 1
--- 				)
--- 				local note_text_start = note_start + #note_icon + 1
--- 				vim.api.nvim_buf_add_highlight(lazydo.buf, ns, "LazyDoNote", line_idx, note_text_start - 1, #line - 1)
--- 			end
-
--- 			-- Highlight subtasks
--- 			if line:match("Subtasks:") then
--- 				vim.api.nvim_buf_add_highlight(lazydo.buf, ns, "LazyDoSubtask", line_idx, block_indent + 2, #line - 1)
--- 			elseif line:match(M.CONSTANTS.BLOCK.SUBTASK_BRANCH) or line:match(M.CONSTANTS.BLOCK.SUBTASK_LAST) then
--- 				vim.api.nvim_buf_add_highlight(lazydo.buf, ns, "LazyDoSubtask", line_idx, block_indent + 2, #line - 1)
--- 			end
-
--- 			-- Highlight current task block with transparent grey background
--- 			if current_task and line_idx >= task_start_line and cursor_line >= task_start_line then
--- 				vim.api.nvim_buf_add_highlight(lazydo.buf, ns, "Visual", line_idx, 0, #line)
--- 			end
--- 		end
--- 	end
--- end
+-- Update the help toggle function
+function M.toggle_help(lazydo)
+    if lazydo.help_win and vim.api.nvim_win_is_valid(lazydo.help_win) then
+        vim.api.nvim_win_close(lazydo.help_win, true)
+        lazydo.help_win = nil
+        lazydo.help_buf = nil
+        -- Restore focus to LazyDo window
+        if lazydo.win and vim.api.nvim_win_is_valid(lazydo.win) then
+            vim.api.nvim_set_current_win(lazydo.win)
+        end
+    else
+        lazydo.help_buf, lazydo.help_win = M.create_help_window(lazydo)
+    end
+end
 
 -- Add edit task functionality
 function M.edit_task_component(lazydo, component)

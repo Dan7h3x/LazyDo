@@ -143,8 +143,8 @@ function LazyDo:render_content()
 		local task_lines = ui.render_task_block(task, width, "  ", self.opts.icons)
 		vim.list_extend(lines, task_lines)
 	end
-	self:render_help_footer(lines)
 
+	
 	vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, lines)
 	vim.api.nvim_buf_set_option(self.buf, "modifiable", false)
 end
@@ -173,37 +173,37 @@ function LazyDo:get_task_statistics()
 end
 
 function LazyDo:get_current_task()
-	if not self.win or not vim.api.nvim_win_is_valid(self.win) then
-		return nil
-	end
+    if not self.win or not vim.api.nvim_win_is_valid(self.win) then
+        return nil
+    end
 
-	local cursor = vim.api.nvim_win_get_cursor(self.win)
-	local line_nr = cursor[1]
+    local cursor = vim.api.nvim_win_get_cursor(self.win)
+    local line_nr = cursor[1]
+    local header_lines = 4  -- Title + separator + stats + empty line
 
-	-- Skip header (title + separator + stats + empty line)
-	if line_nr <= 4 then
-		return nil
-	end
+    -- Skip header
+    if line_nr <= header_lines then
+        return nil
+    end
 
-	local current_task = nil
-	local current_line = line_nr
-	local task_start = 5 -- First task starts after header
+    local current_line = line_nr
+    local task_start = header_lines + 1
+    local found_task = nil
 
-	for _, task in ipairs(self.tasks) do
-		local task_height = self:get_task_block_height(task)
-		if current_line >= task_start and current_line < task_start + task_height then
-			current_task = task
-			break
-		end
-		task_start = task_start + task_height + 3 -- +3 for spacing (1 for empty line + 2 for borders)
-	end
+    for _, task in ipairs(self.tasks) do
+        local task_height = self:get_task_block_height(task)
+        local task_end = task_start + task_height
 
-	-- If the cursor is below the last task, return nil
-	-- if current_line >= task_start then
-	-- 	return nil
-	-- end
+        if current_line >= task_start and current_line <= task_end then
+            found_task = task
+            task.line_number = task_start  -- Store line number for highlighting
+            break
+        end
 
-	return current_task
+        task_start = task_end + 1  -- +1 for spacing between tasks
+    end
+
+    return found_task
 end
 
 function LazyDo:highlight_active_task()
