@@ -10,168 +10,177 @@ M.ANIMATIONS = {
 
 -- Advanced Task Management Helper Functions
 function M.show_search_prompt(lazydo)
-    vim.ui.input({
-        prompt = "Search tasks: ",
-    }, function(query)
-        if query and query ~= "" then
-            local results = lazydo:search_tasks(query)
-            -- Store original tasks and show filtered results
-            lazydo._original_tasks = lazydo.tasks
-            lazydo.tasks = results
-            lazydo:refresh_display()
-            vim.notify(string.format("Found %d matching tasks", #results))
-        end
-    end)
+	vim.ui.input({
+		prompt = "Search tasks: ",
+	}, function(query)
+		if query and query ~= "" then
+			local results = lazydo:search_tasks(query)
+			-- Store original tasks and show filtered results
+			lazydo._original_tasks = lazydo.tasks
+			lazydo.tasks = results
+			lazydo:refresh_display()
+			vim.notify(string.format("Found %d matching tasks", #results))
+		end
+	end)
 end
 
 function M.show_filter_menu(lazydo)
-    local filter_options = {
-        { text = "Status (Done/Pending/Overdue)", value = "status" },
-        { text = "Priority (High/Medium/Low)", value = "priority" },
-        { text = "Tags", value = "tags" },
-    }
+	local filter_options = {
+		{ text = "Status (Done/Pending/Overdue)", value = "status" },
+		{ text = "Priority (High/Medium/Low)", value = "priority" },
+		{ text = "Tags", value = "tags" },
+	}
 
-    vim.ui.select(filter_options, {
-        prompt = "Select filter type:",
-        format_item = function(item) return item.text end,
-    }, function(choice)
-        if not choice then return end
+	vim.ui.select(filter_options, {
+		prompt = "Select filter type:",
+		format_item = function(item)
+			return item.text
+		end,
+	}, function(choice)
+		if not choice then
+			return
+		end
 
-        if choice.value == "status" then
-            vim.ui.select({ "done", "pending", "overdue" }, {
-                prompt = "Select status:",
-            }, function(status)
-                if status then
-                    local filtered = lazydo:filter_tasks({ status = status })
-                    lazydo._original_tasks = lazydo.tasks
-                    lazydo.tasks = filtered
-                    lazydo:refresh_display()
-                end
-            end)
-        elseif choice.value == "priority" then
-            vim.ui.select({ "1", "2", "3" }, {
-                prompt = "Select priority (1=Low, 2=Medium, 3=High):",
-            }, function(priority)
-                if priority then
-                    local filtered = lazydo:filter_tasks({ priority = tonumber(priority) })
-                    lazydo._original_tasks = lazydo.tasks
-                    lazydo.tasks = filtered
-                    lazydo:refresh_display()
-                end
-            end)
-        elseif choice.value == "tags" then
-            vim.ui.input({
-                prompt = "Enter tags (comma-separated):",
-            }, function(input)
-                if input and input ~= "" then
-                    local tags = vim.split(input, ",")
-                    local filtered = lazydo:filter_tasks({ tags = tags })
-                    lazydo._original_tasks = lazydo.tasks
-                    lazydo.tasks = filtered
-                    lazydo:refresh_display()
-                end
-            end)
-        end
-    end)
+		if choice.value == "status" then
+			vim.ui.select({ "done", "pending", "overdue" }, {
+				prompt = "Select status:",
+			}, function(status)
+				if status then
+					local filtered = lazydo:filter_tasks({ status = status })
+					lazydo._original_tasks = lazydo.tasks
+					lazydo.tasks = filtered
+					lazydo:refresh_display()
+				end
+			end)
+		elseif choice.value == "priority" then
+			vim.ui.select({ "1", "2", "3" }, {
+				prompt = "Select priority (1=Low, 2=Medium, 3=High):",
+			}, function(priority)
+				if priority then
+					local filtered = lazydo:filter_tasks({ priority = tonumber(priority) })
+					lazydo._original_tasks = lazydo.tasks
+					lazydo.tasks = filtered
+					lazydo:refresh_display()
+				end
+			end)
+		elseif choice.value == "tags" then
+			vim.ui.input({
+				prompt = "Enter tags (comma-separated):",
+			}, function(input)
+				if input and input ~= "" then
+					local tags = vim.split(input, ",")
+					local filtered = lazydo:filter_tasks({ tags = tags })
+					lazydo._original_tasks = lazydo.tasks
+					lazydo.tasks = filtered
+					lazydo:refresh_display()
+				end
+			end)
+		end
+	end)
 end
 
 function M.show_sort_menu(lazydo)
-    local sort_options = {
-        { text = "Sort by Priority", value = "priority" },
-        { text = "Sort by Due Date", value = "due_date" },
-        { text = "Sort by Creation Date", value = "created" },
-        { text = "Sort by Last Updated", value = "updated" },
-    }
+	local sort_options = {
+		{ text = "Sort by Priority", value = "priority" },
+		{ text = "Sort by Due Date", value = "due_date" },
+		{ text = "Sort by Creation Date", value = "created" },
+		{ text = "Sort by Last Updated", value = "updated" },
+	}
 
-    vim.ui.select(sort_options, {
-        prompt = "Select sorting method:",
-        format_item = function(item) return item.text end,
-    }, function(choice)
-        if choice then
-            lazydo:sort_tasks(choice.value)
-        end
-    end)
+	vim.ui.select(sort_options, {
+		prompt = "Select sorting method:",
+		format_item = function(item)
+			return item.text
+		end,
+	}, function(choice)
+		if choice then
+			lazydo:sort_tasks(choice.value)
+		end
+	end)
 end
 
 function M.show_template_menu(lazydo)
-    local task = lazydo:get_current_task()
-    if not task then
-        vim.notify("No task selected", vim.log.levels.WARN)
-        return
-    end
+	local task = lazydo:get_current_task()
+	if not task then
+		vim.notify("No task selected", vim.log.levels.WARN)
+		return
+	end
 
-    local template_options = {
-        { text = "Save as template", value = "save" },
-        { text = "Create from template", value = "create" },
-    }
+	local template_options = {
+		{ text = "Save as template", value = "save" },
+		{ text = "Create from template", value = "create" },
+	}
 
-    vim.ui.select(template_options, {
-        prompt = "Template operation:",
-        format_item = function(item) return item.text end,
-    }, function(choice)
-        if not choice then return end
+	vim.ui.select(template_options, {
+		prompt = "Template operation:",
+		format_item = function(item)
+			return item.text
+		end,
+	}, function(choice)
+		if not choice then
+			return
+		end
 
-        if choice.value == "save" then
-            lazydo:save_as_template(task)
-        else
-            lazydo:create_from_template()
-        end
-    end)
+		if choice.value == "save" then
+			lazydo:save_as_template(task)
+		else
+			lazydo:create_from_template()
+		end
+	end)
 end
 
 function M.show_statistics(lazydo)
-    local stats = lazydo:get_detailed_statistics()
-    local stats_lines = {
-        "Task Statistics",
-        string.rep("─", 40),
-        string.format("Total Tasks: %d", stats.total),
-        string.format("Completion Rate: %.1f%%", stats.completion_rate),
-        string.format("Average Completion Time: %.1f days", stats.average_completion_time / (24 * 60 * 60)),
-        "",
-        "Priority Distribution:",
-        string.format("  High: %d", stats.priority.high),
-        string.format("  Medium: %d", stats.priority.medium),
-        string.format("  Low: %d", stats.priority.low),
-        "",
-        "Status:",
-        string.format("  Done: %d", stats.done),
-        string.format("  Pending: %d", stats.pending),
-        string.format("  Overdue: %d", stats.overdue),
-        "",
-        "Tags:",
-    }
+	local stats = lazydo:get_detailed_statistics()
+	local stats_lines = {
+		"Task Statistics",
+		string.rep("─", 40),
+		string.format("Total Tasks: %d", stats.total),
+		string.format("Completion Rate: %.1f%%", stats.completion_rate),
+		string.format("Average Completion Time: %.1f days", stats.average_completion_time / (24 * 60 * 60)),
+		"",
+		"Priority Distribution:",
+		string.format("  High: %d", stats.priority.high),
+		string.format("  Medium: %d", stats.priority.medium),
+		string.format("  Low: %d", stats.priority.low),
+		"",
+		"Status:",
+		string.format("  Done: %d", stats.done),
+		string.format("  Pending: %d", stats.pending),
+		string.format("  Overdue: %d", stats.overdue),
+		"",
+		"Tags:",
+	}
 
-    for tag, count in pairs(stats.tags) do
-        table.insert(stats_lines, string.format("  #%s: %d", tag, count))
-    end
+	for tag, count in pairs(stats.tags) do
+		table.insert(stats_lines, string.format("  #%s: %d", tag, count))
+	end
 
-    -- Create a temporary floating window to display statistics
-    local buf = vim.api.nvim_create_buf(false, true)
-    local width = 50
-    local height = #stats_lines
-    local win = vim.api.nvim_open_win(buf, true, {
-        relative = "editor",
-        width = width,
-        height = height,
-        row = math.floor((vim.o.lines - height) / 2),
-        col = math.floor((vim.o.columns - width) / 2),
-        style = "minimal",
-        border = "rounded",
-        title = " Statistics ",
-        title_pos = "center",
-    })
+	-- Create a temporary floating window to display statistics
+	local buf = vim.api.nvim_create_buf(false, true)
+	local width = 50
+	local height = #stats_lines
+	local win = vim.api.nvim_open_win(buf, true, {
+		relative = "editor",
+		width = width,
+		height = height,
+		row = math.floor((vim.o.lines - height) / 2),
+		col = math.floor((vim.o.columns - width) / 2),
+		style = "minimal",
+		border = "rounded",
+		title = " Statistics ",
+		title_pos = "center",
+	})
 
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, stats_lines)
-    vim.api.nvim_buf_set_option(buf, "modifiable", false)
-    vim.api.nvim_win_set_option(win, "wrap", false)
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, stats_lines)
+	vim.api.nvim_buf_set_option(buf, "modifiable", false)
+	vim.api.nvim_win_set_option(win, "wrap", false)
 
-    -- Close on any key press
-    vim.keymap.set("n", "q", function()
-        vim.api.nvim_win_close(win, true)
-        vim.api.nvim_buf_delete(buf, { force = true })
-    end, { buffer = buf, nowait = true })
+	-- Close on any key press
+	vim.keymap.set("n", "q", function()
+		vim.api.nvim_win_close(win, true)
+		vim.api.nvim_buf_delete(buf, { force = true })
+	end, { buffer = buf, nowait = true })
 end
-
 
 -- Enhanced UI constants
 M.CONSTANTS = {
@@ -351,12 +360,50 @@ function M.render_task_block(task, width, indent, icons)
 					.. box.VERTICAL
 			)
 
-			-- Notes content with proper wrapping
-			local wrapped_notes = utils.word_wrap(task.notes, inner_width - 4)
-			for _, note_line in ipairs(wrapped_notes) do
+			-- Smart text wrapping for notes with proper word boundaries
+			local max_width = inner_width - 4 -- Account for borders and padding
+			local words = vim.split(task.notes, " ")
+			local current_line = ""
+
+			for _, word in ipairs(words) do
+				if #word > max_width then
+					-- Word is too long, needs to be split
+					if current_line ~= "" then
+						table.insert(
+							lines,
+							indent .. box.VERTICAL .. "  " .. utils.pad_right(current_line, inner_width - 2) .. box.VERTICAL
+						)
+						current_line = ""
+					end
+
+					-- Split long word
+					local remaining = word
+					while #remaining > 0 do
+						local part = remaining:sub(1, max_width)
+						table.insert(
+							lines,
+							indent .. box.VERTICAL .. "  " .. utils.pad_right(part, inner_width - 2) .. box.VERTICAL
+						)
+						remaining = remaining:sub(max_width + 1)
+					end
+				else
+					local potential_line = current_line ~= "" and (current_line .. " " .. word) or word
+					if #potential_line > max_width then
+						table.insert(
+							lines,
+							indent .. box.VERTICAL .. "  " .. utils.pad_right(current_line, inner_width - 2) .. box.VERTICAL
+						)
+						current_line = word
+					else
+						current_line = potential_line
+					end
+				end
+			end
+
+			if current_line ~= "" then
 				table.insert(
 					lines,
-					indent .. box.VERTICAL .. "  " .. utils.pad_right(note_line, inner_width - 2) .. box.VERTICAL
+					indent .. box.VERTICAL .. "  " .. utils.pad_right(current_line, inner_width - 2) .. box.VERTICAL
 				)
 			end
 		end
@@ -475,32 +522,32 @@ function M.setup_buffer_keymaps(lazydo, buf)
 			vim.notify("Reset to original task list")
 		end
 	end, { buffer = buf, desc = "Reset to original tasks", silent = true })
-	
+
 	-- Quick actions
 	map(lazydo.opts.keymaps.quick_note, "set_note", nil, "Add/edit note")
 	map(lazydo.opts.keymaps.quick_date, "set_date", nil, "Set due date")
 	map(lazydo.opts.keymaps.edit_task, "show_quick_edit_menu", nil, "Edit task")
-	
+
 	-- Task movement
 	map(lazydo.opts.keymaps.move_up, "move_task_up", nil, "Move task up")
 	map(lazydo.opts.keymaps.move_down, "move_task_down", nil, "Move task down")
-	
+
 	-- Priority management
 	map(lazydo.opts.keymaps.increase_priority, "increase_priority", nil, "Increase priority")
 	map(lazydo.opts.keymaps.decrease_priority, "decrease_priority", nil, "Decrease priority")
-	
+
 	-- UI controls
 	map(lazydo.opts.keymaps.toggle_help, "toggle_help", nil, "Toggle help")
 	map(lazydo.opts.keymaps.close_window, "close_window", nil, "Close window")
 	map(lazydo.opts.keymaps.refresh_view, "refresh_display", nil, "Refresh view")
-	
+
 	-- Quick add tasks
 	vim.keymap.set("n", lazydo.opts.keymaps.quick_add or "o", function()
 		vim.ui.input({
 			prompt = "Quick task: ",
 		}, function(input)
 			if input and input ~= "" then
-				lazydo:safe_call("add_task", {input, { priority = 2 }})
+				lazydo:safe_call("add_task", { input, { priority = 2 } })
 				lazydo:safe_call("refresh_display")
 			end
 		end)
@@ -515,7 +562,7 @@ function M.setup_buffer_keymaps(lazydo, buf)
 				lazydo:safe_call("add_task_below", {
 					input,
 					current and current.priority or 2,
-					current and current.id or nil
+					current and current.id or nil,
 				})
 			end
 		end)
@@ -534,7 +581,6 @@ function M.setup_buffer_keymaps(lazydo, buf)
 	vim.keymap.set("n", "<leader>br", function()
 		lazydo:safe_call("restore_from_backup")
 	end, { buffer = buf, desc = "Restore from backup", silent = true })
-
 end
 
 function M.setup_task_highlights(lazydo)
@@ -929,21 +975,25 @@ function M.render_progress_bar(total, completed, width)
 	local empty_width = width - filled_width
 	
 	-- Define gradient colors based on progress
-	local color
-	if progress < 0.3 then
-		color = "LazyDoProgressLow"
-	elseif progress < 0.7 then
-		color = "LazyDoProgressMedium"
-	else
-		color = "LazyDoProgressHigh"
+	local function get_gradient_color(pos, max)
+		local ratio = pos / max
+		if progress < 0.3 then
+			return string.format("%%#LazyDoProgress%d#", 1)
+		elseif progress < 0.7 then
+			return string.format("%%#LazyDoProgress%d#", 2)
+		else
+			return string.format("%%#LazyDoProgress%d#", 3)
+		end
 	end
 	
 	-- Create progress segments with gradient effect
-	local filled = string.rep("█", filled_width)
+	local filled = ""
+	for i = 1, filled_width do
+		filled = filled .. get_gradient_color(i, width) .. "█"
+	end
 	local empty = string.rep("░", empty_width)
 	
-	-- Return with color formatting
-	return string.format("%%#%s#%s%%#LazyDoProgressEmpty#%s", color, filled, empty)
+	return filled .. "%#LazyDoProgressEmpty#" .. empty
 end
 
 -- Add floating window animations
