@@ -93,171 +93,284 @@ function M.create_window(lazydo)
 end
 
 -- Add render functions
+-- function M.render_task_block(task, width, indent, icons)
+-- 	local lines = {}
+-- 	local highlights = {}
+
+-- 	-- Calculate task completion for subtasks
+-- 	local total_subtasks = #task.subtasks
+-- 	local completed_subtasks = 0
+-- 	for _, subtask in ipairs(task.subtasks) do
+-- 		if subtask.done then
+-- 			completed_subtasks = completed_subtasks + 1
+-- 		end
+-- 	end
+
+-- 	-- Status and priority indicators with better visual hierarchy
+-- 	local status = task.done and icons.task_done
+-- 		or (task.due_date and task.due_date < os.time()) and icons.task_overdue
+-- 		or icons.task_pending
+
+-- 	local priority_icon = task.priority == 3 and icons.priority.high
+-- 		or task.priority == 2 and icons.priority.medium
+-- 		or icons.priority.low
+
+-- 	-- Add visual tags
+-- 	local tags_str = ""
+-- 	if #task.tags > 0 then
+-- 		tags_str = " "
+-- 			.. table.concat(
+-- 				vim.tbl_map(function(tag)
+-- 					return "#" .. tag
+-- 				end, task.tags),
+-- 				" "
+-- 			)
+-- 	end
+
+-- 	-- Enhanced block borders with better spacing
+-- 	local block_width = width - #indent
+-- 	local top = indent
+-- 		.. M.CONSTANTS.BLOCK.TOP_LEFT
+-- 		.. string.rep(M.CONSTANTS.BLOCK.HORIZONTAL, block_width - 2)
+-- 		.. M.CONSTANTS.BLOCK.TOP_RIGHT
+
+-- 	-- Task header with improved layout
+-- 	local header = indent
+-- 		.. M.CONSTANTS.BLOCK.VERTICAL
+-- 		.. utils.pad_right(string.format(" %s %s %s%s", status, priority_icon, task.content, tags_str), block_width - 2)
+-- 		.. M.CONSTANTS.BLOCK.VERTICAL
+
+-- 	table.insert(lines, top)
+-- 	table.insert(lines, header)
+
+-- 	-- Due date with countdown
+-- 	if task.due_date then
+-- 		local days_left = math.floor((task.due_date - os.time()) / 86400)
+-- 		local date_str = os.date("Due: %Y-%m-%d", task.due_date)
+-- 		local countdown = days_left > 0 and string.format("(%d days left)", days_left)
+-- 			or days_left == 0 and "(Due today)"
+-- 			or string.format("(%d days overdue)", math.abs(days_left))
+
+-- 		local date_line = indent
+-- 			.. M.CONSTANTS.BLOCK.VERTICAL
+-- 			.. utils.pad_right(string.format("  %s %s %s", icons.due_date, date_str, countdown), block_width - 2)
+-- 			.. M.CONSTANTS.BLOCK.VERTICAL
+-- 		table.insert(lines, date_line)
+-- 	end
+
+-- 	-- -- Notes with better formatting
+-- 	-- if task.notes then
+-- 	-- 	local wrapped_notes = utils.word_wrap(task.notes, block_width - 6)
+-- 	-- 	table.insert(
+-- 	-- 		lines,
+-- 	-- 		indent
+-- 	-- 			.. M.CONSTANTS.BLOCK.VERTICAL
+-- 	-- 			.. utils.pad_right("  " .. icons.note .. " Notes:", block_width - 2)
+-- 	-- 			.. M.CONSTANTS.BLOCK.VERTICAL
+-- 	-- 	)
+
+-- 	-- 	for _, note_line in ipairs(wrapped_notes) do
+-- 	-- 		table.insert(
+-- 	-- 			lines,
+-- 	-- 			indent
+-- 	-- 				.. M.CONSTANTS.BLOCK.VERTICAL
+-- 	-- 				.. utils.pad_right("    " .. note_line, block_width - 2)
+-- 	-- 				.. M.CONSTANTS.BLOCK.VERTICAL
+-- 	-- 		)
+-- 	-- 	end
+-- 	-- end
+
+-- 	-- Notes with better formatting (multiline support)
+-- 	if task.notes then
+-- 		local wrapped_notes = utils.word_wrap(task.notes, block_width - 6)
+-- 		table.insert(
+-- 			lines,
+-- 			indent
+-- 				.. M.CONSTANTS.BLOCK.VERTICAL
+-- 				.. utils.pad_right("  " .. icons.note .. " Notes:", block_width - 2)
+-- 				.. M.CONSTANTS.BLOCK.VERTICAL
+-- 		)
+
+-- 		for _, note_line in ipairs(wrapped_notes) do
+-- 			table.insert(
+-- 				lines,
+-- 				indent
+-- 					.. M.CONSTANTS.BLOCK.VERTICAL
+-- 					.. utils.pad_right("    " .. note_line, block_width - 2)
+-- 					.. M.CONSTANTS.BLOCK.VERTICAL
+-- 			)
+-- 		end
+-- 	end
+-- 	-- Subtasks with progress bar
+-- 	if #task.subtasks > 0 then
+-- 		-- Add subtask header with progress
+-- 		local progress_width = 20
+-- 		local progress_bar = M.render_progress_bar(total_subtasks, completed_subtasks, progress_width)
+-- 		local progress_text = string.format("Subtasks (%d/%d) ", completed_subtasks, total_subtasks)
+
+-- 		table.insert(
+-- 			lines,
+-- 			indent
+-- 				.. M.CONSTANTS.BLOCK.VERTICAL
+-- 				.. utils.pad_right("  " .. progress_text .. progress_bar, block_width - 2)
+-- 				.. M.CONSTANTS.BLOCK.VERTICAL
+-- 		)
+
+-- 		-- Render subtasks
+-- 		for i, subtask in ipairs(task.subtasks) do
+-- 			local is_last = i == #task.subtasks
+-- 			local prefix = is_last and M.CONSTANTS.BLOCK.SUBTASK_LAST or M.CONSTANTS.BLOCK.SUBTASK_BRANCH
+-- 			local subtask_status = subtask.done and icons.task_done or icons.task_pending
+
+-- 			local subtask_line = indent
+-- 				.. M.CONSTANTS.BLOCK.VERTICAL
+-- 				.. utils.pad_right("  " .. prefix .. " " .. subtask_status .. " " .. subtask.content, block_width - 2)
+-- 				.. M.CONSTANTS.BLOCK.VERTICAL
+-- 			table.insert(lines, subtask_line)
+-- 		end
+-- 	end
+
+-- 	-- Add task metadata
+-- 	local metadata = {
+-- 		string.format("Created: %s", os.date("%Y-%m-%d", task.created_at)),
+-- 		string.format("Updated: %s", os.date("%Y-%m-%d", task.updated_at)),
+-- 	}
+-- 	if task.last_completed then
+-- 		table.insert(metadata, string.format("Completed: %s", os.date("%Y-%m-%d", task.last_completed)))
+-- 	end
+
+-- 	local metadata_str = table.concat(metadata, " " .. M.CONSTANTS.BLOCK.SEPARATOR .. " ")
+-- 	table.insert(
+-- 		lines,
+-- 		indent
+-- 			.. M.CONSTANTS.BLOCK.VERTICAL
+-- 			.. utils.pad_right("  " .. metadata_str, block_width - 2)
+-- 			.. M.CONSTANTS.BLOCK.VERTICAL
+-- 	)
+
+-- 	-- Block footer
+-- 	local bottom = indent
+-- 		.. M.CONSTANTS.BLOCK.BOTTOM_LEFT
+-- 		.. string.rep(M.CONSTANTS.BLOCK.HORIZONTAL, block_width - 2)
+-- 		.. M.CONSTANTS.BLOCK.BOTTOM_RIGHT
+-- 	table.insert(lines, bottom)
+-- 	table.insert(lines, "") -- Spacing
+
+-- 	return lines, highlights
+-- end
+
 function M.render_task_block(task, width, indent, icons)
-	local lines = {}
-	local highlights = {}
+    local lines = {}
+    local block_width = width - #indent
+    local inner_width = block_width - 4  -- Account for borders and padding
 
-	-- Calculate task completion for subtasks
-	local total_subtasks = #task.subtasks
-	local completed_subtasks = 0
-	for _, subtask in ipairs(task.subtasks) do
-		if subtask.done then
-			completed_subtasks = completed_subtasks + 1
-		end
-	end
+    -- Enhanced box drawing characters
+    local box = {
+        tl = "╭", tr = "╮", bl = "╰", br = "╯",
+        h = "─", v = "│", 
+        ltee = "├", rtee = "┤",
+        bullet = "•",
+    }
 
-	-- Status and priority indicators with better visual hierarchy
-	local status = task.done and icons.task_done
-		or (task.due_date and task.due_date < os.time()) and icons.task_overdue
-		or icons.task_pending
+    -- Calculate progress
+    local total_subtasks = #task.subtasks
+    local completed_subtasks = 0
+    for _, subtask in ipairs(task.subtasks) do
+        if subtask.done then
+            completed_subtasks = completed_subtasks + 1
+        end
+    end
+    local progress = total_subtasks > 0 and (completed_subtasks / total_subtasks) or 0
 
-	local priority_icon = task.priority == 3 and icons.priority.high
-		or task.priority == 2 and icons.priority.medium
-		or icons.priority.low
+    -- Status indicators
+    local status = task.done and icons.task_done
+        or (task.due_date and task.due_date < os.time()) and icons.task_overdue
+        or icons.task_pending
 
-	-- Add visual tags
-	local tags_str = ""
-	if #task.tags > 0 then
-		tags_str = " "
-			.. table.concat(
-				vim.tbl_map(function(tag)
-					return "#" .. tag
-				end, task.tags),
-				" "
-			)
-	end
+    local priority_icon = task.priority == 3 and icons.priority.high
+        or task.priority == 2 and icons.priority.medium
+        or icons.priority.low
 
-	-- Enhanced block borders with better spacing
-	local block_width = width - #indent
-	local top = indent
-		.. M.CONSTANTS.BLOCK.TOP_LEFT
-		.. string.rep(M.CONSTANTS.BLOCK.HORIZONTAL, block_width - 2)
-		.. M.CONSTANTS.BLOCK.TOP_RIGHT
+    -- Format tags
+    local tags_str = #task.tags > 0 and " " .. table.concat(
+        vim.tbl_map(function(tag)
+            return "#" .. tag
+        end, task.tags),
+        " "
+    ) or ""
 
-	-- Task header with improved layout
-	local header = indent
-		.. M.CONSTANTS.BLOCK.VERTICAL
-		.. utils.pad_right(string.format(" %s %s %s%s", status, priority_icon, task.content, tags_str), block_width - 2)
-		.. M.CONSTANTS.BLOCK.VERTICAL
+    -- Top border with title
+    local title_str = string.format(" %s %s %s%s ", status, priority_icon, task.content, tags_str)
+    local title_len = vim.fn.strdisplaywidth(title_str)
+    local pad_len = math.max(0, inner_width - title_len)
+    local top = indent .. box.tl .. title_str .. string.rep(box.h, pad_len) .. box.tr
 
-	table.insert(lines, top)
-	table.insert(lines, header)
+    table.insert(lines, top)
 
-	-- Due date with countdown
-	if task.due_date then
-		local days_left = math.floor((task.due_date - os.time()) / 86400)
-		local date_str = os.date("Due: %Y-%m-%d", task.due_date)
-		local countdown = days_left > 0 and string.format("(%d days left)", days_left)
-			or days_left == 0 and "(Due today)"
-			or string.format("(%d days overdue)", math.abs(days_left))
+    -- Due date with countdown and visual indicator
+    if task.due_date then
+        local days_left = math.floor((task.due_date - os.time()) / 86400)
+        local date_str = os.date("%Y-%m-%d", task.due_date)
+        local countdown = days_left > 0 and string.format("(%d days left)", days_left)
+            or days_left == 0 and "(Due today)"
+            or string.format("(%d days overdue)", math.abs(days_left))
 
-		local date_line = indent
-			.. M.CONSTANTS.BLOCK.VERTICAL
-			.. utils.pad_right(string.format("  %s %s %s", icons.due_date, date_str, countdown), block_width - 2)
-			.. M.CONSTANTS.BLOCK.VERTICAL
-		table.insert(lines, date_line)
-	end
+        -- Add visual urgency indicator
+        local urgency = days_left < 0 and "!" or days_left == 0 and "⚠" or "○"
+        local date_line = string.format(" %s %s %s %s ", icons.due_date, date_str, countdown, urgency)
+        table.insert(lines, indent .. box.v .. utils.pad_right(date_line, inner_width) .. box.v)
+    end
 
-	-- -- Notes with better formatting
-	-- if task.notes then
-	-- 	local wrapped_notes = utils.word_wrap(task.notes, block_width - 6)
-	-- 	table.insert(
-	-- 		lines,
-	-- 		indent
-	-- 			.. M.CONSTANTS.BLOCK.VERTICAL
-	-- 			.. utils.pad_right("  " .. icons.note .. " Notes:", block_width - 2)
-	-- 			.. M.CONSTANTS.BLOCK.VERTICAL
-	-- 	)
+    -- Notes with improved formatting
+    if task.notes then
+        table.insert(lines, indent .. box.ltee .. string.rep(box.h, inner_width) .. box.rtee)
+        table.insert(lines, indent .. box.v .. string.format(" %s Notes:", icons.note) .. string.rep(" ", inner_width - 8) .. box.v)
+        
+        local wrapped_notes = utils.word_wrap(task.notes, inner_width - 4)
+        for _, note_line in ipairs(wrapped_notes) do
+            table.insert(lines, indent .. box.v .. "  " .. utils.pad_right(note_line, inner_width - 2) .. box.v)
+        end
+    end
 
-	-- 	for _, note_line in ipairs(wrapped_notes) do
-	-- 		table.insert(
-	-- 			lines,
-	-- 			indent
-	-- 				.. M.CONSTANTS.BLOCK.VERTICAL
-	-- 				.. utils.pad_right("    " .. note_line, block_width - 2)
-	-- 				.. M.CONSTANTS.BLOCK.VERTICAL
-	-- 		)
-	-- 	end
-	-- end
+    -- Subtasks with enhanced progress visualization
+    if #task.subtasks > 0 then
+        table.insert(lines, indent .. box.ltee .. string.rep(box.h, inner_width) .. box.rtee)
+        
+        -- Progress bar
+        local progress_width = 20
+        local progress_bar = M.render_progress_bar(total_subtasks, completed_subtasks, progress_width)
+        local progress_text = string.format(" Subtasks (%d/%d) %s ", completed_subtasks, total_subtasks, progress_bar)
+        table.insert(lines, indent .. box.v .. utils.pad_right(progress_text, inner_width) .. box.v)
 
-	-- Notes with better formatting (multiline support)
-	if task.notes then
-		local wrapped_notes = utils.word_wrap(task.notes, block_width - 6)
-		table.insert(
-			lines,
-			indent
-				.. M.CONSTANTS.BLOCK.VERTICAL
-				.. utils.pad_right("  " .. icons.note .. " Notes:", block_width - 2)
-				.. M.CONSTANTS.BLOCK.VERTICAL
-		)
+        -- Render subtasks with improved hierarchy
+        for i, subtask in ipairs(task.subtasks) do
+            local is_last = i == #task.subtasks
+            local prefix = is_last and "└─" or "├─"
+            local subtask_status = subtask.done and icons.task_done or icons.task_pending
+            local subtask_line = string.format(" %s %s %s", prefix, subtask_status, subtask.content)
+            table.insert(lines, indent .. box.v .. utils.pad_right(subtask_line, inner_width) .. box.v)
+        end
+    end
 
-		for _, note_line in ipairs(wrapped_notes) do
-			table.insert(
-				lines,
-				indent
-					.. M.CONSTANTS.BLOCK.VERTICAL
-					.. utils.pad_right("    " .. note_line, block_width - 2)
-					.. M.CONSTANTS.BLOCK.VERTICAL
-			)
-		end
-	end
-	-- Subtasks with progress bar
-	if #task.subtasks > 0 then
-		-- Add subtask header with progress
-		local progress_width = 20
-		local progress_bar = M.render_progress_bar(total_subtasks, completed_subtasks, progress_width)
-		local progress_text = string.format("Subtasks (%d/%d) ", completed_subtasks, total_subtasks)
+    -- Metadata footer with improved layout
+    table.insert(lines, indent .. box.ltee .. string.rep(box.h, inner_width) .. box.rtee)
+    local metadata = {
+        string.format("Created: %s", os.date("%Y-%m-%d", task.created_at)),
+        string.format("Updated: %s", os.date("%Y-%m-%d", task.updated_at)),
+    }
+    if task.last_completed then
+        table.insert(metadata, string.format("Completed: %s", os.date("%Y-%m-%d", task.last_completed)))
+    end
+    local metadata_str = table.concat(metadata, " " .. box.bullet .. " ")
+    table.insert(lines, indent .. box.v .. utils.pad_right(" " .. metadata_str, inner_width) .. box.v)
 
-		table.insert(
-			lines,
-			indent
-				.. M.CONSTANTS.BLOCK.VERTICAL
-				.. utils.pad_right("  " .. progress_text .. progress_bar, block_width - 2)
-				.. M.CONSTANTS.BLOCK.VERTICAL
-		)
+    -- Bottom border
+    table.insert(lines, indent .. box.bl .. string.rep(box.h, inner_width) .. box.br)
+    table.insert(lines, "")  -- Add spacing between tasks
 
-		-- Render subtasks
-		for i, subtask in ipairs(task.subtasks) do
-			local is_last = i == #task.subtasks
-			local prefix = is_last and M.CONSTANTS.BLOCK.SUBTASK_LAST or M.CONSTANTS.BLOCK.SUBTASK_BRANCH
-			local subtask_status = subtask.done and icons.task_done or icons.task_pending
-
-			local subtask_line = indent
-				.. M.CONSTANTS.BLOCK.VERTICAL
-				.. utils.pad_right("  " .. prefix .. " " .. subtask_status .. " " .. subtask.content, block_width - 2)
-				.. M.CONSTANTS.BLOCK.VERTICAL
-			table.insert(lines, subtask_line)
-		end
-	end
-
-	-- Add task metadata
-	local metadata = {
-		string.format("Created: %s", os.date("%Y-%m-%d", task.created_at)),
-		string.format("Updated: %s", os.date("%Y-%m-%d", task.updated_at)),
-	}
-	if task.last_completed then
-		table.insert(metadata, string.format("Completed: %s", os.date("%Y-%m-%d", task.last_completed)))
-	end
-
-	local metadata_str = table.concat(metadata, " " .. M.CONSTANTS.BLOCK.SEPARATOR .. " ")
-	table.insert(
-		lines,
-		indent
-			.. M.CONSTANTS.BLOCK.VERTICAL
-			.. utils.pad_right("  " .. metadata_str, block_width - 2)
-			.. M.CONSTANTS.BLOCK.VERTICAL
-	)
-
-	-- Block footer
-	local bottom = indent
-		.. M.CONSTANTS.BLOCK.BOTTOM_LEFT
-		.. string.rep(M.CONSTANTS.BLOCK.HORIZONTAL, block_width - 2)
-		.. M.CONSTANTS.BLOCK.BOTTOM_RIGHT
-	table.insert(lines, bottom)
-	table.insert(lines, "") -- Spacing
-
-	return lines, highlights
+    return lines
 end
+
 
 function M.setup_buffer_keymaps(lazydo, buf)
 	if not lazydo or not buf then

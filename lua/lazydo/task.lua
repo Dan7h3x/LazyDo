@@ -45,24 +45,47 @@ function M.Task:toggle()
 end
 
 function M.Task:add_subtask(content, opts)
-	opts = opts or {}
-	opts.indent = self.indent + 1
-	local subtask = M.Task.new(content, opts)
-	subtask.hidden = true -- Set the hidden property to true by default
-	table.insert(self.subtasks, subtask)
-	self.updated_at = os.time()
-	return subtask
+    opts = opts or {}
+    opts.indent = self.indent + 1
+    local subtask = M.Task.new(content, opts)
+    subtask.parent_id = self.id  -- Track parent relationship
+    subtask.index = #self.subtasks + 1  -- Track position
+    table.insert(self.subtasks, subtask)
+    self.updated_at = os.time()
+    return subtask
 end
 
-function M.Task:remove_subtask(id)
-	for i, subtask in ipairs(self.subtasks) do
-		if subtask.id == id then
-			table.remove(self.subtasks, i)
-			self.updated_at = os.time()
-			return true
-		end
-	end
-	return false
+function M.Task:edit_subtask(index, new_content)
+    if self.subtasks[index] then
+        self.subtasks[index].content = new_content
+        self.subtasks[index].updated_at = os.time()
+        return true
+    end
+    return false
+end
+
+
+
+function M.Task:toggle_subtask(index)
+    if self.subtasks[index] then
+        self.subtasks[index]:toggle()
+        self.updated_at = os.time()
+        return true
+    end
+    return false
+end
+
+function M.Task:remove_subtask(index)
+    if self.subtasks[index] then
+        table.remove(self.subtasks, index)
+        -- Reindex remaining subtasks
+        for i, subtask in ipairs(self.subtasks) do
+            subtask.index = i
+        end
+        self.updated_at = os.time()
+        return true
+    end
+    return false
 end
 
 function M.Task:is_overdue()

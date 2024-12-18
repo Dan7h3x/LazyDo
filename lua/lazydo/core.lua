@@ -306,67 +306,127 @@ function LazyDo:set_note(task)
 	end)
 end
 
-function LazyDo:add_subtask(task)
-	local template_subtask = task:add_subtask("New Subtask...", { hidden = true })
-	if not task then
-		vim.notify("No task selected to add a subtask", vim.log.levels.WARN)
-		return
-	end
+function LazyDo:add_subtask()
+    local task = self:get_current_task()
+    if not task then
+        vim.notify("No task selected", vim.log.levels.WARN)
+        return
+    end
 
-	-- Create a template subtask
+    local function create_subtask(input)
+        if not input or input == "" then
+            return
+        end
 
-	-- Prompt user to edit the new subtask
-	vim.ui.input({ prompt = "Enter subtask content: ", default = template_subtask.content }, function(input)
-		if input and input ~= "" then
-			template_subtask.content = input -- Update the content of the subtask
-			template_subtask.hidden = false -- Make it visible after editing
-			if self.opts.storage.auto_save then
-				require("lazydo.storage").save_tasks(self)
-			end
-			self:refresh_display()
-		end
-	end)
+        local subtask = task:add_subtask(input, {
+            priority = task.priority,
+            tags = vim.deepcopy(task.tags)
+        })
+
+        if self.opts.storage.auto_save then
+            require("lazydo.storage").save_tasks(self)
+        end
+        self:refresh_display()
+    end
+
+    -- Show input dialog with placeholder
+    vim.ui.input({
+        prompt = "New subtask: ",
+        default = "",
+        completion = "customlist,SubtaskComplete",
+    }, create_subtask)
 end
 
-function LazyDo:edit_subtask(task)
-	if #task.subtasks == 0 then
-		task:add_subtask("Edit Subtask...", { hidden = true })
-	end
-	if not task or #task.subtasks == 0 then
-		vim.notify("No subtasks available to edit", vim.log.levels.WARN)
-		return
-	end
+function LazyDo:edit_subtask()
+    local task = self:get_current_task()
+    if not task then
+        vim.notify("No task selected", vim.log.levels.WARN)
+        return
+    end
 
-	-- Create a template subtask if none exist
+    if #task.subtasks == 0 then
+        vim.notify("No subtasks to edit. Add a subtask first.", vim.log.levels.INFO)
+        self:add_subtask()
+        return
+    end
 
-	-- Assuming you have a way to select a subtask to edit
-	local subtask_items = {}
-	for i, subtask in ipairs(task.subtasks) do
-		if not subtask.hidden then -- Only show visible subtasks
-			table.insert(subtask_items, { text = subtask.content, value = i }) -- Assuming subtask has a content property
-		end
-	end
+    -- Create selection items for subtasks
+    local items = {}
+    for i, subtask in ipairs(task.subtasks) do
+        table.insert(items, {
+            text = string.format("[%s] %s", subtask.done and "✓" or " ", subtask.content),
+            value = i,
+            subtask = subtask
+        })
+    end
 
-	vim.ui.select(subtask_items, {
-		prompt = "Select a subtask to edit:",
-		format_item = function(item)
-			return item.text
-		end,
-	}, function(choice)
-		if choice then
-			local subtask = task.subtasks[choice.value]
-			vim.ui.input({ prompt = "Edit subtask content: ", default = subtask.content }, function(input)
-				if input and input ~= "" then
-					subtask.content = input -- Update the subtask content
-					subtask.hidden = false -- Make it visible after editing
-					if self.opts.storage.auto_save then
-						require("lazydo.storage").save_tasks(self)
-					end
-					self:refresh_display()
-				end
-			end)
-		end
-	end)
+    -- Show subtask selection menu
+    vim.ui.select(items, {
+        prompt = "Select subtask to edit:",
+        format_item = function(item)
+            return item.text
+        end
+    }, function(choice)
+        if not choice then return end
+
+        -- Show edit menu for selected subtask
+        local edit_items = {
+            { text = "Edit content", value = "edit" },
+            { text = "Toggle completion", value = "toggle" },
+            { text = "Delete subtask", value = "delete" },
+            { text = "Move up", value = "up" },
+            { text = "Move down", value = "down" }
+        }
+
+        vim.ui.select(edit_items, {
+            prompt = "Choose action:",
+            format_item = function(item)
+                return item.text
+            end
+        }, function(action)
+            if not action then return end
+
+            if action.value == "edit" then
+                -- Edit subtask content
+                vim.ui.input({
+                    prompt = "Edit subtask: ",
+                    default = items[choice.value].subtask.content,
+                }, function(new_content)
+                    if new_content and new_content ~= "" then
+                        task:edit_subtask(choice.value, new_content)
+                        if self.opts.storage.auto_save then
+                            require("lazydo.storage").save_tasks(self)
+                        end
+                        self:refresh_display()
+                    end
+                end)
+            elseif action.value == "toggle" then
+                task:toggle_subtask(choice.value)
+                if self.opts.storage.auto_save then
+                    require("lazydo.storage").save_tasks(self)
+                end
+                self:refresh_display()
+            elseif action.value == "delete" then
+                task:remove_subtask(choice.value)
+                if self.opts.storage.auto_save then
+                    require("lazydo.storage").save_tasks(self)
+                end
+                self:refresh_display()
+            elseif action.value == "up" or action.value == "down" then
+                local idx = choice.value
+                local new_idx = action.value == "up" and idx - 1 or idx + 1
+                if new_idx >= 1 and new_idx <= #task.subtasks then
+                    task.subtasks[idx], task.subtasks[new_idx] = task.subtasks[new_idx], task.subtasks[idx]
+                    task.subtasks[idx].index = idx
+                    task.subtasks[new_idx].index = new_idx
+                    if self.opts.storage.auto_save then
+                        require("lazydo.storage").save_tasks(self)
+                    end
+                    self:refresh_display()
+                end
+            end
+        end)
+    end)
 end
 
 function LazyDo:set_date(task)
