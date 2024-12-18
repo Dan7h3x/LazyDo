@@ -489,6 +489,10 @@ function LazyDo:setup_highlights()
 			fg = colors.border,
 			nocombine = true,
 		},
+		LazyDoProgressRed =  { fg = '#ff5555' },
+		LazyDoProgressOrange =  { fg = '#ffb86c' },
+		LazyDoProgressGreen =  { fg = '#50fa7b' },
+		LazyDoProgressEmpty =  { fg = '#44475a' },
 
 		-- Subtask elements
 		LazyDoSubtaskBullet = {

@@ -1,5 +1,7 @@
 local M = {}
 local utils = require("lazydo.utils")
+
+
 -- Add animations and transitions
 M.ANIMATIONS = {
 	FADE_FRAMES = 10,
@@ -245,6 +247,7 @@ function M.create_buffer(lazydo)
 	for opt, val in pairs(buf_opts) do
 		vim.api.nvim_buf_set_option(buf, opt, val)
 	end
+	lazydo:setup_highlights()
 
 	-- Setup buffer-specific keymaps
 	M.setup_buffer_keymaps(lazydo, buf)
@@ -479,18 +482,26 @@ function M.setup_buffer_keymaps(lazydo, buf)
 		return
 	end
 
-	local function map(key, method_name, args, desc)
-		vim.keymap.set("n", key, function()
-			lazydo[method_name](lazydo, args)
-		end, { buffer = buf, desc = desc, silent = true })
-	end
-
 	-- Core task management
-	map(lazydo.opts.keymaps.add_task, "create_task_prompt", nil, "Add new task")
-	map(lazydo.opts.keymaps.toggle_done, "toggle_current_task", nil, "Toggle task completion")
-	map(lazydo.opts.keymaps.add_subtask, "add_subtask", nil, "Add subtask")
-	map(lazydo.opts.keymaps.edit_subtask, "edit_subtask", nil, "Edit subtask")
-	map(lazydo.opts.keymaps.delete_task, "delete_task", nil, "Delete task")
+	vim.keymap.set("n", lazydo.opts.keymaps.add_task, function()
+		lazydo:create_task_prompt()
+	end, { buffer = buf, desc = "Add new task", silent = true })
+
+	vim.keymap.set("n", lazydo.opts.keymaps.toggle_done, function()
+		lazydo:toggle_current_task()
+	end, { buffer = buf, desc = "Toggle task completion", silent = true })
+
+	vim.keymap.set("n", lazydo.opts.keymaps.add_subtask, function()
+		lazydo:add_subtask()
+	end, { buffer = buf, desc = "Add subtask", silent = true })
+
+	vim.keymap.set("n", lazydo.opts.keymaps.edit_subtask, function()
+		lazydo:edit_subtask()
+	end, { buffer = buf, desc = "Edit subtask", silent = true })
+
+	vim.keymap.set("n", lazydo.opts.keymaps.delete_task, function()
+		lazydo:delete_task()
+	end, { buffer = buf, desc = "Delete task", silent = true })
 
 	-- Advanced Task Management
 	vim.keymap.set("n", "<leader>s", function()
@@ -524,22 +535,48 @@ function M.setup_buffer_keymaps(lazydo, buf)
 	end, { buffer = buf, desc = "Reset to original tasks", silent = true })
 
 	-- Quick actions
-	map(lazydo.opts.keymaps.quick_note, "set_note", nil, "Add/edit note")
-	map(lazydo.opts.keymaps.quick_date, "set_date", nil, "Set due date")
-	map(lazydo.opts.keymaps.edit_task, "show_quick_edit_menu", nil, "Edit task")
+	vim.keymap.set("n", lazydo.opts.keymaps.quick_note, function()
+		lazydo:set_note(lazydo:get_current_task())
+	end, { buffer = buf, desc = "Add/edit note", silent = true })
+
+	vim.keymap.set("n", lazydo.opts.keymaps.quick_date, function()
+		lazydo:set_date(lazydo:get_current_task())
+	end, { buffer = buf, desc = "Set due date", silent = true })
+
+	vim.keymap.set("n", lazydo.opts.keymaps.edit_task, function()
+		lazydo:show_quick_edit_menu()
+	end, { buffer = buf, desc = "Edit task", silent = true })
 
 	-- Task movement
-	map(lazydo.opts.keymaps.move_up, "move_task_up", nil, "Move task up")
-	map(lazydo.opts.keymaps.move_down, "move_task_down", nil, "Move task down")
+	vim.keymap.set("n", lazydo.opts.keymaps.move_up, function()
+		lazydo:move_task_up()
+	end, { buffer = buf, desc = "Move task up", silent = true })
+
+	vim.keymap.set("n", lazydo.opts.keymaps.move_down, function()
+		lazydo:move_task_down()
+	end, { buffer = buf, desc = "Move task down", silent = true })
 
 	-- Priority management
-	map(lazydo.opts.keymaps.increase_priority, "increase_priority", nil, "Increase priority")
-	map(lazydo.opts.keymaps.decrease_priority, "decrease_priority", nil, "Decrease priority")
+	vim.keymap.set("n", lazydo.opts.keymaps.increase_priority, function()
+		lazydo:increase_priority()
+	end, { buffer = buf, desc = "Increase priority", silent = true })
+
+	vim.keymap.set("n", lazydo.opts.keymaps.decrease_priority, function()
+		lazydo:decrease_priority()
+	end, { buffer = buf, desc = "Decrease priority", silent = true })
 
 	-- UI controls
-	map(lazydo.opts.keymaps.toggle_help, "toggle_help", nil, "Toggle help")
-	map(lazydo.opts.keymaps.close_window, "close_window", nil, "Close window")
-	map(lazydo.opts.keymaps.refresh_view, "refresh_display", nil, "Refresh view")
+	vim.keymap.set("n", lazydo.opts.keymaps.toggle_help, function()
+		lazydo:toggle_help()
+	end, { buffer = buf, desc = "Toggle help", silent = true })
+
+	vim.keymap.set("n", lazydo.opts.keymaps.close_window, function()
+		lazydo:close_window()
+	end, { buffer = buf, desc = "Close window", silent = true })
+
+	vim.keymap.set("n", lazydo.opts.keymaps.refresh_view, function()
+		lazydo:refresh_display()
+	end, { buffer = buf, desc = "Refresh view", silent = true })
 
 	-- Quick add tasks
 	vim.keymap.set("n", lazydo.opts.keymaps.quick_add or "o", function()
@@ -973,30 +1010,26 @@ end
 -- Add progress bar rendering with gradient colors
 function M.render_progress_bar(total, completed, width)
 	local progress = completed / total
-	local filled_width = math.floor(width * progress)
-	local empty_width = width - filled_width
+	local percentage = math.floor(progress * 100)
+	local display_width = width - 4  -- Subtract space for percentage display
+	local filled_width = math.floor(display_width * progress)
+	local empty_width = display_width - filled_width
 	
-	-- Define gradient colors based on progress
-	local function get_gradient_color(pos, max)
-		local ratio = pos / max
-		if progress < 0.3 then
-			return string.format("%%#LazyDoProgress%d#", 1)
-		elseif progress < 0.7 then
-			return string.format("%%#LazyDoProgress%d#", 2)
-		else
-			return string.format("%%#LazyDoProgress%d#", 3)
-		end
-	end
+	-- Define color based on progress percentage
+	local color = progress <= 0.33 and "%#LazyDoProgressRed#"
+		or progress <= 0.66 and "%#LazyDoProgressOrange#"
+		or "%#LazyDoProgressGreen#"
 	
-	-- Create progress segments with gradient effect
-	local filled = ""
-	for i = 1, filled_width do
-		filled = filled .. get_gradient_color(i, width) .. "█"
-	end
-	local empty = string.rep("░", empty_width)
+	-- Create progress segments with color and percentage
+	local filled = string.rep(color .. "█", filled_width)
+	local empty = string.rep("%#LazyDoProgressEmpty#░", empty_width)
 	
-	return filled .. "%#LazyDoProgressEmpty#" .. empty
+	-- Format with percentage at the end
+	return string.format("%s%s %3d%%", filled, empty, percentage)
 end
+
+
+
 
 -- Add floating window animations
 function M.animate_window_open(win, opts)
