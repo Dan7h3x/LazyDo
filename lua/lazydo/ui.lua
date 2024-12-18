@@ -692,43 +692,6 @@ function M.setup_buffer_keymaps(lazydo, buf)
 		if not task_start_line then
 			vim.notify("Could not find parent task", vim.log.levels.WARN)
 			return
-		end
-
-		-- Calculate correct subtask index
-		current_subtask = #task.subtasks - subtask_count
-
-		-- Toggle subtask with visual feedback
-		if current_subtask > 0 and current_subtask <= #task.subtasks then
-			-- Store the cursor position
-			local saved_cursor = vim.api.nvim_win_get_cursor(lazydo.win)
-			
-			-- Toggle the subtask
-			task:toggle_subtask(current_subtask)
-			
-			-- Visual feedback
-			vim.api.nvim_buf_add_highlight(
-				lazydo.buf,
-				-1,
-				task.subtasks[current_subtask].done and "LazyDoDone" or "LazyDoPending",
-				current_line - 1,
-				0,
-				-1
-			)
-			
-			-- Briefly highlight the line
-			vim.defer_fn(function()
-				if vim.api.nvim_buf_is_valid(lazydo.buf) then
-					lazydo:refresh_display()
-					-- Restore cursor position
-					if vim.api.nvim_win_is_valid(lazydo.win) then
-						vim.api.nvim_win_set_cursor(lazydo.win, saved_cursor)
-					end
-				end
-			end, 200)
-
-			-- Auto-save if enabled
-			if lazydo.opts.storage.auto_save then
-				require("lazydo.storage").save_tasks(lazydo)
 			end
 		end
 	end, { buffer = buf, desc = "Toggle subtask completion", silent = true })
@@ -1123,56 +1086,8 @@ function M.show_quick_edit_menu(lazydo)
 			lazydo:delete_task()
 		elseif choice.value == "add_subtask" then
 			lazydo:add_subtask() -- Call the method to add a subtask
--- Progress animation helpers
-local function animate_progress(win, buf, line, start_col, end_col, duration)
-	local frames = {
-		"▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"
-	}
-	
-	local frame_duration = duration / #frames
-	local current_frame = 1
-	
-	local timer = vim.loop.new_timer()
-	timer:start(0, frame_duration, vim.schedule_wrap(function()
-		if current_frame <= #frames and vim.api.nvim_buf_is_valid(buf) then
-			local content = vim.api.nvim_buf_get_lines(buf, line, line + 1, false)[1]
-			local new_content = content:sub(1, start_col - 1) .. 
-							  frames[current_frame] .. 
-							  content:sub(end_col)
-			
-			vim.api.nvim_buf_set_lines(buf, line, line + 1, false, {new_content})
-			current_frame = current_frame + 1
-		else
-			timer:stop()
-			timer:close()
-		end
-	end))
-end
-
--- Update the progress display with animation
-local function update_progress_display(lazydo, task, subtask_index)
-	local total = #task.subtasks
-	local completed = 0
-	for _, subtask in ipairs(task.subtasks) do
-		if subtask.done then
-			completed = completed + 1
-		end
-	end
-	
-	-- Find the progress bar line
-	local lines = vim.api.nvim_buf_get_lines(lazydo.buf, 0, -1, false)
-	for i, line in ipairs(lines) do
-		if line:match("Subtasks %(%d+/%d+%)") then
-			-- Animate the progress change
-			local new_progress = M.render_progress_bar(total, completed, 20)
-			animate_progress(lazydo.win, lazydo.buf, i - 1, line:find("█") or line:find("░"), line:find("%%"), 200)
-			break
-		end
-	end
-end
-
--- Improved progress bar rendering with smooth gradients and animations
-function M.render_progress_bar(total, completed, width)
+		elseif choice.value == "edit_subtask" then
+			lazydo:edit_subtask() -- Call the method to edit a subtask
 		else
 			M.edit_task_component(lazydo, choice.value)
 		end
@@ -1262,28 +1177,79 @@ function M.render_status_line(lazydo)
 	local stats = lazydo:get_task_statistics()
 	local total_width = vim.api.nvim_win_get_width(lazydo.win)
 
+	-- Define colors for different elements
+	local colors = {
+		separator = "#6272a4",   -- Soft purple for separators
+		numbers = "#bd93f9",     -- Bright purple for numbers
+		labels = "#f8f8f2",      -- White for labels
+		warning = "#ffb86c",     -- Orange for warnings
+		success = "#50fa7b",     -- Green for success
+		error = "#ff5555",       -- Red for errors/overdue
+	}
+
+	-- Create styled segments
+	local function styled_number(num, color)
+		return string.format("%%#0x%s#%d%%#0x%s#", color:sub(2), num, colors.labels:sub(2))
+	end
+
+	local function separator()
+		return string.format("%%#0x%s#│%%#0x%s#", colors.separator:sub(2), colors.labels:sub(2))
+	end
+
+	-- Format each statistic with appropriate colors
+	local segments = {
+		string.format(" Tasks: %s ", styled_number(stats.total, colors.numbers)),
+		string.format(" Done: %s ", styled_number(stats.done, colors.success)),
+		string.format(" Pending: %s ", styled_number(stats.pending, colors.warning)),
+		string.format(" Overdue: %s ", styled_number(stats.overdue, colors.error)),
+	}
+
 	-- Create progress bar
 	local progress_width = 20
 	local progress = stats.done / (stats.total > 0 and stats.total or 1)
 	local progress_bar = M.render_progress_bar(stats.total, stats.done, progress_width)
 
-	-- Format statistics
-	local stats_text = string.format(
-		"Tasks: %d │ Done: %d │ Pending: %d │ Overdue: %d │ Progress: ",
-		stats.total,
-		stats.done,
-		stats.pending,
-		stats.overdue
-	)
+	-- Calculate completion percentage
+	local percentage = math.floor(progress * 100)
+	local percentage_color = percentage >= 80 and colors.success 
+		or percentage >= 50 and colors.warning 
+		or colors.error
 
-	-- Combine elements
-	local status_line = stats_text .. progress_bar
+	-- Add percentage to segments
+	table.insert(segments, string.format(" Progress: %s%% ", styled_number(percentage, percentage_color)))
 
-	-- Add to virtual text
+	-- Combine all elements with separators
+	local status_line = table.concat(segments, separator())
+	status_line = status_line .. separator() .. " " .. progress_bar
+
+	-- Add task count summary if there are filtered results
+	if lazydo._original_tasks then
+		local filtered_count = #lazydo.tasks
+		local total_count = #lazydo._original_tasks
+		local filter_info = string.format(
+			" %%#0x%s#(Showing %d/%d)%%#0x%s#",
+			colors.warning:sub(2),
+			filtered_count,
+			total_count,
+			colors.labels:sub(2)
+		)
+		status_line = status_line .. separator() .. filter_info
+	end
+
+	-- Add to virtual text with padding to fill the width
 	vim.api.nvim_buf_clear_namespace(lazydo.buf, lazydo.ns.virtual, 0, -1)
 	vim.api.nvim_buf_set_extmark(lazydo.buf, lazydo.ns.virtual, 0, 0, {
 		virt_text = { { status_line, "LazyDoStatusLine" } },
 		virt_text_pos = "overlay",
+		priority = 100,
+	})
+
+	-- Add a separator line below the status line
+	local separator_line = string.format("%%#0x%s#%s", colors.separator:sub(2), string.rep("─", total_width))
+	vim.api.nvim_buf_set_extmark(lazydo.buf, lazydo.ns.virtual, 1, 0, {
+		virt_text = { { separator_line, "LazyDoStatusLine" } },
+		virt_text_pos = "overlay",
+		priority = 100,
 	})
 end
 
