@@ -44,6 +44,11 @@ M.defaults = {
         activetask = "#2D3343",  -- Subtle background for active task
         tag = "#89ddff",         -- Tag color
         metadata = "#565f89",    -- Metadata text color
+		progress = {
+			full = "#9ece6a",    -- Same as done color
+			empty = "#3b4261",   -- Same as border color
+		},
+		subtask_bullet = "#7dcfff",
     },
 	keymaps = {
         -- Task management
@@ -53,6 +58,8 @@ M.defaults = {
         add_task = "a",
         add_subtask = "A",
         edit_subtask = "E",      -- Added explicit subtask edit
+		quick_add = "o",         -- Quick add task
+		add_below = "O",
         
         -- Movement
         move_up = "K",

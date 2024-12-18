@@ -493,6 +493,40 @@ function M.setup_buffer_keymaps(lazydo, buf)
         end, { buffer = buf, desc = desc, silent = true })
     end
 
+	safe_map(lazydo.opts.keymaps.add_task, function()
+        lazydo:create_task_prompt()
+    end, "Add new task")
+
+	safe_map(lazydo.opts.keymaps.quick_add or "o", function()
+        vim.ui.input({
+            prompt = "Quick task: ",
+        }, function(input)
+            if input and input ~= "" then
+                lazydo:add_task(input, { priority = 2 })
+                lazydo:refresh_display()
+            end
+        end)
+    end, "Quick add task")
+
+	safe_map(lazydo.opts.keymaps.add_below or "O", function()
+        local current = lazydo:get_current_task()
+        vim.ui.input({
+            prompt = "New task below: ",
+        }, function(input)
+            if input and input ~= "" then
+                local task = lazydo:add_task(input, {
+                    priority = current and current.priority or 2
+                })
+                if current then
+                    -- Move the new task to position after current task
+                    local current_index = vim.tbl_index(lazydo.tasks, current)
+                    table.remove(lazydo.tasks)
+                    table.insert(lazydo.tasks, current_index + 1, task)
+                end
+                lazydo:refresh_display()
+            end
+        end)
+    end, "Add task below current")
     -- Task Management
     safe_map(lazydo.opts.keymaps.toggle_done, function()
         local task = lazydo:get_current_task()
@@ -684,6 +718,20 @@ function M.setup_task_highlights(lazydo)
 				add_hl(lnum, 0, #line, "LazyDoActiveTask")
 			end
 
+			--  -- Priority icon highlights
+			--  local priority_icons = {
+			-- 	[lazydo.opts.icons.priority.high] = "LazyDoPriorityHigh",
+			-- 	[lazydo.opts.icons.priority.medium] = "LazyDoPriorityMedium",
+			-- 	[lazydo.opts.icons.priority.low] = "LazyDoPriorityLow"
+			-- }
+			
+			-- for icon, hl_group in pairs(priority_icons) do
+			-- 	local icon_start = line:find(vim.pesc(icon))
+			-- 	if icon_start then
+			-- 		add_hl(lnum, icon_start - 1, icon_start + vim.fn.strdisplaywidth(icon), hl_group)
+			-- 	end
+			-- end
+
 			-- Highlight borders
 			if content:match("^[╭╮╰╯│├┤]") or content:match("[╭╮╰╯│├┤]$") then
 				local indent = #line - #content
@@ -728,6 +776,33 @@ function M.setup_task_highlights(lazydo)
 						add_hl(lnum, tag_start - 1, tag_start + #tag - 1, "LazyDoTag")
 					end
 				end
+
+
+
+				  -- Progress bullets highlights
+				  local progress_icons = {
+					[M.CONSTANTS.BLOCK.PROGRESS_FULL] = "LazyDoProgressFull",
+					[M.CONSTANTS.BLOCK.PROGRESS_EMPTY] = "LazyDoProgressEmpty"
+				}
+				
+				for icon, hl_group in pairs(progress_icons) do
+					local start_idx = 1
+					while true do
+						local icon_start = line:find(vim.pesc(icon), start_idx)
+						if not icon_start then break end
+						add_hl(lnum, icon_start - 1, icon_start + vim.fn.strdisplaywidth(icon), hl_group)
+						start_idx = icon_start + 1
+					end
+				end
+		
+				-- Subtask bullet highlights
+				if line:match("└─") or line:match("├─") then
+					local bullet_start = line:find("[└├]─")
+					if bullet_start then
+						add_hl(lnum, bullet_start - 1, bullet_start + 2, "LazyDoSubtaskBullet")
+					end
+				end
+			
 			end
 
 			-- Highlight due date line

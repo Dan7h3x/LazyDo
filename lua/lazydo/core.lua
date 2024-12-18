@@ -465,9 +465,37 @@ function LazyDo:setup_highlights()
         LazyDoMetadata = { fg = colors.metadata },
         
         -- Priority levels
-        LazyDoPriorityHigh = { fg = colors.priority.high, bold = true },
-        LazyDoPriorityMedium = { fg = colors.priority.medium },
-        LazyDoPriorityLow = { fg = colors.priority.low },
+		LazyDoPriorityHigh = { 
+            fg = colors.priority.high,
+            bold = true,
+            italic = true
+        },
+        LazyDoPriorityMedium = { 
+            fg = colors.priority.medium,
+            bold = true
+        },
+        LazyDoPriorityLow = { 
+            fg = colors.priority.low
+        },
+		-- Progress indicators
+        LazyDoProgressFull = { 
+            fg = colors.done,
+            bold = true
+        },
+        LazyDoProgressEmpty = { 
+            fg = colors.border,
+            nocombine = true
+        },
+        
+        -- Subtask elements
+        LazyDoSubtaskBullet = { 
+            fg = colors.subtask,
+            bold = true
+        },
+        LazyDoSubtaskProgress = { 
+            fg = colors.done,
+            bold = true
+        },
         
         -- Subtasks
         LazyDoSubtask = { fg = colors.subtask },
@@ -500,31 +528,63 @@ function LazyDo:create_commands()
 	end, { nargs = "?" })
 end
 
-function LazyDo:render_help_footer(lines)
-	local width = vim.api.nvim_win_get_width(self.win)
-	local help_lines = {
-		string.rep("─", width),
-		utils.center(" Help ", width),
-		string.rep("─", width),
-		" j/k        - Move cursor up/down",
-		" h/l        - Collapse/Expand task",
-		" gg/G       - Go to top/bottom",
-		" <C-u>/<C-d> - Page up/down",
-		" <Space>    - Toggle task completion",
-		" e          - Edit task",
-		" dd         - Delete task",
-		" a          - Add new task",
-		" A          - Add subtask to current task",
-		" n          - Add/edit note",
-		" d          - Set due date",
-		" >/<        - Increase/decrease priority",
-		" q          - Close window",
-		" ?          - Toggle this help",
-		" :LazyDoAdd - Add task from command line",
-		" :LazyDoToggle - Toggle window",
-	}
+function LazyDo:create_task_prompt()
+    local function create_task(input)
+        if not input or input == "" then
+            return
+        end
 
-	-- Add help lines to the end of the existing lines
-	vim.list_extend(lines, help_lines)
+        -- Parse priority from input (e.g., "!high Task description" or "!3 Task description")
+        local priority = 2  -- default medium priority
+        local content = input
+        
+        -- Priority patterns: !high/!h, !medium/!m, !low/!l or !3, !2, !1
+        local prio_pattern = "^!(%w+)%s+(.+)$"
+        local prio_str, rest = input:match(prio_pattern)
+        
+        if prio_str then
+            content = rest
+            if prio_str:match("^[hH]") or prio_str == "3" then
+                priority = 3
+            elseif prio_str:match("^[lL]") or prio_str == "1" then
+                priority = 1
+            end
+        end
+
+        -- Parse tags from content (e.g., "Task description #tag1 #tag2")
+        local tags = {}
+        content = content:gsub("#(%w+)", function(tag)
+            table.insert(tags, tag)
+            return ""
+        end):gsub("%s+$", "")  -- Remove trailing spaces
+
+        -- Create the task
+        local task = self:add_task(content, {
+            priority = priority,
+            tags = tags
+        })
+
+        -- Optionally prompt for due date
+        vim.ui.input({
+            prompt = "Set due date? (YYYY-MM-DD/today/Xd/n): ",
+        }, function(date_input)
+            if date_input and date_input ~= "" and date_input ~= "n" then
+                local due_date = require("lazydo.utils").parse_date(date_input)
+                if due_date then
+                    task.due_date = due_date
+                    self:refresh_display()
+                else
+                    vim.notify("Invalid date format", vim.log.levels.WARN)
+                end
+            end
+        end)
+
+        self:refresh_display()
+    end
+
+    vim.ui.input({
+        prompt = "New task (!high/!medium/!low or !3/!2/!1 for priority): ",
+        completion = "customlist,TaskComplete",
+    }, create_task)
 end
 return LazyDo
