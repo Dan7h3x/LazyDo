@@ -8,7 +8,8 @@ local M = {
 	-- Default configuration that can be overridden by lazy.nvim opts
 	default_opts = {
 		storage = {
-			path = vim.fn.stdpath("data") .. "/lazydo/tasks.json",
+			directory = vim.fn.stdpath("data") .. "/lazydo",
+			filename = "tasks.json",
 			backup = true,
 			auto_save = true,
 		},

@@ -8,9 +8,10 @@ local cache = {
 	is_dirty = false,
 }
 
-function M.get_storage_path(opts)
-	local dir = opts.storage.directory or vim.fn.stdpath("data") .. "/lazydo"
-	return dir .. "/" .. (opts.storage.filename or "tasks.json")
+function M.get_storage_path(opts, is_backup)
+	local dir = vim.fn.stdpath("data") .. "/lazydo"
+	local filename = is_backup and "backup.json" or "tasks.json"
+	return dir .. "/" .. filename
 end
 
 function M.ensure_storage_path(path)
@@ -20,13 +21,97 @@ function M.ensure_storage_path(path)
 	end
 end
 
+function M.create_backup(lazydo)
+	local tasks_path = M.get_storage_path(lazydo.opts, false)
+	local backup_path = M.get_storage_path(lazydo.opts, true)
+	
+	-- Ensure source file exists
+	if vim.fn.filereadable(tasks_path) == 0 then
+		vim.notify("No tasks file to backup", vim.log.levels.WARN)
+		return false
+	end
+	
+	-- Create backup
+	local ok, err = pcall(function()
+		local file = io.open(tasks_path, "r")
+		if not file then
+			error("Could not open tasks file for backup")
+		end
+		local content = file:read("*all")
+		file:close()
+		
+		local backup_file = io.open(backup_path, "w")
+		if not backup_file then
+			error("Could not create backup file")
+		end
+		backup_file:write(content)
+		backup_file:close()
+	end)
+	
+	if not ok then
+		vim.notify("Failed to create backup: " .. err, vim.log.levels.ERROR)
+		return false
+	end
+	
+	vim.notify("Backup created successfully", vim.log.levels.INFO)
+	return true
+end
+
+function M.restore_from_backup(lazydo)
+	local backup_path = M.get_storage_path(lazydo.opts, true)
+	local tasks_path = M.get_storage_path(lazydo.opts, false)
+	
+	-- Check if backup exists
+	if vim.fn.filereadable(backup_path) == 0 then
+		vim.notify("No backup file found", vim.log.levels.WARN)
+		return false
+	end
+	
+	-- Load backup data first to validate
+	local ok, backup_data = pcall(function()
+		local file = io.open(backup_path, "r")
+		if not file then
+			error("Could not open backup file")
+		end
+		local content = file:read("*all")
+		file:close()
+		return vim.json.decode(content)
+	end)
+	
+	if not ok or not backup_data or not backup_data.tasks then
+		vim.notify("Invalid backup data", vim.log.levels.ERROR)
+		return false
+	end
+	
+	-- Restore backup
+	local restore_ok, err = pcall(function()
+		local file = io.open(tasks_path, "w")
+		if not file then
+			error("Could not open tasks file for writing")
+		end
+		file:write(vim.json.encode(backup_data))
+		file:close()
+		
+		-- Reload tasks
+		M.load_tasks(lazydo)
+	end)
+	
+	if not restore_ok then
+		vim.notify("Failed to restore backup: " .. err, vim.log.levels.ERROR)
+		return false
+	end
+	
+	vim.notify("Backup restored successfully", vim.log.levels.INFO)
+	return true
+end
+
 function M.save_tasks(lazydo)
 	if not cache.is_dirty then
 		return true
 	end
 
 	local ok, err = pcall(function()
-		local path = M.get_storage_path(lazydo.opts)
+		local path = M.get_storage_path(lazydo.opts, false)
 		M.ensure_storage_path(path)
 
 		-- Prepare data for saving
@@ -67,7 +152,7 @@ end
 
 function M.load_tasks(lazydo)
 	local ok, result = pcall(function()
-		local path = M.get_storage_path(lazydo.opts)
+		local path = M.get_storage_path(lazydo.opts, false)
 
 		-- Check if we can use cached data
 		if lazydo.opts.performance.cache_enabled and not cache.is_dirty then
