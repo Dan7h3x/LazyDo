@@ -260,379 +260,585 @@ end
 -- end
 
 function M.render_task_block(task, width, indent, icons)
-    local lines = {}
-    local block_width = width - #indent
-    local inner_width = block_width - 4  -- Account for borders and padding
+	local lines = {}
+	local block_width = width - #indent
+	local inner_width = block_width - 4 -- Account for borders and padding
 
-    -- Enhanced box drawing characters
-    local box = {
-        tl = "╭", tr = "╮", bl = "╰", br = "╯",
-        h = "─", v = "│", 
-        ltee = "├", rtee = "┤",
-        bullet = "•",
-    }
+	-- Enhanced box drawing characters
+	local box = {
+		tl = "╭",
+		tr = "╮",
+		bl = "╰",
+		br = "╯",
+		h = "─",
+		v = "│",
+		ltee = "├",
+		rtee = "┤",
+		bullet = "•",
+	}
 
-    -- Calculate progress
-    local total_subtasks = #task.subtasks
-    local completed_subtasks = 0
-    for _, subtask in ipairs(task.subtasks) do
-        if subtask.done then
-            completed_subtasks = completed_subtasks + 1
-        end
-    end
-    local progress = total_subtasks > 0 and (completed_subtasks / total_subtasks) or 0
+	-- Calculate progress
+	local total_subtasks = #task.subtasks
+	local completed_subtasks = 0
+	for _, subtask in ipairs(task.subtasks) do
+		if subtask.done then
+			completed_subtasks = completed_subtasks + 1
+		end
+	end
+	local progress = total_subtasks > 0 and (completed_subtasks / total_subtasks) or 0
 
-    -- Status indicators
-    local status = task.done and icons.task_done
-        or (task.due_date and task.due_date < os.time()) and icons.task_overdue
-        or icons.task_pending
+	-- Status indicators
+	local status = task.done and icons.task_done
+		or (task.due_date and task.due_date < os.time()) and icons.task_overdue
+		or icons.task_pending
 
-    local priority_icon = task.priority == 3 and icons.priority.high
-        or task.priority == 2 and icons.priority.medium
-        or icons.priority.low
+	local priority_icon = task.priority == 3 and icons.priority.high
+		or task.priority == 2 and icons.priority.medium
+		or icons.priority.low
 
-    -- Format tags
-    local tags_str = #task.tags > 0 and " " .. table.concat(
-        vim.tbl_map(function(tag)
-            return "#" .. tag
-        end, task.tags),
-        " "
-    ) or ""
+	-- Format tags
+	local tags_str = #task.tags > 0
+			and " " .. table.concat(
+				vim.tbl_map(function(tag)
+					return "#" .. tag
+				end, task.tags),
+				" "
+			)
+		or ""
 
-    -- Top border with title
-    local title_str = string.format(" %s %s %s%s ", status, priority_icon, task.content, tags_str)
-    local title_len = vim.fn.strdisplaywidth(title_str)
-    local pad_len = math.max(0, inner_width - title_len)
-    local top = indent .. box.tl .. title_str .. string.rep(box.h, pad_len) .. box.tr
+	-- Top border with title
+	local title_str = string.format(" %s %s %s%s ", status, priority_icon, task.content, tags_str)
+	local title_len = vim.fn.strdisplaywidth(title_str)
+	local pad_len = math.max(0, inner_width - title_len)
+	local top = indent .. box.tl .. title_str .. string.rep(box.h, pad_len) .. box.tr
 
-    table.insert(lines, top)
+	table.insert(lines, top)
 
-    -- Due date with countdown and visual indicator
-    if task.due_date then
-        local days_left = math.floor((task.due_date - os.time()) / 86400)
-        local date_str = os.date("%Y-%m-%d", task.due_date)
-        local countdown = days_left > 0 and string.format("(%d days left)", days_left)
-            or days_left == 0 and "(Due today)"
-            or string.format("(%d days overdue)", math.abs(days_left))
+	-- Due date with countdown and visual indicator
+	if task.due_date then
+		local days_left = math.floor((task.due_date - os.time()) / 86400)
+		local date_str = os.date("%Y-%m-%d", task.due_date)
+		local countdown = days_left > 0 and string.format("(%d days left)", days_left)
+			or days_left == 0 and "(Due today)"
+			or string.format("(%d days overdue)", math.abs(days_left))
 
-        -- Add visual urgency indicator
-        local urgency = days_left < 0 and "!" or days_left == 0 and "⚠" or "○"
-        local date_line = string.format(" %s %s %s %s ", icons.due_date, date_str, countdown, urgency)
-        table.insert(lines, indent .. box.v .. utils.pad_right(date_line, inner_width) .. box.v)
-    end
+		-- Add visual urgency indicator
+		local urgency = days_left < 0 and "!" or days_left == 0 and "⚠" or "○"
+		local date_line = string.format(" %s %s %s %s ", icons.due_date, date_str, countdown, urgency)
+		table.insert(lines, indent .. box.v .. utils.pad_right(date_line, inner_width) .. box.v)
+	end
 
-    -- Notes with improved formatting
-    if task.notes then
-        table.insert(lines, indent .. box.ltee .. string.rep(box.h, inner_width) .. box.rtee)
-        table.insert(lines, indent .. box.v .. string.format(" %s Notes:", icons.note) .. string.rep(" ", inner_width - 8) .. box.v)
-        
-        local wrapped_notes = utils.word_wrap(task.notes, inner_width - 4)
-        for _, note_line in ipairs(wrapped_notes) do
-            table.insert(lines, indent .. box.v .. "  " .. utils.pad_right(note_line, inner_width - 2) .. box.v)
-        end
-    end
+	-- Notes with improved formatting
+	if task.notes then
+		table.insert(lines, indent .. box.ltee .. string.rep(box.h, inner_width) .. box.rtee)
+		table.insert(
+			lines,
+			indent .. box.v .. string.format(" %s Notes:", icons.note) .. string.rep(" ", inner_width - 8) .. box.v
+		)
 
-    -- Subtasks with enhanced progress visualization
-    if #task.subtasks > 0 then
-        table.insert(lines, indent .. box.ltee .. string.rep(box.h, inner_width) .. box.rtee)
-        
-        -- Progress bar
-        local progress_width = 20
-        local progress_bar = M.render_progress_bar(total_subtasks, completed_subtasks, progress_width)
-        local progress_text = string.format(" Subtasks (%d/%d) %s ", completed_subtasks, total_subtasks, progress_bar)
-        table.insert(lines, indent .. box.v .. utils.pad_right(progress_text, inner_width) .. box.v)
+		local wrapped_notes = utils.word_wrap(task.notes, inner_width - 4)
+		for _, note_line in ipairs(wrapped_notes) do
+			table.insert(lines, indent .. box.v .. "  " .. utils.pad_right(note_line, inner_width - 2) .. box.v)
+		end
+	end
 
-        -- Render subtasks with improved hierarchy
-        for i, subtask in ipairs(task.subtasks) do
-            local is_last = i == #task.subtasks
-            local prefix = is_last and "└─" or "├─"
-            local subtask_status = subtask.done and icons.task_done or icons.task_pending
-            local subtask_line = string.format(" %s %s %s", prefix, subtask_status, subtask.content)
-            table.insert(lines, indent .. box.v .. utils.pad_right(subtask_line, inner_width) .. box.v)
-        end
-    end
+	-- Subtasks with enhanced progress visualization
+	if #task.subtasks > 0 then
+		table.insert(lines, indent .. box.ltee .. string.rep(box.h, inner_width) .. box.rtee)
 
-    -- Metadata footer with improved layout
-    table.insert(lines, indent .. box.ltee .. string.rep(box.h, inner_width) .. box.rtee)
-    local metadata = {
-        string.format("Created: %s", os.date("%Y-%m-%d", task.created_at)),
-        string.format("Updated: %s", os.date("%Y-%m-%d", task.updated_at)),
-    }
-    if task.last_completed then
-        table.insert(metadata, string.format("Completed: %s", os.date("%Y-%m-%d", task.last_completed)))
-    end
-    local metadata_str = table.concat(metadata, " " .. box.bullet .. " ")
-    table.insert(lines, indent .. box.v .. utils.pad_right(" " .. metadata_str, inner_width) .. box.v)
+		-- Progress bar
+		local progress_width = 20
+		local progress_bar = M.render_progress_bar(total_subtasks, completed_subtasks, progress_width)
+		local progress_text = string.format(" Subtasks (%d/%d) %s ", completed_subtasks, total_subtasks, progress_bar)
+		table.insert(lines, indent .. box.v .. utils.pad_right(progress_text, inner_width) .. box.v)
 
-    -- Bottom border
-    table.insert(lines, indent .. box.bl .. string.rep(box.h, inner_width) .. box.br)
-    table.insert(lines, "")  -- Add spacing between tasks
+		-- Render subtasks with improved hierarchy
+		for i, subtask in ipairs(task.subtasks) do
+			local is_last = i == #task.subtasks
+			local prefix = is_last and "└─" or "├─"
+			local subtask_status = subtask.done and icons.task_done or icons.task_pending
+			local subtask_line = string.format(" %s %s %s", prefix, subtask_status, subtask.content)
+			table.insert(lines, indent .. box.v .. utils.pad_right(subtask_line, inner_width) .. box.v)
+		end
+	end
 
-    return lines
+	-- Metadata footer with improved layout
+	table.insert(lines, indent .. box.ltee .. string.rep(box.h, inner_width) .. box.rtee)
+	local metadata = {
+		string.format("Created: %s", os.date("%Y-%m-%d", task.created_at)),
+		string.format("Updated: %s", os.date("%Y-%m-%d", task.updated_at)),
+	}
+	if task.last_completed then
+		table.insert(metadata, string.format("Completed: %s", os.date("%Y-%m-%d", task.last_completed)))
+	end
+	local metadata_str = table.concat(metadata, " " .. box.bullet .. " ")
+	table.insert(lines, indent .. box.v .. utils.pad_right(" " .. metadata_str, inner_width) .. box.v)
+
+	-- Bottom border
+	table.insert(lines, indent .. box.bl .. string.rep(box.h, inner_width) .. box.br)
+	table.insert(lines, "") -- Add spacing between tasks
+
+	return lines
 end
 
+-- function M.setup_buffer_keymaps(lazydo, buf)
+-- 	if not lazydo or not buf then
+-- 		vim.notify("Invalid arguments for setup_buffer_keymaps", vim.log.levels.ERROR)
+-- 		return
+-- 	end
+
+-- 	local function safe_map(key, fn, desc)
+-- 		vim.keymap.set("n", key, function()
+-- 			local status, err = pcall(fn)
+-- 			if not status then
+-- 				vim.notify("LazyDo action failed: " .. tostring(err), vim.log.levels.ERROR)
+-- 			end
+-- 		end, { buffer = buf, desc = desc })
+-- 	end
+
+-- 	-- Add keymaps with error handling
+-- 	safe_map(lazydo.opts.keymaps.toggle_done or "<Space>", function()
+-- 		local task = lazydo:get_current_task()
+-- 		if task then
+-- 			task:toggle()
+-- 			if lazydo.opts.storage.auto_save then
+-- 				require("lazydo.storage").save_tasks(lazydo)
+-- 			end
+-- 			lazydo:refresh_display()
+-- 		end
+-- 	end, "Toggle task done")
+
+-- 	safe_map(lazydo.opts.keymaps.edit_task or "e", function()
+-- 		M.show_quick_edit_menu(lazydo)
+-- 	end, "Edit task")
+
+-- 	safe_map(lazydo.opts.keymaps.add_task or "a", function()
+-- 		vim.cmd("LazyDoAdd")
+-- 	end, "Add task")
+-- 	safe_map(lazydo.opts.keymaps.add_subtask or "A", function()
+-- 		local task = lazydo.get_current_task()
+-- 		if task then
+-- 			lazydo.add_subtask()
+-- 		else
+-- 			vim.notify("No active task to add a subtask to", vim.log.levels.WARN)
+-- 		end
+-- 	end, "Add subtask")
+-- 	safe_map(lazydo.opts.keymaps.add_subtask or "E", function()
+-- 		local task = lazydo.get_current_task()
+-- 		if task then
+-- 			lazydo.edit_subtask()
+-- 		else
+-- 			vim.notify("No active task to add a subtask to", vim.log.levels.WARN)
+-- 		end
+-- 	end, "Edit subtask")
+-- 	safe_map(lazydo.opts.keymaps.move_up or "K", function()
+-- 		local task = lazydo.get_current_task(lazydo)
+-- 		if task then
+-- 			lazydo.move_task(lazydo, task, 1)
+-- 		else
+-- 			vim.notify("No active task selected", vim.log.levels.WARN)
+-- 		end
+-- 	end, "Move task down")
+-- 	safe_map(lazydo.opts.keymaps.move_down or "J", function()
+-- 		local task = lazydo.get_current_task(lazydo)
+-- 		if task then
+-- 			lazydo.move_task(lazydo, task, -1)
+-- 		else
+-- 			vim.notify("No active task selected", vim.log.levels.WARN)
+-- 		end
+-- 	end, "Move task up")
+-- 	safe_map(lazydo.opts.keymaps.quick_note or "n", function()
+-- 		local task = lazydo.get_current_task(lazydo)
+-- 		if task then
+-- 			lazydo.set_note(lazydo, task)
+-- 		else
+-- 			vim.notify("No active task selected", vim.log.levels.WARN)
+-- 		end
+-- 	end, "Add Note")
+-- 	safe_map(lazydo.opts.keymaps.quick_date or "D", function()
+-- 		local task = lazydo.get_current_task(lazydo)
+-- 		if task then
+-- 			lazydo.set_date(lazydo, task)
+-- 		else
+-- 			vim.notify("No active task selected", vim.log.levels.WARN)
+-- 		end
+-- 	end, "Add Date")
+-- 	safe_map(lazydo.opts.keymaps.delete_task or "d", function()
+-- 		lazydo:delete_task()
+-- 	end, "Delete task")
+
+-- 	safe_map("q", function()
+-- 		if lazydo.close_window then
+-- 			lazydo:close_window()
+-- 		end
+-- 	end, "Close window")
+-- 	-- In setup_buffer_keymaps function
+-- 	safe_map("?", function()
+-- 		M.toggle_help(lazydo)
+-- 	end, "Toggle help window")
+-- end
 
 function M.setup_buffer_keymaps(lazydo, buf)
-	if not lazydo or not buf then
-		vim.notify("Invalid arguments for setup_buffer_keymaps", vim.log.levels.ERROR)
-		return
-	end
+    if not lazydo or not buf then
+        vim.notify("Invalid arguments for setup_buffer_keymaps", vim.log.levels.ERROR)
+        return
+    end
 
-	local function safe_map(key, fn, desc)
-		vim.keymap.set("n", key, function()
-			local status, err = pcall(fn)
-			if not status then
-				vim.notify("LazyDo action failed: " .. tostring(err), vim.log.levels.ERROR)
-			end
-		end, { buffer = buf, desc = desc })
-	end
+    local function safe_map(key, fn, desc)
+        vim.keymap.set("n", key, function()
+            local status, err = pcall(fn)
+            if not status then
+                vim.notify("LazyDo action failed: " .. tostring(err), vim.log.levels.ERROR)
+            end
+        end, { buffer = buf, desc = desc, silent = true })
+    end
 
-	-- Add keymaps with error handling
-	safe_map(lazydo.opts.keymaps.toggle_done or "<Space>", function()
-		local task = lazydo:get_current_task()
-		if task then
-			task:toggle()
-			if lazydo.opts.storage.auto_save then
-				require("lazydo.storage").save_tasks(lazydo)
-			end
-			lazydo:refresh_display()
-		end
-	end, "Toggle task done")
+    -- Task Management
+    safe_map(lazydo.opts.keymaps.toggle_done, function()
+        local task = lazydo:get_current_task()
+        if task then
+            task:toggle()
+            if lazydo.opts.storage.auto_save then
+                require("lazydo.storage").save_tasks(lazydo)
+            end
+            lazydo:refresh_display()
+        end
+    end, "Toggle task completion")
 
-	safe_map(lazydo.opts.keymaps.edit_task or "e", function()
-		M.show_quick_edit_menu(lazydo)
-	end, "Edit task")
+    safe_map(lazydo.opts.keymaps.edit_task, function()
+        M.show_quick_edit_menu(lazydo)
+    end, "Edit task")
 
-	safe_map(lazydo.opts.keymaps.add_task or "a", function()
-		vim.cmd("LazyDoAdd")
-	end, "Add task")
-	safe_map(lazydo.opts.keymaps.add_subtask or "A", function()
-		local task = lazydo.get_current_task()
-		if task then
-			lazydo.add_subtask()
-		else
-			vim.notify("No active task to add a subtask to", vim.log.levels.WARN)
-		end
-	end, "Add subtask")
-	safe_map(lazydo.opts.keymaps.add_subtask or "E", function()
-		local task = lazydo.get_current_task()
-		if task then
-			lazydo.edit_subtask()
-		else
-			vim.notify("No active task to add a subtask to", vim.log.levels.WARN)
-		end
-	end, "Edit subtask")
-	safe_map(lazydo.opts.keymaps.move_up or "K", function()
-		local task = lazydo.get_current_task(lazydo)
-		if task then
-			lazydo.move_task(lazydo, task, 1)
-		else
-			vim.notify("No active task selected", vim.log.levels.WARN)
-		end
-	end, "Move task down")
-	safe_map(lazydo.opts.keymaps.move_down or "J", function()
-		local task = lazydo.get_current_task(lazydo)
-		if task then
-			lazydo.move_task(lazydo, task, -1)
-		else
-			vim.notify("No active task selected", vim.log.levels.WARN)
-		end
-	end, "Move task up")
-	safe_map(lazydo.opts.keymaps.quick_note or "n", function()
-		local task = lazydo.get_current_task(lazydo)
-		if task then
-			lazydo.set_note(lazydo, task)
-		else
-			vim.notify("No active task selected", vim.log.levels.WARN)
-		end
-	end, "Add Note")
-	safe_map(lazydo.opts.keymaps.quick_date or "D", function()
-		local task = lazydo.get_current_task(lazydo)
-		if task then
-			lazydo.set_date(lazydo, task)
-		else
-			vim.notify("No active task selected", vim.log.levels.WARN)
-		end
-	end, "Add Date")
-	safe_map(lazydo.opts.keymaps.delete_task or "d", function()
-		lazydo:delete_task()
-	end, "Delete task")
+    safe_map(lazydo.opts.keymaps.delete_task, function()
+        local task = lazydo:get_current_task()
+        if task then
+            vim.ui.input({
+                prompt = "Delete task? (y/n): ",
+            }, function(input)
+                if input and input:lower() == "y" then
+                    lazydo:delete_task()
+                end
+            end)
+        end
+    end, "Delete task")
 
-	safe_map("q", function()
-		if lazydo.close_window then
-			lazydo:close_window()
-		end
-	end, "Close window")
-	-- In setup_buffer_keymaps function
-	safe_map("?", function()
-    	M.toggle_help(lazydo)
-	end, "Toggle help window")
+    -- Subtask Management
+    safe_map(lazydo.opts.keymaps.add_subtask, function()
+        lazydo:add_subtask()
+    end, "Add subtask")
+
+    safe_map(lazydo.opts.keymaps.edit_subtask, function()
+        lazydo:edit_subtask()
+    end, "Edit subtask")
+
+    -- Task Movement
+    safe_map(lazydo.opts.keymaps.move_up, function()
+        local task = lazydo:get_current_task()
+        if task then
+            lazydo:move_task(task, -1)
+        end
+    end, "Move task up")
+
+    safe_map(lazydo.opts.keymaps.move_down, function()
+        local task = lazydo:get_current_task()
+        if task then
+            lazydo:move_task(task, 1)
+        end
+    end, "Move task down")
+
+    -- Quick Actions
+    safe_map(lazydo.opts.keymaps.quick_note, function()
+        local task = lazydo:get_current_task()
+        if task then
+            lazydo:set_note(task)
+        end
+    end, "Add/edit note")
+
+    safe_map(lazydo.opts.keymaps.quick_date, function()
+        local task = lazydo:get_current_task()
+        if task then
+            lazydo:set_date(task)
+        end
+    end, "Set due date")
+
+    -- Priority Management
+    safe_map(lazydo.opts.keymaps.increase_priority, function()
+        local task = lazydo:get_current_task()
+        if task then
+            task:change_priority(1)
+            lazydo:refresh_display()
+        end
+    end, "Increase priority")
+
+    safe_map(lazydo.opts.keymaps.decrease_priority, function()
+        local task = lazydo:get_current_task()
+        if task then
+            task:change_priority(-1)
+            lazydo:refresh_display()
+        end
+    end, "Decrease priority")
+
+    -- UI Controls
+    safe_map(lazydo.opts.keymaps.toggle_help, function()
+        M.toggle_help(lazydo)
+    end, "Toggle help")
+
+    safe_map(lazydo.opts.keymaps.close_window, function()
+        if lazydo.close_window then
+            lazydo:close_window()
+        end
+    end, "Close window")
+
+    safe_map(lazydo.opts.keymaps.refresh_view, function()
+        lazydo:refresh_display()
+    end, "Refresh view")
+
+    -- Navigation improvements
+    vim.keymap.set("n", "j", function()
+        local line = vim.api.nvim_win_get_cursor(0)[1]
+        local max_lines = vim.api.nvim_buf_line_count(buf)
+        if line < max_lines then
+            vim.api.nvim_win_set_cursor(0, {line + 1, 0})
+            lazydo:refresh_display()
+        end
+    end, { buffer = buf, desc = "Next line" })
+
+    vim.keymap.set("n", "k", function()
+        local line = vim.api.nvim_win_get_cursor(0)[1]
+        if line > 1 then
+            vim.api.nvim_win_set_cursor(0, {line - 1, 0})
+            lazydo:refresh_display()
+        end
+    end, { buffer = buf, desc = "Previous line" })
 end
 
 function M.setup_task_highlights(lazydo)
-    local ns = vim.api.nvim_create_namespace("lazydo_task_highlights")
-    vim.api.nvim_buf_clear_namespace(lazydo.buf, ns, 0, -1)
+	local ns = vim.api.nvim_create_namespace("lazydo_task_highlights")
+	vim.api.nvim_buf_clear_namespace(lazydo.buf, ns, 0, -1)
 
-    local function add_hl(line, col_start, col_end, group)
-        vim.api.nvim_buf_add_highlight(lazydo.buf, ns, group, line, col_start, col_end)
-    end
+	local function add_hl(line, col_start, col_end, group)
+		vim.api.nvim_buf_add_highlight(lazydo.buf, ns, group, line, col_start, col_end)
+	end
 
-    local current_task = lazydo:get_current_task()
-    local lines = vim.api.nvim_buf_get_lines(lazydo.buf, 0, -1, false)
-    local in_task = false
-    local task_start = 0
+	local current_task = lazydo:get_current_task()
+	local lines = vim.api.nvim_buf_get_lines(lazydo.buf, 0, -1, false)
+	local in_task = false
+	local current_task_start = nil
+	local current_task_end = nil
+	local task_start = 0
+	local header_lines = 4 -- Title + separator + stats + empty line
 
-    for i, line in ipairs(lines) do
-        local lnum = i - 1
-        local content = line:gsub("^%s+", "")
+	-- First pass: determine the current task boundaries
+	if current_task then
+		local line_count = 0
+		for i, line in ipairs(lines) do
+			local lnum = i - 1
+			if lnum < header_lines then
+				goto continue
+			end
 
-        -- Highlight header
-        if lnum <= 3 then
-            add_hl(lnum, 0, -1, "LazyDoHeader")
-            goto continue
-        end
+			local content = line:gsub("^%s+", "")
+			if content:match("^╭") then
+				task_start = lnum
+				if not current_task_start and current_task.line_number == task_start then
+					current_task_start = lnum
+				end
+			elseif content:match("^╰") and current_task_start and not current_task_end then
+				current_task_end = lnum
+				break
+			end
+			::continue::
+		end
+	end
 
-        -- Detect task boundaries
-        if content:match("^╭") then
-            in_task = true
-            task_start = lnum
-        elseif content:match("^╰") then
-            in_task = false
-        end
+	-- Second pass: apply highlights
+	task_start = 0
+	for i, line in ipairs(lines) do
+		local lnum = i - 1
+		local content = line:gsub("^%s+", "")
 
-        if in_task then
-            -- Highlight task border
-            local border_match = line:match("^%s*[╭╮╰╯│├┤]")
-            if border_match then
-                add_hl(lnum, #line:match("^%s*"), #line:match("^%s*") + 1, "LazyDoBorder")
-                add_hl(lnum, #line - 1, #line, "LazyDoBorder")
-            end
+		-- Highlight header
+		if lnum < header_lines then
+			if lnum == 0 then -- Title
+				add_hl(lnum, 0, -1, "LazyDoHeader")
+			elseif lnum == 1 then -- Separator
+				add_hl(lnum, 0, -1, "LazyDoSeparator")
+			elseif lnum == 2 then -- Stats
+				add_hl(lnum, 0, -1, "LazyDoStatusLine")
+			end
+			goto continue
+		end
 
-            -- Highlight current task with subtle background
-            if current_task and lnum >= task_start and lnum <= task_start + lazydo:get_task_block_height(current_task) then
-                add_hl(lnum, 0, #line, "LazyDoActiveTask")
-            end
+		-- Detect task boundaries
+		if content:match("^╭") then
+			in_task = true
+			task_start = lnum
+		elseif content:match("^╰") then
+			in_task = false
+		end
 
-            -- Highlight task components
-            local components = {
-                { pattern = icons.task_done, group = "LazyDoDone" },
-                { pattern = icons.task_pending, group = "LazyDoPending" },
-                { pattern = icons.task_overdue, group = "LazyDoOverdue" },
-                { pattern = icons.due_date, group = "LazyDoDueDate" },
-                { pattern = icons.note, group = "LazyDoNote" },
-            }
+		if in_task then
+			-- Highlight active task background
+			if current_task_start and current_task_end and lnum >= current_task_start and lnum <= current_task_end then
+				-- Add a subtle background highlight for the active task
+				add_hl(lnum, 0, #line, "LazyDoActiveTask")
+			end
 
-            for _, comp in ipairs(components) do
-                local start = line:find(vim.pesc(comp.pattern))
-                if start then
-                    add_hl(lnum, start - 1, start + #comp.pattern - 1, comp.group)
-                end
-            end
+			-- Highlight borders
+			if content:match("^[╭╮╰╯│├┤]") or content:match("[╭╮╰╯│├┤]$") then
+				local indent = #line - #content
+				add_hl(lnum, indent, indent + 1, "LazyDoBorder")
+				add_hl(lnum, #line - 1, #line, "LazyDoBorder")
+			end
 
-            -- Highlight tags
-            for tag in line:gmatch("#%w+") do
-                local start = line:find(tag)
-                add_hl(lnum, start - 1, start + #tag - 1, "LazyDoTag")
-            end
+			-- Highlight task components
+			if content:match("^╭") then -- Task header line
+				-- Highlight status icon
+				local status_start = line:find(lazydo.opts.icons.task_done)
+					or line:find(lazydo.opts.icons.task_pending)
+					or line:find(lazydo.opts.icons.task_overdue)
+				if status_start then
+					local status_group = "LazyDoPending"
+					if line:find(lazydo.opts.icons.task_done, status_start) then
+						status_group = "LazyDoDone"
+					elseif line:find(lazydo.opts.icons.task_overdue, status_start) then
+						status_group = "LazyDoOverdue"
+					end
+					add_hl(lnum, status_start - 1, status_start + 1, status_group)
+				end
 
-            -- Highlight dates
-            local date_pattern = "%d%d%d%d%-%d%d%-%d%d"
-            local date_start = line:find(date_pattern)
-            if date_start then
-                add_hl(lnum, date_start - 1, date_start + 9, "LazyDoDueDate")
-            end
+				-- Highlight priority icon
+				local priority_start = line:find(lazydo.opts.icons.priority.high)
+					or line:find(lazydo.opts.icons.priority.medium)
+					or line:find(lazydo.opts.icons.priority.low)
+				if priority_start then
+					local priority_group = "LazyDoPriorityMedium"
+					if line:find(lazydo.opts.icons.priority.high, priority_start) then
+						priority_group = "LazyDoPriorityHigh"
+					elseif line:find(lazydo.opts.icons.priority.low, priority_start) then
+						priority_group = "LazyDoPriorityLow"
+					end
+					add_hl(lnum, priority_start - 1, priority_start + 1, priority_group)
+				end
 
-            -- Highlight subtasks
-            if line:match("└─") or line:match("├─") then
-                add_hl(lnum, 0, -1, "LazyDoSubtask")
-            end
-        end
+				-- Highlight tags
+				for tag in line:gmatch("#%w+") do
+					local tag_start = line:find(tag, 1, true)
+					if tag_start then
+						add_hl(lnum, tag_start - 1, tag_start + #tag - 1, "LazyDoTag")
+					end
+				end
+			end
 
-        ::continue::
-    end
+			-- Highlight due date line
+			local date_icon = lazydo.opts.icons.due_date
+			local date_start = line:find(date_icon, 1, true)
+			if date_start then
+				add_hl(lnum, date_start - 1, #line - 1, "LazyDoDueDate")
+			end
+
+			-- Highlight notes
+			local note_icon = lazydo.opts.icons.note
+			local note_start = line:find(note_icon, 1, true)
+			if note_start then
+				add_hl(lnum, note_start - 1, #line - 1, "LazyDoNote")
+			end
+
+			-- Highlight subtasks
+			if line:match("└─") or line:match("├─") then
+				local subtask_status_start = line:find(lazydo.opts.icons.task_done)
+					or line:find(lazydo.opts.icons.task_pending)
+				if subtask_status_start then
+					local status_group = line:find(lazydo.opts.icons.task_done) and "LazyDoDone" or "LazyDoPending"
+					add_hl(lnum, subtask_status_start - 1, subtask_status_start + 1, status_group)
+				end
+				add_hl(lnum, 0, #line, "LazyDoSubtask")
+			end
+		end
+
+		::continue::
+	end
 end
-
-
 -- In ui.lua
 function M.create_help_window(lazydo)
-    local help_width = math.floor(vim.o.columns * 0.6)
-    local help_height = 20
-    local row = math.floor((vim.o.lines - help_height) / 2)
-    local col = math.floor((vim.o.columns - help_width) / 2)
+	local help_width = math.floor(vim.o.columns * 0.6)
+	local help_height = 20
+	local row = math.floor((vim.o.lines - help_height) / 2)
+	local col = math.floor((vim.o.columns - help_width) / 2)
 
-    -- Create help buffer
-    local help_buf = vim.api.nvim_create_buf(false, true)
-    vim.api.nvim_buf_set_option(help_buf, 'bufhidden', 'wipe')
+	-- Create help buffer
+	local help_buf = vim.api.nvim_create_buf(false, true)
+	vim.api.nvim_buf_set_option(help_buf, "bufhidden", "wipe")
 
-    -- Create help window
-    local help_win = vim.api.nvim_open_win(help_buf, true, {
-        relative = 'editor',
-        width = help_width,
-        height = help_height,
-        row = row,
-        col = col,
-        style = 'minimal',
-        border = 'rounded',
-        title = ' LazyDo Help ',
-        title_pos = 'center',
-    })
+	-- Create help window
+	local help_win = vim.api.nvim_open_win(help_buf, true, {
+		relative = "editor",
+		width = help_width,
+		height = help_height,
+		row = row,
+		col = col,
+		style = "minimal",
+		border = "rounded",
+		title = " LazyDo Help ",
+		title_pos = "center",
+	})
 
-    -- Set help window options
-    vim.api.nvim_win_set_option(help_win, 'winblend', 10)
-    vim.api.nvim_win_set_option(help_win, 'cursorline', true)
+	-- Set help window options
+	vim.api.nvim_win_set_option(help_win, "winblend", 10)
+	vim.api.nvim_win_set_option(help_win, "cursorline", true)
 
-    -- Add help content
-    local help_lines = {
-        "LazyDo Keybindings",
-        string.rep("─", help_width),
-        "",
-        " Navigation:",
-        " j/k        - Move cursor up/down",
-        " h/l        - Collapse/Expand task",
-        " gg/G       - Go to top/bottom",
-        " <C-u>/<C-d> - Page up/down",
-        "",
-        " Task Management:",
-        " <Space>    - Toggle task completion",
-        " e          - Edit task",
-        " dd         - Delete task",
-        " a          - Add new task",
-        " A          - Add subtask to current task",
-        " n          - Add/edit note",
-        " d          - Set due date",
-        " >/<        - Increase/decrease priority",
-        "",
-        " Press q to close this window"
-    }
+	-- Add help content
+	local help_lines = {
+		"LazyDo Keybindings",
+		string.rep("─", help_width),
+		"",
+		" Navigation:",
+		" j/k        - Move cursor up/down",
+		" h/l        - Collapse/Expand task",
+		" gg/G       - Go to top/bottom",
+		" <C-u>/<C-d> - Page up/down",
+		"",
+		" Task Management:",
+		" <Space>    - Toggle task completion",
+		" e          - Edit task",
+		" dd         - Delete task",
+		" a          - Add new task",
+		" A          - Add subtask to current task",
+		" n          - Add/edit note",
+		" d          - Set due date",
+		" >/<        - Increase/decrease priority",
+		"",
+		" Press q to close this window",
+	}
 
-    vim.api.nvim_buf_set_lines(help_buf, 0, -1, false, help_lines)
-    vim.api.nvim_buf_set_option(help_buf, 'modifiable', false)
+	vim.api.nvim_buf_set_lines(help_buf, 0, -1, false, help_lines)
+	vim.api.nvim_buf_set_option(help_buf, "modifiable", false)
 
-    -- Add keymaps for help window
-    vim.keymap.set('n', 'q', function()
-        vim.api.nvim_win_close(help_win, true)
-        -- Restore focus to LazyDo window
-        if lazydo.win and vim.api.nvim_win_is_valid(lazydo.win) then
-            vim.api.nvim_set_current_win(lazydo.win)
-        end
-    end, { buffer = help_buf, nowait = true })
+	-- Add keymaps for help window
+	vim.keymap.set("n", "q", function()
+		vim.api.nvim_win_close(help_win, true)
+		-- Restore focus to LazyDo window
+		if lazydo.win and vim.api.nvim_win_is_valid(lazydo.win) then
+			vim.api.nvim_set_current_win(lazydo.win)
+		end
+	end, { buffer = help_buf, nowait = true })
 
-    return help_buf, help_win
+	return help_buf, help_win
 end
 
 -- Update the help toggle function
 function M.toggle_help(lazydo)
-    if lazydo.help_win and vim.api.nvim_win_is_valid(lazydo.help_win) then
-        vim.api.nvim_win_close(lazydo.help_win, true)
-        lazydo.help_win = nil
-        lazydo.help_buf = nil
-        -- Restore focus to LazyDo window
-        if lazydo.win and vim.api.nvim_win_is_valid(lazydo.win) then
-            vim.api.nvim_set_current_win(lazydo.win)
-        end
-    else
-        lazydo.help_buf, lazydo.help_win = M.create_help_window(lazydo)
-    end
+	if lazydo.help_win and vim.api.nvim_win_is_valid(lazydo.help_win) then
+		vim.api.nvim_win_close(lazydo.help_win, true)
+		lazydo.help_win = nil
+		lazydo.help_buf = nil
+		-- Restore focus to LazyDo window
+		if lazydo.win and vim.api.nvim_win_is_valid(lazydo.win) then
+			vim.api.nvim_set_current_win(lazydo.win)
+		end
+	else
+		lazydo.help_buf, lazydo.help_win = M.create_help_window(lazydo)
+	end
 end
 
 -- Add edit task functionality

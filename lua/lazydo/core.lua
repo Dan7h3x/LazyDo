@@ -105,7 +105,7 @@ function LazyDo:refresh_display()
 		end
 
 		ui.setup_task_highlights(self)
-		self:highlight_active_task()
+		-- self:highlight_active_task()
 
 		-- Update buffer
 	end)
@@ -144,7 +144,6 @@ function LazyDo:render_content()
 		vim.list_extend(lines, task_lines)
 	end
 
-	
 	vim.api.nvim_buf_set_lines(self.buf, 0, -1, false, lines)
 	vim.api.nvim_buf_set_option(self.buf, "modifiable", false)
 end
@@ -173,73 +172,37 @@ function LazyDo:get_task_statistics()
 end
 
 function LazyDo:get_current_task()
-    if not self.win or not vim.api.nvim_win_is_valid(self.win) then
-        return nil
-    end
-
-    local cursor = vim.api.nvim_win_get_cursor(self.win)
-    local line_nr = cursor[1]
-    local header_lines = 4  -- Title + separator + stats + empty line
-
-    -- Skip header
-    if line_nr <= header_lines then
-        return nil
-    end
-
-    local current_line = line_nr
-    local task_start = header_lines + 1
-    local found_task = nil
-
-    for _, task in ipairs(self.tasks) do
-        local task_height = self:get_task_block_height(task)
-        local task_end = task_start + task_height
-
-        if current_line >= task_start and current_line <= task_end then
-            found_task = task
-            task.line_number = task_start  -- Store line number for highlighting
-            break
-        end
-
-        task_start = task_end + 1  -- +1 for spacing between tasks
-    end
-
-    return found_task
-end
-
-function LazyDo:highlight_active_task()
-	local task = self:get_current_task()
-	if not task then
-		return
+	if not self.win or not vim.api.nvim_win_is_valid(self.win) then
+		return nil
 	end
 
-	-- Clear previous highlights
-	vim.api.nvim_buf_clear_namespace(self.buf, self.ns.highlight, 0, -1)
+	local cursor = vim.api.nvim_win_get_cursor(self.win)
+	local line_nr = cursor[1]
+	local header_lines = 4 -- Title + separator + stats + empty line
 
-	-- Highlight the active task block
-	local task_line = task.line_number -- Assuming each task has a line_number property
-	local task_end_line = self:get_task_block_height(task) -- Adjust based on how many lines the task spans
-
-	for i = task_line, task_line + task_end_line + 1 do
-		vim.api.nvim_buf_add_highlight(self.buf, self.ns.highlight, "LazyDoActiveTask", i, 0, -1)
-	end
-	-- Highlight task components
-	if task.due_date then
-		local due_date_line = task_line + 1 -- Assuming due date is on the next line
-		vim.api.nvim_buf_add_highlight(self.buf, self.ns.highlight, "LazyDoDueDate", due_date_line, 0, -1)
+	-- Skip header
+	if line_nr <= header_lines then
+		return nil
 	end
 
-	if task.notes then
-		local notes_line = task_line + 2 -- Assuming notes are on the line after due date
-		vim.api.nvim_buf_add_highlight(self.buf, self.ns.highlight, "LazyDoNote", notes_line, 0, -1)
-	end
+	local current_line = line_nr
+	local task_start = header_lines + 1
+	local found_task = nil
 
-	-- Highlight subtasks
-	for _, subtask in ipairs(task.subtasks) do
-		if not subtask.hidden then
-			local subtask_line = task_line + 3 + subtask.index -- Adjust based on the index of the subtask
-			vim.api.nvim_buf_add_highlight(self.buf, self.ns.highlight, "LazyDoSubtask", subtask_line, 0, -1)
+	for _, task in ipairs(self.tasks) do
+		local task_height = self:get_task_block_height(task)
+		local task_end = task_start + task_height
+
+		if current_line >= task_start and current_line <= task_end then
+			found_task = task
+			task.line_number = task_start -- Store line number for highlighting
+			break
 		end
+
+		task_start = task_end + 3 -- +1 for spacing between tasks
 	end
+
+	return found_task
 end
 
 function LazyDo:get_task_block_height(task)
@@ -307,126 +270,130 @@ function LazyDo:set_note(task)
 end
 
 function LazyDo:add_subtask()
-    local task = self:get_current_task()
-    if not task then
-        vim.notify("No task selected", vim.log.levels.WARN)
-        return
-    end
+	local task = self:get_current_task()
+	if not task then
+		vim.notify("No task selected", vim.log.levels.WARN)
+		return
+	end
 
-    local function create_subtask(input)
-        if not input or input == "" then
-            return
-        end
+	local function create_subtask(input)
+		if not input or input == "" then
+			return
+		end
 
-        local subtask = task:add_subtask(input, {
-            priority = task.priority,
-            tags = vim.deepcopy(task.tags)
-        })
+		local subtask = task:add_subtask(input, {
+			priority = task.priority,
+			tags = vim.deepcopy(task.tags),
+		})
 
-        if self.opts.storage.auto_save then
-            require("lazydo.storage").save_tasks(self)
-        end
-        self:refresh_display()
-    end
+		if self.opts.storage.auto_save then
+			require("lazydo.storage").save_tasks(self)
+		end
+		self:refresh_display()
+	end
 
-    -- Show input dialog with placeholder
-    vim.ui.input({
-        prompt = "New subtask: ",
-        default = "",
-        completion = "customlist,SubtaskComplete",
-    }, create_subtask)
+	-- Show input dialog with placeholder
+	vim.ui.input({
+		prompt = "New subtask: ",
+		default = "",
+		completion = "customlist,SubtaskComplete",
+	}, create_subtask)
 end
 
 function LazyDo:edit_subtask()
-    local task = self:get_current_task()
-    if not task then
-        vim.notify("No task selected", vim.log.levels.WARN)
-        return
-    end
+	local task = self:get_current_task()
+	if not task then
+		vim.notify("No task selected", vim.log.levels.WARN)
+		return
+	end
 
-    if #task.subtasks == 0 then
-        vim.notify("No subtasks to edit. Add a subtask first.", vim.log.levels.INFO)
-        self:add_subtask()
-        return
-    end
+	if #task.subtasks == 0 then
+		vim.notify("No subtasks to edit. Add a subtask first.", vim.log.levels.INFO)
+		self:add_subtask()
+		return
+	end
 
-    -- Create selection items for subtasks
-    local items = {}
-    for i, subtask in ipairs(task.subtasks) do
-        table.insert(items, {
-            text = string.format("[%s] %s", subtask.done and "✓" or " ", subtask.content),
-            value = i,
-            subtask = subtask
-        })
-    end
+	-- Create selection items for subtasks
+	local items = {}
+	for i, subtask in ipairs(task.subtasks) do
+		table.insert(items, {
+			text = string.format("[%s] %s", subtask.done and "✓" or " ", subtask.content),
+			value = i,
+			subtask = subtask,
+		})
+	end
 
-    -- Show subtask selection menu
-    vim.ui.select(items, {
-        prompt = "Select subtask to edit:",
-        format_item = function(item)
-            return item.text
-        end
-    }, function(choice)
-        if not choice then return end
+	-- Show subtask selection menu
+	vim.ui.select(items, {
+		prompt = "Select subtask to edit:",
+		format_item = function(item)
+			return item.text
+		end,
+	}, function(choice)
+		if not choice then
+			return
+		end
 
-        -- Show edit menu for selected subtask
-        local edit_items = {
-            { text = "Edit content", value = "edit" },
-            { text = "Toggle completion", value = "toggle" },
-            { text = "Delete subtask", value = "delete" },
-            { text = "Move up", value = "up" },
-            { text = "Move down", value = "down" }
-        }
+		-- Show edit menu for selected subtask
+		local edit_items = {
+			{ text = "Edit content", value = "edit" },
+			{ text = "Toggle completion", value = "toggle" },
+			{ text = "Delete subtask", value = "delete" },
+			{ text = "Move up", value = "up" },
+			{ text = "Move down", value = "down" },
+		}
 
-        vim.ui.select(edit_items, {
-            prompt = "Choose action:",
-            format_item = function(item)
-                return item.text
-            end
-        }, function(action)
-            if not action then return end
+		vim.ui.select(edit_items, {
+			prompt = "Choose action:",
+			format_item = function(item)
+				return item.text
+			end,
+		}, function(action)
+			if not action then
+				return
+			end
 
-            if action.value == "edit" then
-                -- Edit subtask content
-                vim.ui.input({
-                    prompt = "Edit subtask: ",
-                    default = items[choice.value].subtask.content,
-                }, function(new_content)
-                    if new_content and new_content ~= "" then
-                        task:edit_subtask(choice.value, new_content)
-                        if self.opts.storage.auto_save then
-                            require("lazydo.storage").save_tasks(self)
-                        end
-                        self:refresh_display()
-                    end
-                end)
-            elseif action.value == "toggle" then
-                task:toggle_subtask(choice.value)
-                if self.opts.storage.auto_save then
-                    require("lazydo.storage").save_tasks(self)
-                end
-                self:refresh_display()
-            elseif action.value == "delete" then
-                task:remove_subtask(choice.value)
-                if self.opts.storage.auto_save then
-                    require("lazydo.storage").save_tasks(self)
-                end
-                self:refresh_display()
-            elseif action.value == "up" or action.value == "down" then
-                local idx = choice.value
-                local new_idx = action.value == "up" and idx - 1 or idx + 1
-                if new_idx >= 1 and new_idx <= #task.subtasks then
-                    task.subtasks[idx], task.subtasks[new_idx] = task.subtasks[new_idx], task.subtasks[idx]
-                    task.subtasks[idx].index = idx
-                    task.subtasks[new_idx].index = new_idx
-                    if self.opts.storage.auto_save then
-                        require("lazydo.storage").save_tasks(self)
-                    end
-                    self:refresh_display()
-                end
-            end
-        end)
-    end)
+			if action.value == "edit" then
+				-- Edit subtask content
+				vim.ui.input({
+					prompt = "Edit subtask: ",
+					default = items[choice.value].subtask.content,
+				}, function(new_content)
+					if new_content and new_content ~= "" then
+						task:edit_subtask(choice.value, new_content)
+						if self.opts.storage.auto_save then
+							require("lazydo.storage").save_tasks(self)
+						end
+						self:refresh_display()
+					end
+				end)
+			elseif action.value == "toggle" then
+				task:toggle_subtask(choice.value)
+				if self.opts.storage.auto_save then
+					require("lazydo.storage").save_tasks(self)
+				end
+				self:refresh_display()
+			elseif action.value == "delete" then
+				task:remove_subtask(choice.value)
+				if self.opts.storage.auto_save then
+					require("lazydo.storage").save_tasks(self)
+				end
+				self:refresh_display()
+			elseif action.value == "up" or action.value == "down" then
+				local idx = choice.value
+				local new_idx = action.value == "up" and idx - 1 or idx + 1
+				if new_idx >= 1 and new_idx <= #task.subtasks then
+					task.subtasks[idx], task.subtasks[new_idx] = task.subtasks[new_idx], task.subtasks[idx]
+					task.subtasks[idx].index = idx
+					task.subtasks[new_idx].index = new_idx
+					if self.opts.storage.auto_save then
+						require("lazydo.storage").save_tasks(self)
+					end
+					self:refresh_display()
+				end
+			end
+		end)
+	end)
 end
 
 function LazyDo:set_date(task)
@@ -477,56 +444,50 @@ function LazyDo:move_task(task, direction)
 end
 
 function LazyDo:setup_highlights()
-	-- Ensure we have opts and colors
-	if not self.opts then
-		self.opts = config.defaults
-	end
+    local colors = self.opts.colors or config.defaults.colors
 
-	local colors = self.opts.colors
-	if not colors then
-		-- Fallback colors if none provided
-		colors = {
-			header = "#7aa2f7",
-			border = "#3b4261",
-			pending = "#7aa2f7",
-			done = "#9ece6a",
-			overdue = "#f7768e",
-			note = "#e0af68",
-			due_date = "#bb9af7",
-			priority = {
-				high = "#f7768e",
-				medium = "#e0af68",
-				low = "#9ece6a",
-			},
-			subtask = "#7dcfff",
-		}
-	end
+    local highlights = {
+        -- Basic UI elements
+        LazyDoBorder = { fg = colors.border },
+        LazyDoHeader = { fg = colors.header, bold = true },
+        LazyDoSeparator = { fg = colors.border },
+        LazyDoStatusLine = { fg = colors.header },
+        
+        -- Task states
+        LazyDoPending = { fg = colors.pending },
+        LazyDoDone = { fg = colors.done },
+        LazyDoOverdue = { fg = colors.overdue },
+        
+        -- Task components
+        LazyDoNote = { fg = colors.note },
+        LazyDoDueDate = { fg = colors.due_date },
+        LazyDoTag = { fg = colors.tag, italic = true },
+        LazyDoMetadata = { fg = colors.metadata },
+        
+        -- Priority levels
+        LazyDoPriorityHigh = { fg = colors.priority.high, bold = true },
+        LazyDoPriorityMedium = { fg = colors.priority.medium },
+        LazyDoPriorityLow = { fg = colors.priority.low },
+        
+        -- Subtasks
+        LazyDoSubtask = { fg = colors.subtask },
+        LazyDoSubtaskDone = { fg = colors.done },
+        
+        -- Active task
+        LazyDoActiveTask = { 
+            bg = colors.activetask,
+            blend = self.opts.ui.highlight.blend or 10
+        },
+        
+        -- Help window
+        LazyDoHelp = { fg = colors.note },
+        LazyDoHelpHeader = { fg = colors.header, bold = true },
+        LazyDoHelpKey = { fg = colors.header, bold = true },
+    }
 
-	-- Define highlight groups with error handling
-	local highlights = {
-		LazyDoBorder = { fg = colors.border },
-		LazyDoHeader = { fg = colors.header, bold = true },
-		LazyDoPending = { fg = colors.pending },
-		LazyDoDone = { fg = colors.done },
-		LazyDoOverdue = { fg = colors.overdue },
-		LazyDoNote = { fg = colors.note },
-		LazyDoDueDate = { fg = colors.due_date },
-		LazyDoPriorityHigh = { fg = colors.priority and colors.priority.high or colors.overdue },
-		LazyDoPriorityMedium = { fg = colors.priority and colors.priority.medium or colors.note },
-		LazyDoPriorityLow = { fg = colors.priority and colors.priority.low or colors.done },
-		LazyDoSubtask = { fg = colors.subtask },
-		LazyDoStatusLine = { fg = colors.header },
-		LazyDoKey = { fg = colors.header, bold = true },
-		LazyDoSeparator = { fg = colors.border },
-		LazyDoHelp = { fg = colors.note },
-		LazyDoHelpHeader = { fg = colors.header, bold = true },
-		LazyDoFooter = { fg = colors.border },
-	}
-
-	-- Safely set highlights
-	for group, settings in pairs(highlights) do
-		pcall(vim.api.nvim_set_hl, 0, group, settings)
-	end
+    for group, settings in pairs(highlights) do
+        pcall(vim.api.nvim_set_hl, 0, group, settings)
+    end
 end
 
 function LazyDo:create_commands()
