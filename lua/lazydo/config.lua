@@ -82,7 +82,7 @@ M.defaults = {
         sort_by_priority = "sp",
         
         -- UI controls
-        toggle_help = "?",
+        toggle_help = "<C-s>",
         close_window = "q",
         refresh_view = "R",      -- Added refresh view
     },
