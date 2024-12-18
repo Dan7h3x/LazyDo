@@ -5,46 +5,8 @@ local storage = require("lazydo.storage")
 local Tasker = require("lazydo.task")
 local config = require("lazydo.config")
 
--- Add safe method mapping system
-LazyDo.safe_methods = {
-	add_task = true,
-	delete_task = true,
-	move_task = true,
-	set_note = true,
-	add_subtask = true,
-	edit_subtask = true,
-	set_date = true,
-	toggle = true,
-	refresh_display = true,
-	create_task_prompt = true,
-	search_tasks = true,
-	filter_tasks = true,
-	sort_tasks = true,
-	save_as_template = true,
-	create_from_template = true,
-	get_detailed_statistics = true,
-}
 
-function LazyDo:safe_call(method_name, ...)
-	if not self.safe_methods[method_name] then
-		vim.notify(string.format("Method '%s' is not allowed", method_name), vim.log.levels.ERROR)
-		return nil
-	end
-	
-	local method = self[method_name]
-	if not method then
-		vim.notify(string.format("Method '%s' not found", method_name), vim.log.levels.ERROR)
-		return nil
-	end
-	
-	local status, result = pcall(method, self, ...)
-	if not status then
-		vim.notify(string.format("Error in '%s': %s", method_name, result), vim.log.levels.ERROR)
-		return nil
-	end
-	
-	return result
-end
+
 
 -- Core functionality and state management
 LazyDo.instance = nil
@@ -773,28 +735,28 @@ end
 
 function LazyDo:create_commands()
 	vim.api.nvim_create_user_command("LazyDoToggle", function()
-		self:safe_call("toggle")
+		self:toggle()
 	end, {})
 
 	vim.api.nvim_create_user_command("LazyDoAdd", function(opts)
-		self:safe_call("add_task", opts.args)
+		self:add_task(opts.args)
 	end, { nargs = "?" })
 
 	vim.api.nvim_create_user_command("LazyDoSearch", function(opts)
-		self:safe_call("search_tasks", opts.args)
+		self:search_tasks(opts.args)
 	end, { nargs = "?" })
 
 	vim.api.nvim_create_user_command("LazyDoSort", function(opts)
-		self:safe_call("sort_tasks", opts.args)
+		self:sort_tasks(opts.args)
 	end, { nargs = 1, complete = function()
 		return { "priority", "due_date", "created", "updated" }
 	end })
 
 	vim.api.nvim_create_user_command("LazyDoTemplate", function(opts)
 		if opts.args == "save" then
-			self:safe_call("save_as_template", self:get_current_task())
+			self:save_as_template(self:get_current_task())
 		else
-			self:safe_call("create_from_template")
+			self:create_from_template()
 		end
 	end, { nargs = "?", complete = function()
 		return { "save", "load" }

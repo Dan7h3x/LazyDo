@@ -88,8 +88,8 @@ M.defaults = {
     },
     keymaps = {
         -- Task management
-        toggle_done = "<Space>",
-        toggle_subtask = "<C-Space>", -- Added new keymap for subtask toggle
+        toggle_done = "<CR>",
+        toggle_subtask = "<C-CR>", -- Added new keymap for subtask toggle
         edit_task = "e",
         delete_task = "dd",
         add_task = "a",
@@ -101,8 +101,6 @@ M.defaults = {
         -- Movement
         move_up = "K",
         move_down = "J",
-        next_task = "j",
-        prev_task = "k",
 
         -- Priority management
         increase_priority = ">",
@@ -114,14 +112,14 @@ M.defaults = {
         toggle_expand = "za",
 
         -- Search and sort
-        search = "/",
-        advanced_search = "?",
-        filter = "f",
-        clear_filter = "F",
-        sort_menu = "s",
-        templates = "t",
-        quick_stats = "S",
-        task_history = "H",
+        -- search = "/",
+        -- advanced_search = "?",
+        -- filter = "f",
+        -- clear_filter = "F",
+        -- sort_menu = "s",
+        -- templates = "t",
+        -- quick_stats = "S",
+        -- task_history = "H",
 
         -- Window control
         close_window = "q",     -- Added explicit close window keymap
@@ -135,7 +133,7 @@ M.defaults = {
         winblend = 5,
         title = " LazyDo Task manager ",
         highlight = {
-            blend = 10,
+            blend = 5,
             cursorline = true,
         },
         animations = true, -- Enable/disable animations

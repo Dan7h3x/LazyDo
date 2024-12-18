@@ -481,7 +481,7 @@ function M.setup_buffer_keymaps(lazydo, buf)
 
 	local function map(key, method_name, args, desc)
 		vim.keymap.set("n", key, function()
-			lazydo:safe_call(method_name, args)
+			lazydo[method_name](lazydo, args)
 		end, { buffer = buf, desc = desc, silent = true })
 	end
 
@@ -547,8 +547,8 @@ function M.setup_buffer_keymaps(lazydo, buf)
 			prompt = "Quick task: ",
 		}, function(input)
 			if input and input ~= "" then
-				lazydo:safe_call("add_task", { input, { priority = 2 } })
-				lazydo:safe_call("refresh_display")
+				lazydo:add_task(input, { priority = 2 })
+				lazydo:refresh_display()
 			end
 		end)
 	end, { buffer = buf, desc = "Quick add task", silent = true })
@@ -559,29 +559,26 @@ function M.setup_buffer_keymaps(lazydo, buf)
 			prompt = "New task below: ",
 		}, function(input)
 			if input and input ~= "" then
-				lazydo:safe_call("add_task_below", {
-					input,
-					current and current.priority or 2,
-					current and current.id or nil,
-				})
+				lazydo:add_task_below(input, current and current.priority or 2, current and current.id or nil)
 			end
 		end)
 	end, { buffer = buf, desc = "Add task below current", silent = true })
 
 	-- Toggle subtask completion
 	vim.keymap.set("n", lazydo.opts.keymaps.toggle_subtask or "<C-Space>", function()
-		lazydo:safe_call("toggle_subtask_at_cursor")
+		lazydo:toggle_subtask_at_cursor()
 	end, { buffer = buf, desc = "Toggle subtask completion", silent = true })
 
 	-- Backup controls
 	vim.keymap.set("n", "<leader>bb", function()
-		lazydo:safe_call("create_backup")
+		lazydo:create_backup()
 	end, { buffer = buf, desc = "Create backup", silent = true })
 
 	vim.keymap.set("n", "<leader>br", function()
-		lazydo:safe_call("restore_from_backup")
+		lazydo:restore_from_backup()
 	end, { buffer = buf, desc = "Restore from backup", silent = true })
 end
+
 
 function M.setup_task_highlights(lazydo)
 	local ns = vim.api.nvim_create_namespace("lazydo_task_highlights")
@@ -802,14 +799,13 @@ function M.create_help_window(lazydo)
 		string.rep("─", help_width),
 		"",
 		" Navigation:",
-		" j/k        - Move cursor up/down",
 		" h/l        - Collapse/Expand Task",
 		" gg/G       - Go to top/bottom",
 		" <C-u>/<C-d> - Page up/down",
 		"",
 		" Task Management:",
-		" <Space>    - Toggle Task completion",
-		" <C-Space>   - Toggle subtask completion",
+		" <Return>    - Toggle Task completion",
+		" <C-Return>  - Toggle subtask completion",
 		" e          - Edit Task menu",
 		" dd         - Delete Task",
 		" a          - Add new Task",
@@ -819,7 +815,13 @@ function M.create_help_window(lazydo)
 		" n          - Add/edit note",
 		" d          - Set due date",
 		" >/<        - Increase/decrease priority",
-		"",
+		" <leader>s		- Search tasks",
+		" <leader>f		- Filter tasks",
+		" <leader>S		- Sort tasks",
+		" <leader>t     - Template operations",
+		" <leader>i		- Show detailed stats",
+		" <leader>r 	- Reset to original list",
+		string.rep("─", help_width),
 		" Press q to close this window",
 	}
 
