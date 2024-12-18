@@ -30,6 +30,17 @@ M.CONSTANTS = {
 	ANIMATION_MS = 50,
 }
 
+-- Add this helper function at the top of ui.lua
+local function find_index(list, value)
+    for i, v in ipairs(list) do
+        if v == value then
+            return i
+        end
+    end
+    return nil
+end
+
+
 function M.create_buffer(lazydo)
 	local buf = vim.api.nvim_create_buf(false, true)
 
@@ -509,24 +520,28 @@ function M.setup_buffer_keymaps(lazydo, buf)
     end, "Quick add task")
 
 	safe_map(lazydo.opts.keymaps.add_below or "O", function()
-        local current = lazydo:get_current_task()
-        vim.ui.input({
-            prompt = "New task below: ",
-        }, function(input)
-            if input and input ~= "" then
-                local task = lazydo:add_task(input, {
-                    priority = current and current.priority or 2
-                })
-                if current then
-                    -- Move the new task to position after current task
-                    local current_index = vim.tbl_index(lazydo.tasks, current)
-                    table.remove(lazydo.tasks)
-                    table.insert(lazydo.tasks, current_index + 1, task)
-                end
-                lazydo:refresh_display()
-            end
-        end)
-    end, "Add task below current")
+		local current = lazydo:get_current_task()
+		vim.ui.input({
+			prompt = "New task below: ",
+		}, function(input)
+			if input and input ~= "" then
+				local task = lazydo:add_task(input, {
+					priority = current and current.priority or 2
+				})
+				if current then
+					-- Move the new task to position after current task
+					local current_index = vim.list_find(lazydo.tasks, function(t)
+						return t.id == current.id
+					end)
+					if current_index then
+						table.remove(lazydo.tasks)
+						table.insert(lazydo.tasks, current_index + 1, task)
+					end
+				end
+				lazydo:refresh_display()
+			end
+		end)
+	end, "Add task below current")
     -- Task Management
     safe_map(lazydo.opts.keymaps.toggle_done, function()
         local task = lazydo:get_current_task()
@@ -869,16 +884,18 @@ function M.create_help_window(lazydo)
 		"",
 		" Navigation:",
 		" j/k        - Move cursor up/down",
-		" h/l        - Collapse/Expand task",
+		" h/l        - Collapse/Expand Task",
 		" gg/G       - Go to top/bottom",
 		" <C-u>/<C-d> - Page up/down",
 		"",
 		" Task Management:",
-		" <Space>    - Toggle task completion",
-		" e          - Edit task",
-		" dd         - Delete task",
-		" a          - Add new task",
-		" A          - Add subtask to current task",
+		" <Space>    - Toggle Task completion",
+		" e          - Edit Task menu",
+		" dd         - Delete Task",
+		" a          - Add new Task",
+		" A          - Add subTask to current Task",
+		" o			 - Add Quick Task",
+		" O 		 - Add Quick Task below current Task",
 		" n          - Add/edit note",
 		" d          - Set due date",
 		" >/<        - Increase/decrease priority",
