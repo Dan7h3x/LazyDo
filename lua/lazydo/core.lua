@@ -526,27 +526,34 @@ function LazyDo:search_tasks(query)
 
 	local results = {}
 	local query_lower = query:lower()
-	
+
 	for _, task in ipairs(self.tasks) do
-		if task.content:lower():find(query_lower) or
-		   (task.notes and task.notes:lower():find(query_lower)) or
-		   vim.tbl_contains(vim.tbl_map(function(tag) return tag:lower() end, task.tags), query_lower) then
+		if
+			task.content:lower():find(query_lower)
+			or (task.notes and task.notes:lower():find(query_lower))
+			or vim.tbl_contains(
+				vim.tbl_map(function(tag)
+					return tag:lower()
+				end, task.tags),
+				query_lower
+			)
+		then
 			table.insert(results, task)
 		end
 	end
-	
+
 	return results
 end
 
 -- Advanced filtering
 function LazyDo:filter_tasks(filters)
 	local filtered = vim.deepcopy(self.tasks)
-	
+
 	if filters.status then
 		filtered = vim.tbl_filter(function(task)
-			return (filters.status == "done" and task.done) or
-				   (filters.status == "pending" and not task.done) or
-				   (filters.status == "overdue" and task:is_overdue())
+			return (filters.status == "done" and task.done)
+				or (filters.status == "pending" and not task.done)
+				or (filters.status == "overdue" and task:is_overdue())
 		end, filtered)
 	end
 
@@ -573,14 +580,24 @@ end
 -- Task sorting
 function LazyDo:sort_tasks(method)
 	local sorters = {
-		priority = function(a, b) return a.priority > b.priority end,
+		priority = function(a, b)
+			return a.priority > b.priority
+		end,
 		due_date = function(a, b)
-			if not a.due_date then return false end
-			if not b.due_date then return true end
+			if not a.due_date then
+				return false
+			end
+			if not b.due_date then
+				return true
+			end
 			return a.due_date < b.due_date
 		end,
-		created = function(a, b) return a.created_at > b.created_at end,
-		updated = function(a, b) return a.updated_at > b.updated_at end,
+		created = function(a, b)
+			return a.created_at > b.created_at
+		end,
+		updated = function(a, b)
+			return a.updated_at > b.updated_at
+		end,
 	}
 
 	if sorters[method] then
@@ -594,12 +611,12 @@ function LazyDo:save_as_template(task)
 	if not self.templates then
 		self.templates = {}
 	end
-	
+
 	local template = vim.deepcopy(task)
 	template.id = nil
 	template.created_at = nil
 	template.updated_at = nil
-	
+
 	vim.ui.input({
 		prompt = "Template name: ",
 	}, function(name)
@@ -646,7 +663,7 @@ function LazyDo:get_detailed_statistics()
 	}
 
 	local completion_times = {}
-	
+
 	for _, task in ipairs(self.tasks) do
 		if task.done then
 			stats.done = stats.done + 1
