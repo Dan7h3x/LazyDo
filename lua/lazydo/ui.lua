@@ -701,119 +701,113 @@ function M.setup_buffer_keymaps(lazydo, buf)
 end
 
 function M.setup_task_highlights(lazydo)
-    local ns = vim.api.nvim_create_namespace("lazydo_task_highlights")
-    vim.api.nvim_buf_clear_namespace(lazydo.buf, ns, 0, -1)
+	local ns = vim.api.nvim_create_namespace("lazydo_task_highlights")
+	vim.api.nvim_buf_clear_namespace(lazydo.buf, ns, 0, -1)
 
-    local function add_hl(line, col_start, col_end, group)
-        vim.api.nvim_buf_add_highlight(lazydo.buf, ns, group, line, col_start, col_end)
-    end
+	local function add_hl(line, col_start, col_end, group)
+		vim.api.nvim_buf_add_highlight(lazydo.buf, ns, group, line, col_start, col_end)
+	end
 
-    local lines = vim.api.nvim_buf_get_lines(lazydo.buf, 0, -1, false)
-    local current_line = vim.api.nvim_win_get_cursor(lazydo.win)[1]
-    local header_lines = 4
-    
-    -- Task tracking variables
-    local in_task = false
-    local empty_line_count = 0
-    local current_task_start = nil
-    local current_task_end = nil
-    local task_content_start = false
+	local lines = vim.api.nvim_buf_get_lines(lazydo.buf, 0, -1, false)
+	local current_line = vim.api.nvim_win_get_cursor(lazydo.win)[1]
+	local header_lines = 4
+	
+	-- Task tracking variables
+	local in_task = false
+	local task_start = nil
+	local task_end = nil
+	local empty_lines = 0
 
-    -- First pass: find the current task boundaries
-    for i, line in ipairs(lines) do
-        local lnum = i - 1
-        if lnum < header_lines then
-            goto continue
-        end
+	-- First pass: find the current task boundaries
+	for i, line in ipairs(lines) do
+		local lnum = i - 1
+		if lnum < header_lines then
+			goto continue
+		end
 
-        local content = line:gsub("^%s+", "")
-        
-        -- Track empty lines for task boundaries
-        if content == "" then
-            empty_line_count = empty_line_count + 1
-            goto continue
-        else
-            empty_line_count = 0
-        end
+		local content = line:gsub("^%s+", "")
+		
+		-- Track empty lines between tasks
+		if content == "" then
+			empty_lines = empty_lines + 1
+			goto continue
+		end
 
-        -- Detect task start
-        if content:match("^╭") then
-            in_task = true
-            task_content_start = true
-            -- Check if this is the active task
-            if current_line >= lnum and not current_task_start then
-                current_task_start = lnum
-            end
-        -- Detect task end
-        elseif content:match("^╰") then
-            if current_task_start and not current_task_end and current_line <= lnum then
-                current_task_end = lnum
-            end
-            in_task = false
-            task_content_start = false
-        end
+		-- Detect task boundaries
+		if content:match("^╭") then
+			task_start = lnum
+			in_task = true
+			empty_lines = 0
+		elseif content:match("^╰") then
+			task_end = lnum
+			-- Check if current line is within this task's boundaries
+			if current_line >= task_start and current_line <= task_end then
+				-- Highlight the entire task
+				for hlline = task_start, task_end do
+					add_hl(hlline, 0, #lines[hlline + 1], "LazyDoActiveTask")
+				end
+			end
+			in_task = false
+			task_start = nil
+			task_end = nil
+		end
 
-        -- Apply highlights
-        if in_task then
-            -- Highlight active task
-            -- if current_task_start and lnum >= current_task_start and (not current_task_end or lnum <= current_task_end) then
-            --     add_hl(lnum, 0, #line, "LazyDoActiveTask")
-            -- end
+		-- Apply component highlights
+		if in_task then
+			-- Title line highlights
+			if content:match("Title:") then
+				local title_start = line:find("Title:")
+				if title_start then
+					add_hl(lnum, title_start - 1, #line, "LazyDoHeader")
+					
+					-- Status icon highlight
+					local status_start = line:find(lazydo.opts.icons.task_done)
+						or line:find(lazydo.opts.icons.task_pending)
+						or line:find(lazydo.opts.icons.task_overdue)
+					if status_start then
+						local status_group = line:find(lazydo.opts.icons.task_done) and "LazyDoDone"
+							or line:find(lazydo.opts.icons.task_overdue) and "LazyDoOverdue"
+							or "LazyDoPending"
+						add_hl(lnum, status_start - 1, status_start + 1, status_group)
+					end
+				end
+			end
 
-            -- Highlight task components
-            if task_content_start then
-                -- Title line highlights
-                local title_start = line:find("Title:")
-                if title_start then
-                    add_hl(lnum, title_start - 1, #line, "LazyDoHeader")
-                    
-                    -- Status icon highlight
-                    local status_start = line:find(lazydo.opts.icons.task_done)
-                        or line:find(lazydo.opts.icons.task_pending)
-                        or line:find(lazydo.opts.icons.task_overdue)
-                    if status_start then
-                        local status_group = line:find(lazydo.opts.icons.task_done) and "LazyDoDone"
-                            or line:find(lazydo.opts.icons.task_overdue) and "LazyDoOverdue"
-                            or "LazyDoPending"
-                        add_hl(lnum, status_start - 1, status_start + 1, status_group)
-                    end
-                end
-            end
+			-- Highlight subtasks section
+			if content:match("Subtasks") then
+				add_hl(lnum, 0, #line, "LazyDoSubtask")
+			elseif content:match("└─") or content:match("├─") then
+				-- Subtask status highlight
+				local status_start = line:find(lazydo.opts.icons.task_done)
+					or line:find(lazydo.opts.icons.task_pending)
+				if status_start then
+					local status_group = line:find(lazydo.opts.icons.task_done) and "LazyDoDone" or "LazyDoPending"
+					add_hl(lnum, status_start - 1, status_start + 1, status_group)
+				end
+				
+				-- Highlight current subtask line
+				if lnum + 1 == current_line then
+					add_hl(lnum, 0, #line, "LazyDoActiveTask")
+				end
+			end
 
-            -- Highlight subtasks section
-            if content:match("Subtasks") then
-                add_hl(lnum, 0, #line, "LazyDoSubtask")
-            elseif content:match("└─") or content:match("├─") then
-                -- Subtask status highlight
-                local status_start = line:find(lazydo.opts.icons.task_done)
-                    or line:find(lazydo.opts.icons.task_pending)
-                if status_start then
-                    local status_group = line:find(lazydo.opts.icons.task_done) and "LazyDoDone" or "LazyDoPending"
-                    add_hl(lnum, status_start - 1, status_start + 1, status_group)
-                end
-                
-                -- Highlight current subtask line
-                if lnum + 1 == current_line then
-                    add_hl(lnum, 0, #line, "LazyDoActiveTask")
-                end
-            end
-
-            -- Highlight progress bar
-            if content:match("%%") then
-                local progress_start = line:find("█")
-                if progress_start then
-                    local progress_end = line:find("░")
-                    if progress_end then
-                        add_hl(lnum, progress_start - 1, progress_end - 1, "LazyDoProgressFull")
-                        add_hl(lnum, progress_end - 1, #line - 1, "LazyDoProgressEmpty")
-                    end
-                end
+			-- Highlight progress bar
+			if content:match("%%") then
+				local progress_start = line:find("█")
+				if progress_start then
+					local progress_end = line:find("░")
+					if progress_end then
+						add_hl(lnum, progress_start - 1, progress_end - 1, "LazyDoProgressFull")
+						add_hl(lnum, progress_end - 1, #line - 1, "LazyDoProgressEmpty")
+					end
+				end
 			end
 		end
 
 		::continue::
 	end
 end
+
 
 -- In ui.lua
 function M.create_help_window(lazydo)
