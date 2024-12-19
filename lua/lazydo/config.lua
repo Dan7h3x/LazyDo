@@ -79,8 +79,8 @@ M.defaults = {
 		tag = "#89ddff",
 		metadata = "#565f89",
 		progress = {
-			full = "#9ece6a",
-			empty = "#3b4261",
+			full = "#50fa7b", -- Green color for filled progress
+			empty = "#ffffff", -- White color for empty progress
 		},
 		subtask_bullet = "#7dcfff",
 		search_highlight = "#bb9af7",
