@@ -606,15 +606,6 @@ function M.setup_buffer_keymaps(lazydo, buf)
 		lazydo:move_task_down()
 	end, { buffer = buf, desc = "Move task down", silent = true })
 
-	-- Priority management
-	vim.keymap.set("n", lazydo.opts.keymaps.increase_priority, function()
-		lazydo:increase_priority()
-	end, { buffer = buf, desc = "Increase priority", silent = true })
-
-	vim.keymap.set("n", lazydo.opts.keymaps.decrease_priority, function()
-		lazydo:decrease_priority()
-	end, { buffer = buf, desc = "Decrease priority", silent = true })
-
 	-- UI controls
 	vim.keymap.set("n", lazydo.opts.keymaps.toggle_help, function()
 		M.toggle_help(lazydo)
