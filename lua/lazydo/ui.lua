@@ -1,57 +1,6 @@
 local M = {}
 local utils = require("lazydo.utils")
 
--- Add this helper function to find subtask index from cursor position
-local function get_subtask_under_cursor(lazydo, current_line)
-	-- Get the current task first
-	local task = lazydo:get_current_task()
-	if not task or #task.subtasks == 0 then
-		return nil
-	end
-
-	-- Get buffer lines
-	local lines = vim.api.nvim_buf_get_lines(lazydo.buf, 0, -1, false)
-	local line_content = lines[current_line]
-
-	-- Verify we're on a subtask line
-	if not line_content or not (line_content:match("└─") or line_content:match("├─")) then
-		return nil
-	end
-
-	-- Find task boundaries
-	local task_start = nil
-	local task_end = nil
-	
-	-- Scan backwards to find task start
-	for i = current_line, 1, -1 do
-		if lines[i]:match("^%s*╭") then
-			task_start = i
-			break
-		end
-	end
-
-	if not task_start then
-		return nil
-	end
-
-	-- Count subtasks from task start to current line
-	local subtask_index = 0
-	for i = task_start + 1, current_line do
-		local line = lines[i]
-		if line:match("└─") or line:match("├─") then
-			subtask_index = subtask_index + 1
-			if i == current_line then
-				-- Verify the index is within bounds of task's subtasks
-				if subtask_index <= #task.subtasks then
-					return subtask_index
-				end
-				break
-			end
-		end
-	end
-
-	return nil
-end
 
 -- Add animations and transitions
 M.ANIMATIONS = {
@@ -1228,7 +1177,7 @@ function M.render_status_line(lazydo)
 	})
 end
 
--- Update the toggle_subtask_completion function
+-- Replace the toggle_subtask_completion function with this improved version
 function M.toggle_subtask_completion(lazydo)
 	local task = lazydo:get_current_task()
 	if not task then
@@ -1236,19 +1185,56 @@ function M.toggle_subtask_completion(lazydo)
 		return
 	end
 
-	-- Get cursor position
+	-- Get cursor position and buffer content
 	local cursor = vim.api.nvim_win_get_cursor(lazydo.win)
 	local current_line = cursor[1]
+	local lines = vim.api.nvim_buf_get_lines(lazydo.buf, 0, -1, false)
+	local line_content = lines[current_line]
 
-	-- Find which subtask is under cursor using improved function
-	local subtask_index = get_subtask_under_cursor(lazydo, current_line)
-	if not subtask_index or not task.subtasks[subtask_index] then
+	-- Check if cursor is on a subtask line
+	if not line_content or not (line_content:match("└─") or line_content:match("├─")) then
+		vim.notify("Not on a subtask line", vim.log.levels.WARN)
+		return
+	end
+
+	-- Find task start line and count subtasks
+	local task_start = nil
+	local subtask_index = 0
+	local found_index = nil
+
+	-- Scan backwards to find task start and count subtasks until current line
+	for i = current_line, 1, -1 do
+		local line = lines[i]
+		if line:match("^%s*╭") then
+			task_start = i
+			break
+		end
+	end
+
+	if not task_start then
+		vim.notify("Could not find task start", vim.log.levels.WARN)
+		return
+	end
+
+	-- Count subtasks from task start to current line
+	for i = task_start + 1, current_line do
+		local line = lines[i]
+		if line:match("└─") or line:match("├─") then
+			subtask_index = subtask_index + 1
+			if i == current_line then
+				found_index = subtask_index
+				break
+			end
+		end
+	end
+
+	if not found_index or not task.subtasks[found_index] then
 		vim.notify("Could not determine subtask position", vim.log.levels.WARN)
 		return
 	end
 
 	-- Toggle the subtask completion
-	task.subtasks[subtask_index].done = not task.subtasks[subtask_index].done
+	task.subtasks[found_index].done = not task.subtasks[found_index].done
 	task.updated_at = os.time()
 
 	-- Save if auto-save is enabled
