@@ -3,26 +3,31 @@ local utils = require("lazydo.utils")
 
 -- Add this helper function to find subtask index from cursor position
 local function get_subtask_under_cursor(lines, current_line)
-	local subtask_count = 0
-	local found_subtask = nil
-	
-	-- Scan backwards to find task start and count subtasks until cursor
+	-- First find the task start by scanning backwards
+	local task_start = nil
 	for i = current_line, 1, -1 do
-		local line = lines[i]
-		if line:match("^%s*╭") then -- Found task start
+		if lines[i]:match("^%s*╭") then
+			task_start = i
 			break
-		elseif line:match("└─") or line:match("├─") then
-			subtask_count = subtask_count + 1
+		end
+	end
+
+	if not task_start then
+		return nil
+	end
+
+	-- Now scan forward from task start to current line to count subtasks
+	local subtask_index = 0
+	for i = task_start + 1, current_line do
+		local line = lines[i]
+		if line:match("└─") or line:match("├─") then
+			subtask_index = subtask_index + 1
 			if i == current_line then
-				found_subtask = subtask_count
+				return subtask_index
 			end
 		end
 	end
-	
-	if found_subtask then
-		-- Convert from bottom-up count to top-down index
-		return subtask_count - found_subtask + 1
-	end
+
 	return nil
 end
 
@@ -1100,9 +1105,9 @@ function M.render_progress_bar(total, completed, width)
 	local empty = string.rep("░", empty_width)
 
 	-- Add percentage display
-	local percentage = string.format(" %d%%", math.floor(progress * 100))
+	-- local percentage = string.format(" %d%%", math.floor(progress * 100))
 
-	return filled .. empty .. percentage
+	return filled .. empty
 end
 
 
