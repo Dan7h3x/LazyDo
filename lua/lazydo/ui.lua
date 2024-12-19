@@ -756,9 +756,9 @@ function M.setup_task_highlights(lazydo)
         -- Apply highlights
         if in_task then
             -- Highlight active task
-            if current_task_start and lnum >= current_task_start and (not current_task_end or lnum <= current_task_end) then
-                add_hl(lnum, 0, #line, "LazyDoActiveTask")
-            end
+            -- if current_task_start and lnum >= current_task_start and (not current_task_end or lnum <= current_task_end) then
+            --     add_hl(lnum, 0, #line, "LazyDoActiveTask")
+            -- end
 
             -- Highlight task components
             if task_content_start then
