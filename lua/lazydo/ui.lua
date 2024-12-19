@@ -650,11 +650,11 @@ function M.setup_buffer_keymaps(lazydo, buf)
 
 	-- Backup controls
 	vim.keymap.set("n", "<leader>bb", function()
-		lazydo:create_backup()
+		M.create_backup(lazydo)
 	end, { buffer = buf, desc = "Create backup", silent = true })
 
 	vim.keymap.set("n", "<leader>br", function()
-		lazydo:restore_from_backup()
+		M.restore_from_backup(lazydo)
 	end, { buffer = buf, desc = "Restore from backup", silent = true })
 end
 
