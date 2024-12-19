@@ -1263,4 +1263,79 @@ function M.setup_auto_save(lazydo)
 	end
 end
 
+-- Create a backup of current tasks
+function M.create_backup(lazydo)
+    if not lazydo or not lazydo.tasks then
+        vim.notify("No tasks to backup", vim.log.levels.WARN)
+        return
+    end
+
+    -- Get the current tasks file path and create backup path
+    local tasks_file = lazydo.opts.storage.file
+    local backup_file = tasks_file .. ".backup"
+
+    -- Create a backup table with metadata
+    local backup_data = {
+        timestamp = os.time(),
+        tasks = vim.deepcopy(lazydo.tasks),
+        metadata = {
+            total_tasks = #lazydo.tasks,
+            backup_date = os.date("%Y-%m-%d %H:%M:%S"),
+        }
+    }
+
+    -- Save the backup
+    local backup_json = vim.json.encode(backup_data)
+    local file = io.open(backup_file, "w")
+    if file then
+        file:write(backup_json)
+        file:close()
+        vim.notify(string.format("Backup created with %d tasks", #lazydo.tasks), vim.log.levels.INFO)
+    else
+        vim.notify("Failed to create backup", vim.log.levels.ERROR)
+    end
+end
+
+-- Restore tasks from backup
+function M.restore_from_backup(lazydo)
+    -- Get the backup file path
+    local tasks_file = lazydo.opts.storage.file
+    local backup_file = tasks_file .. ".backup"
+
+    -- Check if backup exists
+    local file = io.open(backup_file, "r")
+    if not file then
+        vim.notify("No backup file found", vim.log.levels.WARN)
+        return
+    end
+
+    -- Read and parse backup data
+    local content = file:read("*all")
+    file:close()
+
+    local ok, backup_data = pcall(vim.json.decode, content)
+    if not ok or not backup_data or not backup_data.tasks then
+        vim.notify("Invalid backup file", vim.log.levels.ERROR)
+        return
+    end
+
+    -- Confirm restoration with user
+    local backup_date = backup_data.metadata and backup_data.metadata.backup_date or "unknown date"
+    local msg = string.format("Restore %d tasks from backup (%s)?", #backup_data.tasks, backup_date)
+    
+    vim.ui.select({"Yes", "No"}, {
+        prompt = msg,
+    }, function(choice)
+        if choice == "Yes" then
+            -- Restore tasks
+            lazydo.tasks = backup_data.tasks
+            if lazydo.opts.storage.auto_save then
+                require("lazydo.storage").save_tasks(lazydo)
+            end
+            lazydo:refresh_display()
+            vim.notify(string.format("Restored %d tasks from backup", #backup_data.tasks), vim.log.levels.INFO)
+        end
+    end)
+end
+
 return M
