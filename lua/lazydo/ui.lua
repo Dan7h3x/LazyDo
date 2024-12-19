@@ -658,7 +658,9 @@ function M.setup_buffer_keymaps(lazydo, buf)
 	-- Toggle subtask completion
 	vim.keymap.set("n", lazydo.opts.keymaps.toggle_subtask or "<C-Space>", function()
 		local task = lazydo:get_current_task()
-		if not task then return end
+		if not task then
+			return
+		end
 
 		-- Get the cursor position and buffer content
 		local cursor = vim.api.nvim_win_get_cursor(lazydo.win)
@@ -692,9 +694,8 @@ function M.setup_buffer_keymaps(lazydo, buf)
 		if not task_start_line then
 			vim.notify("Could not find parent task", vim.log.levels.WARN)
 			return
-			end
 		end
-	end, { buffer = buf, desc = "Toggle subtask completion", silent = true })
+	end, { desc = "Toggle subtask completion", silent = true })
 
 	-- Backup controls
 	vim.keymap.set("n", "<leader>bb", function()
@@ -1120,7 +1121,7 @@ function M.render_progress_bar(total, completed, width)
 	local filled = string.format("%%#0x%s#%s", color:sub(2), string.rep("█", filled_width))
 	local partial = progress * width % 1
 	local partial_block = ""
-	
+
 	if partial > 0 then
 		if partial < 0.125 then
 			partial_block = "▏"
@@ -1144,10 +1145,10 @@ function M.render_progress_bar(total, completed, width)
 	end
 
 	local empty = string.format("%%#0x44475a#%s", string.rep("░", empty_width))
-	
+
 	-- Add percentage display
 	local percentage = string.format(" %d%%", math.floor(progress * 100))
-	
+
 	return filled .. empty .. percentage
 end
 
@@ -1179,12 +1180,12 @@ function M.render_status_line(lazydo)
 
 	-- Define colors for different elements
 	local colors = {
-		separator = "#6272a4",   -- Soft purple for separators
-		numbers = "#bd93f9",     -- Bright purple for numbers
-		labels = "#f8f8f2",      -- White for labels
-		warning = "#ffb86c",     -- Orange for warnings
-		success = "#50fa7b",     -- Green for success
-		error = "#ff5555",       -- Red for errors/overdue
+		separator = "#6272a4", -- Soft purple for separators
+		numbers = "#bd93f9", -- Bright purple for numbers
+		labels = "#f8f8f2", -- White for labels
+		warning = "#ffb86c", -- Orange for warnings
+		success = "#50fa7b", -- Green for success
+		error = "#ff5555", -- Red for errors/overdue
 	}
 
 	-- Create styled segments
@@ -1211,9 +1212,7 @@ function M.render_status_line(lazydo)
 
 	-- Calculate completion percentage
 	local percentage = math.floor(progress * 100)
-	local percentage_color = percentage >= 80 and colors.success 
-		or percentage >= 50 and colors.warning 
-		or colors.error
+	local percentage_color = percentage >= 80 and colors.success or percentage >= 50 and colors.warning or colors.error
 
 	-- Add percentage to segments
 	table.insert(segments, string.format(" Progress: %s%% ", styled_number(percentage, percentage_color)))
