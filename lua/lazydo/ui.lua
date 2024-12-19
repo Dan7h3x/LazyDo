@@ -305,7 +305,8 @@ function M.render_task_block(task, width, indent, icons)
 		or ""
 
 	-- Top border with title and fold indicator
-	local title_str = string.format(" %s Title: %s %s %s%s ", fold_indicator, status, priority_icon, task.content, tags_str)
+	local title_str =
+		string.format(" %s Title: %s %s %s%s ", fold_indicator, status, priority_icon, task.content, tags_str)
 	local title_len = vim.fn.strdisplaywidth(title_str)
 	local pad_len = math.max(0, inner_width - title_len)
 	local top = indent .. box.TOP_LEFT .. title_str .. string.rep(box.HORIZONTAL, pad_len) .. box.TOP_RIGHT
@@ -816,7 +817,7 @@ function M.setup_task_highlights(lazydo)
 			if date_start then
 				-- Highlight the icon
 				add_hl(lnum, date_start - 1, date_start + #date_icon, "LazyDoDueDate")
-				
+
 				-- Find and highlight the date format (YYYY-MM-DD)
 				local date_pattern = "%d%d%d%d%-%d%d%-%d%d"
 				local date_match_start = line:find(date_pattern)
@@ -841,7 +842,7 @@ function M.setup_task_highlights(lazydo)
 			-- Notes section highlighting with improved boundary detection
 			local note_icon = lazydo.opts.icons.note
 			local note_start = line:find(note_icon, 1, true)
-			
+
 			if note_start then
 				-- Start of notes section
 				add_hl(lnum, note_start - 1, #line - 1, "LazyDoNote")
@@ -865,8 +866,7 @@ function M.setup_task_highlights(lazydo)
 			if content:match("Subtasks") then
 				add_hl(lnum, 0, #line, "LazyDoSubtask")
 			elseif content:match("└─") or content:match("├─") then
-				local status_start = line:find(lazydo.opts.icons.task_done)
-					or line:find(lazydo.opts.icons.task_pending)
+				local status_start = line:find(lazydo.opts.icons.task_done) or line:find(lazydo.opts.icons.task_pending)
 				if status_start then
 					local status_group = line:find(lazydo.opts.icons.task_done) and "LazyDoDone" or "LazyDoPending"
 					add_hl(lnum, status_start - 1, status_start + 1, status_group)
@@ -890,7 +890,6 @@ function M.setup_task_highlights(lazydo)
 		::continue::
 	end
 end
-
 
 -- In ui.lua
 function M.create_help_window(lazydo)
@@ -1107,7 +1106,6 @@ function M.render_progress_bar(total, completed, width)
 
 	return filled .. empty
 end
-
 
 -- Add floating window animations
 function M.animate_window_open(win, opts)

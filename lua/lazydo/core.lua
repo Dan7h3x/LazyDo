@@ -10,8 +10,6 @@ LazyDo.instance = nil
 LazyDo.is_visible = false
 LazyDo.is_processing = false
 LazyDo.is_ui_busy = false
-LazyDo.tasks_modified = false
-LazyDo.filtered_state = nil -- To track if we're in a filtered state
 
 function LazyDo:new()
 	local instance = setmetatable({}, { __index = LazyDo })
@@ -227,10 +225,8 @@ end
 function LazyDo:add_task(content, opts)
 	local task = Tasker.Task.new(content, opts)
 	table.insert(self.tasks, task)
-	self.tasks_modified = true
 	if self.opts.storage.auto_save then
 		storage.save_tasks(self)
-		self.tasks_modified = false
 	end
 	self:refresh_display()
 	return task
@@ -245,10 +241,8 @@ function LazyDo:delete_task()
 	for i, t in ipairs(self.tasks) do
 		if t.id == task.id then
 			table.remove(self.tasks, i)
-			self.tasks_modified = true
 			if self.opts.storage.auto_save then
 				storage.save_tasks(self)
-				self.tasks_modified = false
 			end
 			self:refresh_display()
 			return true
@@ -437,37 +431,14 @@ function LazyDo:move_task(task, direction)
 			local new_pos = i + direction
 			if new_pos >= 1 and new_pos <= #self.tasks then
 				self.tasks[i], self.tasks[new_pos] = self.tasks[new_pos], self.tasks[i]
-				self.tasks_modified = true
 				if self.opts.storage.auto_save then
 					storage.save_tasks(self)
-					self.tasks_modified = false
 				end
 				self:refresh_display()
 				return true
 			end
 			break
 		end
-	end
-	return false
-end
-
--- Add new function to handle filter state
-function LazyDo:save_filter_state()
-	if not self.filtered_state then
-		self.filtered_state = {
-			tasks = vim.deepcopy(self.tasks),
-			original_count = #self.tasks
-		}
-	end
-end
-
-function LazyDo:reset_filter()
-	if self.filtered_state then
-		self.tasks = self.filtered_state.tasks
-		self.filtered_state = nil
-		self:refresh_display()
-		vim.notify(string.format("Reset to original %d tasks", #self.tasks))
-		return true
 	end
 	return false
 end
@@ -508,17 +479,16 @@ function LazyDo:setup_highlights()
 		},
 		-- Progress indicators
 		LazyDoProgressFull = {
-			fg = colors.done,
+			fg = colors.progress.full,
 			bold = true,
 		},
 		LazyDoProgressEmpty = {
-			fg = colors.border,
+			fg = colors.progress.empty,
 			nocombine = true,
 		},
 		LazyDoProgressRed = { fg = "#ff5555" },
 		LazyDoProgressOrange = { fg = "#ffb86c" },
 		LazyDoProgressGreen = { fg = "#50fa7b" },
-		LazyDoProgressEmpty = { fg = "#44475a" },
 
 		-- Subtask elements
 		LazyDoSubtaskBullet = {
@@ -529,6 +499,47 @@ function LazyDo:setup_highlights()
 			fg = colors.done,
 			bold = true,
 		},
+
+		-- Subtasks
+		LazyDoSubtask = { fg = colors.subtask },
+		LazyDoSubtaskDone = { fg = colors.done },
+
+		-- Active task
+		LazyDoActiveTask = {
+			bg = colors.activetask,
+			blend = self.opts.ui.highlight.blend or 10,
+		},
+
+		-- Help window
+		LazyDoHelp = { fg = colors.note },
+		LazyDoHelpHeader = { fg = colors.header, bold = true },
+		LazyDoHelpKey = { fg = colors.header, bold = true },
+	}
+
+	for group, settings in pairs(highlights) do
+		pcall(vim.api.nvim_set_hl, 0, group, settings)
+	end
+end
+-- Add new function to handle filter state
+function LazyDo:save_filter_state()
+	if not self.filtered_state then
+		self.filtered_state = {
+			tasks = vim.deepcopy(self.tasks),
+			original_count = #self.tasks,
+		}
+	end
+end
+
+function LazyDo:reset_filter()
+	if self.filtered_state then
+		self.tasks = self.filtered_state.tasks
+		self.filtered_state = nil
+		self:refresh_display()
+		vim.notify(string.format("Reset to original %d tasks", #self.tasks))
+		return true
+	end
+	return false
+end
 function LazyDo:search_tasks(query)
 	if not query or query == "" then
 		return self:reset_filter()
@@ -556,33 +567,10 @@ function LazyDo:search_tasks(query)
 	self.tasks = results
 	return results
 end
+-- Advanced filtering
+
 function LazyDo:filter_tasks(filters)
 	self:save_filter_state()
-	local filtered = vim.deepcopy(self.filtered_state.tasks)
-
-	if filters.status then
-		filtered = vim.tbl_filter(function(task)
-			return (filters.status == "done" and task.done)
-				or (filters.status == "pending" and not task.done)
-				or (filters.status == "overdue" and task:is_overdue())
-		end, filtered)
-	end
-			or vim.tbl_contains(
-				vim.tbl_map(function(tag)
-					return tag:lower()
-				end, task.tags),
-				query_lower
-			)
-		then
-			table.insert(results, task)
-		end
-	end
-
-	return results
-end
-
--- Advanced filtering
-function LazyDo:filter_tasks(filters)
 	local filtered = vim.deepcopy(self.tasks)
 
 	if filters.status then
@@ -609,7 +597,7 @@ function LazyDo:filter_tasks(filters)
 			return true
 		end, filtered)
 	end
-
+	self.tasks = filtered
 	return filtered
 end
 
