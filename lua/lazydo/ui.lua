@@ -1,6 +1,31 @@
 local M = {}
 local utils = require("lazydo.utils")
 
+-- Add this helper function to find subtask index from cursor position
+local function get_subtask_under_cursor(lines, current_line)
+	local subtask_count = 0
+	local found_subtask = nil
+	
+	-- Scan backwards to find task start and count subtasks until cursor
+	for i = current_line, 1, -1 do
+		local line = lines[i]
+		if line:match("^%s*╭") then -- Found task start
+			break
+		elseif line:match("└─") or line:match("├─") then
+			subtask_count = subtask_count + 1
+			if i == current_line then
+				found_subtask = subtask_count
+			end
+		end
+	end
+	
+	if found_subtask then
+		-- Convert from bottom-up count to top-down index
+		return subtask_count - found_subtask + 1
+	end
+	return nil
+end
+
 -- Add animations and transitions
 M.ANIMATIONS = {
 	FADE_FRAMES = 10,
@@ -657,45 +682,9 @@ function M.setup_buffer_keymaps(lazydo, buf)
 
 	-- Toggle subtask completion
 	vim.keymap.set("n", lazydo.opts.keymaps.toggle_subtask or "<C-Space>", function()
-		local task = lazydo:get_current_task()
-		if not task then
-			return
-		end
+		M.toggle_subtask_completion(lazydo)
+	end, { buffer = buf, desc = "Toggle subtask completion", silent = true })
 
-		-- Get the cursor position and buffer content
-		local cursor = vim.api.nvim_win_get_cursor(lazydo.win)
-		local current_line = cursor[1]
-		local lines = vim.api.nvim_buf_get_lines(lazydo.buf, 0, -1, false)
-		local line_content = lines[current_line]
-
-		-- Improved subtask line detection
-		local is_subtask_line = line_content and (line_content:match("└─") or line_content:match("├─"))
-		if not is_subtask_line then
-			vim.notify("Not a subtask line", vim.log.levels.WARN)
-			return
-		end
-
-		-- Enhanced subtask index calculation
-		local task_start_line = nil
-		local subtask_count = 0
-		local current_subtask = 0
-
-		-- Scan backwards to find task start and count subtasks
-		for i = current_line - 1, 1, -1 do
-			local line = lines[i]
-			if line:match("^%s*╭") then -- Found task start
-				task_start_line = i
-				break
-			elseif line:match("└─") or line:match("├─") then
-				subtask_count = subtask_count + 1
-			end
-		end
-
-		if not task_start_line then
-			vim.notify("Could not find parent task", vim.log.levels.WARN)
-			return
-		end
-	end, { desc = "Toggle subtask completion", silent = true })
 
 	-- Backup controls
 	vim.keymap.set("n", "<leader>bb", function()
@@ -1097,7 +1086,6 @@ function M.show_quick_edit_menu(lazydo)
 	end)
 end
 
--- Improved progress bar rendering with smooth gradients and animations
 function M.render_progress_bar(total, completed, width)
 	if total == 0 then
 		return string.rep("░", width)
@@ -1107,50 +1095,16 @@ function M.render_progress_bar(total, completed, width)
 	local filled_width = math.floor(width * progress)
 	local empty_width = width - filled_width
 
-	-- Enhanced color gradients based on progress
-	local color
-	if progress <= 0.33 then
-		color = progress <= 0.15 and "#ff3333" or "#ff5555" -- Darker red for very low progress
-	elseif progress <= 0.66 then
-		color = progress <= 0.5 and "#ffa066" or "#ffb86c" -- Gradient orange
-	else
-		color = progress >= 0.9 and "#50fa7b" or "#8aff7b" -- Brighter green for completion
-	end
-
-	-- Use more detailed Unicode blocks for smoother appearance
-	local filled = string.format("%%#0x%s#%s", color:sub(2), string.rep("█", filled_width))
-	local partial = progress * width % 1
-	local partial_block = ""
-
-	if partial > 0 then
-		if partial < 0.125 then
-			partial_block = "▏"
-		elseif partial < 0.25 then
-			partial_block = "▎"
-		elseif partial < 0.375 then
-			partial_block = "▍"
-		elseif partial < 0.5 then
-			partial_block = "▌"
-		elseif partial < 0.625 then
-			partial_block = "▋"
-		elseif partial < 0.75 then
-			partial_block = "▊"
-		elseif partial < 0.875 then
-			partial_block = "▉"
-		else
-			partial_block = "█"
-		end
-		filled = filled .. string.format("%%#0x%s#%s", color:sub(2), partial_block)
-		empty_width = empty_width - 1
-	end
-
-	local empty = string.format("%%#0x44475a#%s", string.rep("░", empty_width))
+	-- Use simple block characters for progress visualization
+	local filled = string.rep("█", filled_width)
+	local empty = string.rep("░", empty_width)
 
 	-- Add percentage display
 	local percentage = string.format(" %d%%", math.floor(progress * 100))
 
 	return filled .. empty .. percentage
 end
+
 
 -- Add floating window animations
 function M.animate_window_open(win, opts)
@@ -1250,6 +1204,46 @@ function M.render_status_line(lazydo)
 		virt_text_pos = "overlay",
 		priority = 100,
 	})
+end
+
+-- Update the toggle_subtask_completion function
+function M.toggle_subtask_completion(lazydo)
+	local task = lazydo:get_current_task()
+	if not task then
+		vim.notify("No task selected", vim.log.levels.WARN)
+		return
+	end
+
+	-- Get cursor position and buffer content
+	local cursor = vim.api.nvim_win_get_cursor(lazydo.win)
+	local current_line = cursor[1]
+	local lines = vim.api.nvim_buf_get_lines(lazydo.buf, 0, -1, false)
+	local line_content = lines[current_line]
+
+	-- Check if cursor is on a subtask line
+	if not line_content or not (line_content:match("└─") or line_content:match("├─")) then
+		vim.notify("Not on a subtask line", vim.log.levels.WARN)
+		return
+	end
+
+	-- Find which subtask is under cursor
+	local subtask_index = get_subtask_under_cursor(lines, current_line - 1)
+	if not subtask_index or not task.subtasks[subtask_index] then
+		vim.notify("Could not determine subtask position", vim.log.levels.WARN)
+		return
+	end
+
+	-- Toggle the subtask completion
+	task.subtasks[subtask_index].done = not task.subtasks[subtask_index].done
+	task.updated_at = os.time()
+
+	-- Save if auto-save is enabled
+	if lazydo.opts.storage.auto_save then
+		require("lazydo.storage").save_tasks(lazydo)
+	end
+
+	-- Refresh the display
+	lazydo:refresh_display()
 end
 
 function M.setup_auto_save(lazydo)
