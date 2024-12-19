@@ -219,16 +219,6 @@ function M.toggle_fold(lazydo)
 	end
 end
 
--- Add this helper function at the top of ui.lua
-local function find_index(list, value)
-	for i, v in ipairs(list) do
-		if v == value then
-			return i
-		end
-	end
-	return nil
-end
-
 function M.create_buffer(lazydo)
 	local buf = vim.api.nvim_create_buf(false, true)
 
@@ -929,11 +919,6 @@ function M.create_help_window(lazydo)
 		"LazyDo Keybindings",
 		string.rep("─", help_width),
 		"",
-		" Navigation:",
-		" h/l        - Collapse/Expand Task",
-		" gg/G       - Go to top/bottom",
-		" <C-u>/<C-d> - Page up/down",
-		"",
 		" Task Management:",
 		" <Return>    - Toggle Task completion",
 		" <C-Return>  - Toggle subtask completion",
@@ -946,12 +931,12 @@ function M.create_help_window(lazydo)
 		" n          - Add/edit note",
 		" d          - Set due date",
 		" >/<        - Increase/decrease priority",
-		" <leader>s		- Search tasks",
-		" <leader>f		- Filter tasks",
-		" <leader>S		- Sort tasks",
-		" <leader>t     - Template operations",
-		" <leader>i		- Show detailed stats",
-		" <leader>r 	- Reset to original list",
+		" s		- Search tasks",
+		" f		- Filter tasks",
+		" S		- Sort tasks",
+		" t     - Template operations",
+		" I		- Show detailed stats",
+		" R- Reset to original list",
 		string.rep("─", help_width),
 		" Press q to close this window",
 	}

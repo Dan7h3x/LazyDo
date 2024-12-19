@@ -115,7 +115,7 @@ M.defaults = {
 		clear_filter = "F",
 		sort_menu = "S",
 		templates = "t",
-		quick_stats = "S",
+		quick_stats = "I",
 
 		-- Window control
 		close_window = "q", -- Added explicit close window keymap
@@ -139,4 +139,3 @@ M.defaults = {
 }
 
 return M
-
