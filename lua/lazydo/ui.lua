@@ -838,18 +838,26 @@ function M.setup_task_highlights(lazydo)
 				end
 			end
 
-			-- Notes section highlighting
+			-- Notes section highlighting with improved boundary detection
 			local note_icon = lazydo.opts.icons.note
 			local note_start = line:find(note_icon, 1, true)
+			
 			if note_start then
-				-- Highlight "Notes:" header
+				-- Start of notes section
 				add_hl(lnum, note_start - 1, #line - 1, "LazyDoNote")
 				in_notes_section = true
-			elseif in_notes_section and content:match("^│%s+") then
-				-- Highlight the actual note content
-				local content_start = line:find("%s[^%s]") -- Find first non-space after initial spaces
-				if content_start then
-					add_hl(lnum, content_start, #line - 1, "LazyDoNote")
+				notes_end_found = false
+			elseif in_notes_section then
+				-- Check for section boundaries
+				if content:match("^├") or content:match("Subtasks") or content:match("^╰") then
+					in_notes_section = false
+					notes_end_found = true
+				elseif content:match("^│%s+") and not notes_end_found then
+					-- Highlight the actual note content
+					local content_start = line:find("%s[^%s]")
+					if content_start then
+						add_hl(lnum, content_start, #line - 1, "LazyDoNote")
+					end
 				end
 			end
 
