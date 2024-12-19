@@ -1177,7 +1177,6 @@ function M.render_status_line(lazydo)
 	})
 end
 
--- Replace the toggle_subtask_completion function with this improved version
 function M.toggle_subtask_completion(lazydo)
 	local task = lazydo:get_current_task()
 	if not task then
@@ -1197,53 +1196,54 @@ function M.toggle_subtask_completion(lazydo)
 		return
 	end
 
-	-- Find task start line and count subtasks
+	-- Find task boundaries and subtask section
 	local task_start = nil
+	local subtask_section_start = nil
 	local subtask_index = 0
-	local found_index = nil
 
-	-- Scan backwards to find task start and count subtasks until current line
+	-- Scan backwards to find task start and subtask section
 	for i = current_line, 1, -1 do
 		local line = lines[i]
-		if line:match("^%s*╭") then
+		if line:match("^%s*╭") then -- Found task start
 			task_start = i
 			break
+		elseif line:match("Subtasks") then -- Found subtask section
+			subtask_section_start = i
 		end
 	end
 
-	if not task_start then
-		vim.notify("Could not find task start", vim.log.levels.WARN)
+	if not task_start or not subtask_section_start then
+		vim.notify("Could not find task boundaries", vim.log.levels.WARN)
 		return
 	end
 
-	-- Count subtasks from task start to current line
-	for i = task_start + 1, current_line do
+	-- Count subtasks from subtask section to current line
+	for i = subtask_section_start + 1, current_line do
 		local line = lines[i]
 		if line:match("└─") or line:match("├─") then
 			subtask_index = subtask_index + 1
 			if i == current_line then
-				found_index = subtask_index
+				-- Found our subtask
+				if subtask_index <= #task.subtasks then
+					-- Toggle the subtask completion
+					task.subtasks[subtask_index].done = not task.subtasks[subtask_index].done
+					task.updated_at = os.time()
+
+					-- Save if auto-save is enabled
+					if lazydo.opts.storage.auto_save then
+						require("lazydo.storage").save_tasks(lazydo)
+					end
+
+					-- Refresh the display
+					lazydo:refresh_display()
+					return
+				end
 				break
 			end
 		end
 	end
 
-	if not found_index or not task.subtasks[found_index] then
-		vim.notify("Could not determine subtask position", vim.log.levels.WARN)
-		return
-	end
-
-	-- Toggle the subtask completion
-	task.subtasks[found_index].done = not task.subtasks[found_index].done
-	task.updated_at = os.time()
-
-	-- Save if auto-save is enabled
-	if lazydo.opts.storage.auto_save then
-		require("lazydo.storage").save_tasks(lazydo)
-	end
-
-	-- Refresh the display
-	lazydo:refresh_display()
+	vim.notify("Could not determine subtask position", vim.log.levels.WARN)
 end
 
 
