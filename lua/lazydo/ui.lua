@@ -1,6 +1,5 @@
 local M = {}
 local utils = require("lazydo.utils")
-
 -- Add animations and transitions
 M.ANIMATIONS = {
 	FADE_FRAMES = 10,
@@ -201,9 +200,9 @@ M.CONSTANTS = {
 		SEPARATOR = "•",
 		FOLD_OPEN = "▼",
 		FOLD_CLOSED = "▶",
-		PRIORITY_HIGH = "★",
-		PRIORITY_MEDIUM = "☆",
-		PRIORITY_LOW = "·",
+		PRIORITY_HIGH = "",
+		PRIORITY_MEDIUM = "",
+		PRIORITY_LOW = "󰻂",
 	},
 	PADDING = 2,
 	MIN_WIDTH = 60,
@@ -1102,7 +1101,7 @@ function M.render_progress_bar(total, completed, width)
 	-- Add percentage display
 	-- local percentage = string.format(" %d%%", math.floor(progress * 100))
 
-	return filled .. empty
+	return "%#LazyDoProgressFull#" .. filled .. "%#LazyDoProgressEmpty#" .. empty
 end
 
 -- Add floating window animations
