@@ -599,11 +599,17 @@ function M.setup_buffer_keymaps(lazydo, buf)
 
 	-- Task movement
 	vim.keymap.set("n", lazydo.opts.keymaps.move_up, function()
-		lazydo:move_task_up()
+		local task = lazydo:get_current_task()
+		if task then
+			lazydo:move_task(task, -1)
+		end
 	end, { buffer = buf, desc = "Move task up", silent = true })
 
 	vim.keymap.set("n", lazydo.opts.keymaps.move_down, function()
-		lazydo:move_task_down()
+		local task = lazydo:get_current_task()
+		if task then
+			lazydo:move_task(task, 1)
+		end
 	end, { buffer = buf, desc = "Move task down", silent = true })
 
 	-- UI controls
@@ -633,11 +639,60 @@ function M.setup_buffer_keymaps(lazydo, buf)
 
 	vim.keymap.set("n", lazydo.opts.keymaps.add_below or "O", function()
 		local current = lazydo:get_current_task()
+		if not current then
+			-- If no current task, just add at the end
+			vim.ui.input({
+				prompt = "New task: ",
+			}, function(input)
+				if input and input ~= "" then
+					lazydo:add_task(input, { priority = 2 })
+					lazydo:refresh_display()
+				end
+			end)
+			return
+		end
+
 		vim.ui.input({
 			prompt = "New task below: ",
 		}, function(input)
 			if input and input ~= "" then
-				lazydo:add_task_below(input, current and current.priority or 2, current and current.id or nil)
+				-- Find current task's index
+				local current_index = nil
+				for i, task in ipairs(lazydo.tasks) do
+					if task.id == current.id then
+						current_index = i
+						break
+					end
+				end
+
+				if current_index then
+					-- Create new task
+					local new_task = lazydo:add_task(input, {
+						priority = current.priority, -- Inherit priority
+						tags = vim.deepcopy(current.tags) -- Inherit tags
+					})
+
+					-- Move the new task to position after current task
+					local new_index = nil
+					for i, task in ipairs(lazydo.tasks) do
+						if task.id == new_task.id then
+							new_index = i
+							break
+						end
+					end
+
+					if new_index then
+						-- Move the task to the position after current task
+						table.remove(lazydo.tasks, new_index)
+						table.insert(lazydo.tasks, current_index + 1, new_task)
+					end
+
+					-- Save and refresh
+					if lazydo.opts.storage.auto_save then
+						require("lazydo.storage").save_tasks(lazydo)
+					end
+					lazydo:refresh_display()
+				end
 			end
 		end)
 	end, { buffer = buf, desc = "Add task below current", silent = true })
