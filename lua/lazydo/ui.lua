@@ -2,9 +2,27 @@ local M = {}
 local utils = require("lazydo.utils")
 
 -- Add this helper function to find subtask index from cursor position
-local function get_subtask_under_cursor(lines, current_line)
-	-- First find the task start by scanning backwards
+local function get_subtask_under_cursor(lazydo, current_line)
+	-- Get the current task first
+	local task = lazydo:get_current_task()
+	if not task or #task.subtasks == 0 then
+		return nil
+	end
+
+	-- Get buffer lines
+	local lines = vim.api.nvim_buf_get_lines(lazydo.buf, 0, -1, false)
+	local line_content = lines[current_line]
+
+	-- Verify we're on a subtask line
+	if not line_content or not (line_content:match("└─") or line_content:match("├─")) then
+		return nil
+	end
+
+	-- Find task boundaries
 	local task_start = nil
+	local task_end = nil
+	
+	-- Scan backwards to find task start
 	for i = current_line, 1, -1 do
 		if lines[i]:match("^%s*╭") then
 			task_start = i
@@ -16,14 +34,18 @@ local function get_subtask_under_cursor(lines, current_line)
 		return nil
 	end
 
-	-- Now scan forward from task start to current line to count subtasks
+	-- Count subtasks from task start to current line
 	local subtask_index = 0
 	for i = task_start + 1, current_line do
 		local line = lines[i]
 		if line:match("└─") or line:match("├─") then
 			subtask_index = subtask_index + 1
 			if i == current_line then
-				return subtask_index
+				-- Verify the index is within bounds of task's subtasks
+				if subtask_index <= #task.subtasks then
+					return subtask_index
+				end
+				break
 			end
 		end
 	end
@@ -312,11 +334,6 @@ function M.create_window(lazydo)
 		vim.api.nvim_win_set_option(win, "winblend", lazydo.opts.ui.winblend or 0)
 		M.setup_buffer_keymaps(lazydo, lazydo.buf)
 		M.setup_auto_save(lazydo)
-
-		vim.keymap.set("n", "?", function()
-			lazydo.show_help = not lazydo.show_help
-			lazydo:refresh_display()
-		end, { buffer = lazydo.buf, desc = "Toggle help" })
 	end
 
 	return win
@@ -1219,20 +1236,12 @@ function M.toggle_subtask_completion(lazydo)
 		return
 	end
 
-	-- Get cursor position and buffer content
+	-- Get cursor position
 	local cursor = vim.api.nvim_win_get_cursor(lazydo.win)
 	local current_line = cursor[1]
-	local lines = vim.api.nvim_buf_get_lines(lazydo.buf, 0, -1, false)
-	local line_content = lines[current_line]
 
-	-- Check if cursor is on a subtask line
-	if not line_content or not (line_content:match("└─") or line_content:match("├─")) then
-		vim.notify("Not on a subtask line", vim.log.levels.WARN)
-		return
-	end
-
-	-- Find which subtask is under cursor
-	local subtask_index = get_subtask_under_cursor(lines, current_line - 1)
+	-- Find which subtask is under cursor using improved function
+	local subtask_index = get_subtask_under_cursor(lazydo, current_line)
 	if not subtask_index or not task.subtasks[subtask_index] then
 		vim.notify("Could not determine subtask position", vim.log.levels.WARN)
 		return
@@ -1250,6 +1259,7 @@ function M.toggle_subtask_completion(lazydo)
 	-- Refresh the display
 	lazydo:refresh_display()
 end
+
 
 function M.setup_auto_save(lazydo)
 	-- Save on buffer leave
