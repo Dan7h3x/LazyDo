@@ -343,7 +343,7 @@ function M.render_task_block(task, width, indent, icons)
 				indent
 					.. box.VERTICAL
 					.. string.format(" %s Notes:", icons.note)
-					.. string.rep(" ", inner_width - 8)
+					.. string.rep(" ", inner_width - 9)
 					.. box.VERTICAL
 			)
 
@@ -916,7 +916,7 @@ function M.create_help_window(lazydo)
 	})
 
 	-- Set help window options
-	vim.api.nvim_win_set_option(help_win, "winblend", 10)
+	vim.api.nvim_win_set_option(help_win, "winblend", lazydo.opts.ui.winblend or 5)
 	vim.api.nvim_win_set_option(help_win, "cursorline", true)
 
 	-- Add help content
@@ -936,12 +936,12 @@ function M.create_help_window(lazydo)
 		" n          - Add/edit note",
 		" d          - Set due date",
 		" >/<        - Increase/decrease priority",
-		" s		- Search tasks",
-		" f		- Filter tasks",
-		" S		- Sort tasks",
-		" t     - Template operations",
-		" I		- Show detailed stats",
-		" R- Reset to original list",
+		" s		      - Search tasks",
+		" f		      - Filter tasks",
+		" S		      - Sort tasks",
+		" t         - Template operations",
+		" I		      - Show detailed stats",
+		" R         - Reset to original list",
 		string.rep("─", help_width),
 		" Press q to close this window",
 	}
@@ -1100,7 +1100,6 @@ function M.render_progress_bar(total, completed, width)
 	local filled_width = math.floor(width * progress)
 	local empty_width = width - filled_width
 
-	-- Use block characters with green for filled and white for empty
 	local filled = string.rep("█", filled_width)
 	local empty = string.rep("░", empty_width)
 
@@ -1285,12 +1284,12 @@ function M.setup_auto_save(lazydo)
 		end,
 	})
 
-	-- Save periodically (every 30 seconds)
+	-- Save periodically (every 5 seconds)
 	if not lazydo.auto_save_timer then
 		lazydo.auto_save_timer = vim.loop.new_timer()
 		lazydo.auto_save_timer:start(
-			30000,
-			30000,
+			lazydo.opts.storage.save_interval * 1000 or 5000,
+			lazydo.opts.storage.save_interval * 1000 or 5000,
 			vim.schedule_wrap(function()
 				if lazydo.tasks_modified then
 					require("lazydo.storage").save_tasks(lazydo)
