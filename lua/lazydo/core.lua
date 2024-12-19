@@ -496,7 +496,7 @@ function LazyDo:setup_highlights()
 			bold = true,
 		},
 		LazyDoSubtaskProgress = {
-			fg = colors.done,
+			fg = colors.progress.full,
 			bold = true,
 		},
 

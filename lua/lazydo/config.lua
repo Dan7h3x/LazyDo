@@ -7,7 +7,7 @@ M.defaults = {
 		directory = nil, -- Will be set to vim.fn.stdpath("data") .. "/lazydo" if nil
 		filename = "tasks.json",
 		auto_save = true,
-		save_interval = 30, -- Auto-save interval in seconds
+		save_interval = 5, -- Auto-save interval in seconds
 	},
 	performance = {
 		debounce_refresh = 100, -- Debounce UI refresh in ms
@@ -38,11 +38,6 @@ M.defaults = {
 			high = "", -- Changed to match UI constants
 			medium = "", -- Changed to match UI constants
 			low = "󰻂", -- Changed to match UI constants
-		},
-		checkbox = {
-			unchecked = "[ ]",
-			checked = "[x]",
-			overdue = "[!]",
 		},
 		bullet = "",
 		expand = "▼", -- Changed to match UI constants

@@ -1135,7 +1135,7 @@ function M.render_status_line(lazydo)
 
 	-- Define colors for different elements
 	local colors = {
-		separator = "#6272a4", -- Soft purple for separators
+		separator = "#a202b4", -- Soft purple for separators
 		numbers = "#bd93f9", -- Bright purple for numbers
 		labels = "#f8f8f2", -- White for labels
 		warning = "#ffb86c", -- Orange for warnings
