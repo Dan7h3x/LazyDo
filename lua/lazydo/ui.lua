@@ -1,7 +1,6 @@
 local M = {}
 local utils = require("lazydo.utils")
 
-
 -- Add animations and transitions
 M.ANIMATIONS = {
 	FADE_FRAMES = 10,
@@ -333,10 +332,10 @@ function M.render_task_block(task, width, indent, icons)
 				or string.format("(%d days overdue)", math.abs(days_left))
 
 			-- Enhanced urgency indicator with dynamic symbols
-			local urgency = days_left < 0 and "⚠"
-				or days_left == 0 and "⌛"
-				or days_left <= 2 and "⚡"
-				or days_left <= 7 and "◷"
+			local urgency = days_left < 0 and "󰀦 "
+				or days_left == 0 and "󰥕 "
+				or days_left <= 2 and "󰠠 "
+				or days_left <= 7 and "󰥔 "
 				or "○"
 
 			local date_line = string.format(" %s %s %s %s ", icons.due_date, date_str, countdown, urgency)
@@ -554,28 +553,28 @@ function M.setup_buffer_keymaps(lazydo, buf)
 	end, { buffer = buf, desc = "Delete task", silent = true })
 
 	-- Advanced Task Management
-	vim.keymap.set("n", "<leader>s", function()
+	vim.keymap.set("n", lazydo.opts.keymaps.search, function()
 		M.show_search_prompt(lazydo)
 	end, { buffer = buf, desc = "Search tasks", silent = true })
 
-	vim.keymap.set("n", "<leader>f", function()
+	vim.keymap.set("n", lazydo.opts.keymaps.filter, function()
 		M.show_filter_menu(lazydo)
 	end, { buffer = buf, desc = "Filter tasks", silent = true })
 
-	vim.keymap.set("n", "<leader>S", function()
+	vim.keymap.set("n", lazydo.opts.keymaps.sort, function()
 		M.show_sort_menu(lazydo)
 	end, { buffer = buf, desc = "Sort tasks", silent = true })
 
-	vim.keymap.set("n", "<leader>t", function()
+	vim.keymap.set("n", lazydo.opts.keymaps.template, function()
 		M.show_template_menu(lazydo)
 	end, { buffer = buf, desc = "Template operations", silent = true })
 
-	vim.keymap.set("n", "<leader>i", function()
+	vim.keymap.set("n", lazydo.opts.keymaps.quick_stats, function()
 		M.show_statistics(lazydo)
 	end, { buffer = buf, desc = "Show detailed statistics", silent = true })
 
 	-- Reset filtered/searched results
-	vim.keymap.set("n", "<leader>r", function()
+	vim.keymap.set("n", lazydo.opts.keymaps.clear_filter, function()
 		if lazydo._original_tasks then
 			lazydo.tasks = lazydo._original_tasks
 			lazydo._original_tasks = nil
@@ -669,7 +668,7 @@ function M.setup_buffer_keymaps(lazydo, buf)
 					-- Create new task
 					local new_task = lazydo:add_task(input, {
 						priority = current.priority, -- Inherit priority
-						tags = vim.deepcopy(current.tags) -- Inherit tags
+						tags = vim.deepcopy(current.tags), -- Inherit tags
 					})
 
 					-- Move the new task to position after current task
@@ -701,7 +700,6 @@ function M.setup_buffer_keymaps(lazydo, buf)
 	vim.keymap.set("n", lazydo.opts.keymaps.toggle_subtask or "<C-Space>", function()
 		M.toggle_subtask_completion(lazydo)
 	end, { buffer = buf, desc = "Toggle subtask completion", silent = true })
-
 
 	-- Backup controls
 	vim.keymap.set("n", "<leader>bb", function()
@@ -1122,7 +1120,6 @@ function M.render_progress_bar(total, completed, width)
 	return filled .. empty
 end
 
-
 -- Add floating window animations
 function M.animate_window_open(win, opts)
 	local start_width = math.floor(opts.width * 0.5)
@@ -1292,7 +1289,6 @@ function M.toggle_subtask_completion(lazydo)
 	vim.notify("Could not determine subtask position", vim.log.levels.WARN)
 end
 
-
 function M.setup_auto_save(lazydo)
 	-- Save on buffer leave
 	vim.api.nvim_create_autocmd({ "BufLeave", "VimLeavePre" }, {
@@ -1320,77 +1316,77 @@ end
 
 -- Create a backup of current tasks
 function M.create_backup(lazydo)
-    if not lazydo or not lazydo.tasks then
-        vim.notify("No tasks to backup", vim.log.levels.WARN)
-        return
-    end
+	if not lazydo or not lazydo.tasks then
+		vim.notify("No tasks to backup", vim.log.levels.WARN)
+		return
+	end
 
-    -- Get the current tasks file path and create backup path
-    local tasks_file = lazydo.opts.storage.file
-    local backup_file = tasks_file .. ".backup"
+	-- Get the current tasks file path and create backup path
+	local tasks_file = lazydo.opts.storage.file
+	local backup_file = tasks_file .. ".backup"
 
-    -- Create a backup table with metadata
-    local backup_data = {
-        timestamp = os.time(),
-        tasks = vim.deepcopy(lazydo.tasks),
-        metadata = {
-            total_tasks = #lazydo.tasks,
-            backup_date = os.date("%Y-%m-%d %H:%M:%S"),
-        }
-    }
+	-- Create a backup table with metadata
+	local backup_data = {
+		timestamp = os.time(),
+		tasks = vim.deepcopy(lazydo.tasks),
+		metadata = {
+			total_tasks = #lazydo.tasks,
+			backup_date = os.date("%Y-%m-%d %H:%M:%S"),
+		},
+	}
 
-    -- Save the backup
-    local backup_json = vim.json.encode(backup_data)
-    local file = io.open(backup_file, "w")
-    if file then
-        file:write(backup_json)
-        file:close()
-        vim.notify(string.format("Backup created with %d tasks", #lazydo.tasks), vim.log.levels.INFO)
-    else
-        vim.notify("Failed to create backup", vim.log.levels.ERROR)
-    end
+	-- Save the backup
+	local backup_json = vim.json.encode(backup_data)
+	local file = io.open(backup_file, "w")
+	if file then
+		file:write(backup_json)
+		file:close()
+		vim.notify(string.format("Backup created with %d tasks", #lazydo.tasks), vim.log.levels.INFO)
+	else
+		vim.notify("Failed to create backup", vim.log.levels.ERROR)
+	end
 end
 
 -- Restore tasks from backup
 function M.restore_from_backup(lazydo)
-    -- Get the backup file path
-    local tasks_file = lazydo.opts.storage.file
-    local backup_file = tasks_file .. ".backup"
+	-- Get the backup file path
+	local tasks_file = lazydo.opts.storage.file
+	local backup_file = tasks_file .. ".backup"
 
-    -- Check if backup exists
-    local file = io.open(backup_file, "r")
-    if not file then
-        vim.notify("No backup file found", vim.log.levels.WARN)
-        return
-    end
+	-- Check if backup exists
+	local file = io.open(backup_file, "r")
+	if not file then
+		vim.notify("No backup file found", vim.log.levels.WARN)
+		return
+	end
 
-    -- Read and parse backup data
-    local content = file:read("*all")
-    file:close()
+	-- Read and parse backup data
+	local content = file:read("*all")
+	file:close()
 
-    local ok, backup_data = pcall(vim.json.decode, content)
-    if not ok or not backup_data or not backup_data.tasks then
-        vim.notify("Invalid backup file", vim.log.levels.ERROR)
-        return
-    end
+	local ok, backup_data = pcall(vim.json.decode, content)
+	if not ok or not backup_data or not backup_data.tasks then
+		vim.notify("Invalid backup file", vim.log.levels.ERROR)
+		return
+	end
 
-    -- Confirm restoration with user
-    local backup_date = backup_data.metadata and backup_data.metadata.backup_date or "unknown date"
-    local msg = string.format("Restore %d tasks from backup (%s)?", #backup_data.tasks, backup_date)
-    
-    vim.ui.select({"Yes", "No"}, {
-        prompt = msg,
-    }, function(choice)
-        if choice == "Yes" then
-            -- Restore tasks
-            lazydo.tasks = backup_data.tasks
-            if lazydo.opts.storage.auto_save then
-                require("lazydo.storage").save_tasks(lazydo)
-            end
-            lazydo:refresh_display()
-            vim.notify(string.format("Restored %d tasks from backup", #backup_data.tasks), vim.log.levels.INFO)
-        end
-    end)
+	-- Confirm restoration with user
+	local backup_date = backup_data.metadata and backup_data.metadata.backup_date or "unknown date"
+	local msg = string.format("Restore %d tasks from backup (%s)?", #backup_data.tasks, backup_date)
+
+	vim.ui.select({ "Yes", "No" }, {
+		prompt = msg,
+	}, function(choice)
+		if choice == "Yes" then
+			-- Restore tasks
+			lazydo.tasks = backup_data.tasks
+			if lazydo.opts.storage.auto_save then
+				require("lazydo.storage").save_tasks(lazydo)
+			end
+			lazydo:refresh_display()
+			vim.notify(string.format("Restored %d tasks from backup", #backup_data.tasks), vim.log.levels.INFO)
+		end
+	end)
 end
 
 return M
