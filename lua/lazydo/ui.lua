@@ -561,11 +561,11 @@ function M.setup_buffer_keymaps(lazydo, buf)
 		M.show_filter_menu(lazydo)
 	end, { buffer = buf, desc = "Filter tasks", silent = true })
 
-	vim.keymap.set("n", lazydo.opts.keymaps.sort, function()
+	vim.keymap.set("n", lazydo.opts.keymaps.sort_menu, function()
 		M.show_sort_menu(lazydo)
 	end, { buffer = buf, desc = "Sort tasks", silent = true })
 
-	vim.keymap.set("n", lazydo.opts.keymaps.template, function()
+	vim.keymap.set("n", lazydo.opts.keymaps.templates, function()
 		M.show_template_menu(lazydo)
 	end, { buffer = buf, desc = "Template operations", silent = true })
 
