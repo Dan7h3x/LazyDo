@@ -324,7 +324,7 @@ local function render_progress_bar(progress, width)
 
 	if style == "modern" then
 		return string.format(
-			"%s[%s%s] %d%%",
+			"%s [%s%s] %d%%",
 			progress_icon,
 			string.rep(config.theme.progress_bar.filled, filled),
 			string.rep(config.theme.progress_bar.empty, empty),

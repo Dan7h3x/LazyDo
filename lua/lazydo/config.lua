@@ -193,6 +193,7 @@ local defaults = {
 			live_preview = true,
 		},
 	},
+	title = " LazyDo Tasks ",
 	layout = {
 		width = 0.7, -- Percentage of screen width
 		height = 0.8, -- Percentage of screen height
