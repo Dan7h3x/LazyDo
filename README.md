@@ -3,13 +3,16 @@
   <p>A smart, feature-rich task manager for Neovim</p>
 
   <p>
-    <a href="#-features">Features</a> •
     <a href="#-screenshots">Screenshots</a> •
+    <a href="#-features">Features</a> •
     <a href="#-installation">Installation</a> •
     <a href="#usage">Usage</a> •
     <a href="#-configuration">Configuration</a>
   </p>
 </div>
+##  Screenshots
+![Main Panel](https://github.com/user-attachments/assets/da5255fa-90c9-4ddd-adc0-5ab4da2cbff0)
+![StatusLine](https://github.com/user-attachments/assets/e81bc6dd-815d-4a5d-8086-d815ba7cff1d)
 
 ## ✨ Features
 
@@ -30,13 +33,16 @@ Using [lazy.nvim](https://github.com/folke/lazy.nvim):
 {
     "Dan7h3x/LazyDo",
     branch = "main",
+    keys = { -- recommended keymap for easy toggle LazyDo in normal and insert modes (arbitrary)
+	{
+	"<F2>","<ESC><CMD>LazyDoToggle<CR>",
+	mode = {"n","i"},
+	},
+    },
     event = "VeryLazy",
     opts = {
       -- your config here
     },
-    config = function(_,opts)
-        require("lazydo").setup(opts)
-    end,
 }
 ```
 and integration with `lualine.nvim`:
@@ -66,8 +72,12 @@ and integration with `lualine.nvim`:
   - p - Toggle priority
   - n - Add/edit note
   - z - Toggle fold
+  - K - Move task up
+  - J - Move task down
 and more in help window using `?`.
+
 ## 🔧 Configuration
+All available options:
 
 ```lua
 {
@@ -178,7 +188,9 @@ and more in help window using `?`.
 		due_date = "",
 		recurring = {
 			daily = "",
-			weekly = "",
+		##  Screenshots
+![Main Panel](https://github.com/user-attachments/assets/da5255fa-90c9-4ddd-adc0-5ab4da2cbff0)
+![StatusLine](https://github.com/user-attachments/assets/e81bc6dd-815d-4a5d-8086-d815ba7cff1d)	weekly = "",
 			monthly = "",
 		},
 		metadata = "󰂵",
@@ -217,9 +229,7 @@ and more in help window using `?`.
 	},
 }
 ```
-##  Screenshots
-![Main Panel](https://github.com/user-attachments/assets/da5255fa-90c9-4ddd-adc0-5ab4da2cbff0)
-![StatusLine](https://github.com/user-attachments/assets/e81bc6dd-815d-4a5d-8086-d815ba7cff1d)
+
 ## 🤝 Contributing
 Contributors are welcome here and thank you btw.
 
