@@ -30,7 +30,7 @@ Using [lazy.nvim](https://github.com/folke/lazy.nvim):
 {
     "Dan7h3x/LazyDo",
     branch = "main",
-    events = "VeryLazy",
+    event = "VeryLazy",
     opts = {
       -- your config here
     },
