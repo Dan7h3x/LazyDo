@@ -10,7 +10,9 @@
     <a href="#-configuration">Configuration</a>
   </p>
 </div>
+
 ##  Screenshots
+
 ![Main Panel](https://github.com/user-attachments/assets/da5255fa-90c9-4ddd-adc0-5ab4da2cbff0)
 ![StatusLine](https://github.com/user-attachments/assets/e81bc6dd-815d-4a5d-8086-d815ba7cff1d)
 
