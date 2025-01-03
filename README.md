@@ -3,11 +3,11 @@
   <p>A smart, feature-rich task manager for Neovim</p>
 
   <p>
-    <a href="#features">Features</a> •
-    <a href="#screenshots">Screenshots</a> •
-    <a href="#installation">Installation</a> •
+    <a href="#-features">Features</a> •
+    <a href="#-screenshots">Screenshots</a> •
+    <a href="#-installation">Installation</a> •
     <a href="#usage">Usage</a> •
-    <a href="#configuration">Configuration</a>
+    <a href="#-configuration">Configuration</a>
   </p>
 </div>
 
