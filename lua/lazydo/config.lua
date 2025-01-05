@@ -93,6 +93,22 @@ local defaults = {
 			last_connector = "└─",
 		},
 	},
+	views = {
+        default = "list", -- "list" or "kanban"
+        kanban = {
+            enabled = true,
+            columns = {
+                {name = "Todo", status = "pending", icon = "󰄱", color = "#7aa2f7"},
+                {name = "In Progress", status = "in_progress", icon = "󱎫", color = "#e0af68"},
+                {name = "Blocked", status = "blocked", icon = "󰯆", color = "#f7768e"},
+                {name = "Done", status = "done", icon = "󰄬", color = "#9ece6a"}
+            },
+            column_width = 30, -- or 'auto'
+            show_column_stats = true,
+            compact_view = false,
+            highlight_cards = true,
+        }
+    },
 
 	icons = {
 		task_pending = "",

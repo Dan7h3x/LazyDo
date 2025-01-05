@@ -30,6 +30,7 @@ function Core.new(config)
 		_last_filter = nil,
 		_last_sort = nil,
 		_template_cache = {},
+		_view_mode = config.views.default or "list",
 	}, Core)
 
 	-- Load tasks
@@ -68,6 +69,7 @@ function Core:toggle()
 			cursor = vim.api.nvim_win_get_cursor(0),
 			tasks = Utils.deep_copy(self.tasks),
 			scroll = vim.fn.winsaveview(),
+			view_mode = self._view_mode,
 		}
 		UI.close()
 		self._ui_visible = false

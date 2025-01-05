@@ -73,6 +73,22 @@ function LazyDo.setup(opts)
 	-- Setup with error handling
 	local success, result = pcall(function()
 		LazyDo._config = Config.setup(opts)
+		if LazyDo._config.views then
+            if not LazyDo._config.views.default then
+                LazyDo._config.views.default = "list"
+            end
+            if not LazyDo._config.views.kanban then
+                LazyDo._config.views.kanban = {
+                    enabled = true,
+                    columns = {
+                        {name = "Todo", status = "pending", icon = "󰄱", color = "#7aa2f7"},
+                        {name = "In Progress", status = "in_progress", icon = "󱎫", color = "#e0af68"},
+                        {name = "Blocked", status = "blocked", icon = "󰯆", color = "#f7768e"},
+                        {name = "Done", status = "done", icon = "󰄬", color = "#9ece6a"}
+                    }
+                }
+            end
+        end
 
 		-- Setup highlights with error handling
 		local hl_success, hl_err = pcall(Highlights.setup, LazyDo._config)
