@@ -2150,7 +2150,7 @@ function UI.show_relations()
 	for _, rel in ipairs(task.relations) do
 		local target = UI.find_task_by_id(rel.target_id)
 		if target then
-			local status_icon = target.status == "done" and config.icons.task_done or icons.task_pending
+			local status_icon = target.status == "done" and config.icons.task_done or config.icons.task_pending
 			table.insert(relation_items, {
 				relation = rel,
 				target = target,
