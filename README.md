@@ -15,7 +15,11 @@
 
 ##  Screenshots
 
-![Main Panel](https://github.com/user-attachments/assets/da5255fa-90c9-4ddd-adc0-5ab4da2cbff0)
+A demo video for `LazyDo`:
+![LazyDo](https://github.com/user-attachments/assets/9fd079c8-52c3-45eb-81ef-e6cb315002fd)
+
+Screenshots form main panel and `lualine`:
+![Main Panel](https://github.com/user-attachments/assets/eda47fa5-7ff8-4c03-93b3-05a6f82bcdea)
 ![StatusLine](https://github.com/user-attachments/assets/e81bc6dd-815d-4a5d-8086-d815ba7cff1d)
 
 ## ✨ Features
