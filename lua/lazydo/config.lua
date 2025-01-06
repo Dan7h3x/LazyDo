@@ -93,22 +93,6 @@ local defaults = {
 			last_connector = "└─",
 		},
 	},
-	views = {
-        default = "list", -- "list" or "kanban"
-        kanban = {
-            enabled = true,
-            columns = {
-                {name = "Todo", status = "pending", icon = "󰄱", color = "#7aa2f7"},
-                {name = "In Progress", status = "in_progress", icon = "󱎫", color = "#e0af68"},
-                {name = "Blocked", status = "blocked", icon = "󰯆", color = "#f7768e"},
-                {name = "Done", status = "done", icon = "󰄬", color = "#9ece6a"}
-            },
-            column_width = 30, -- or 'auto'
-            show_column_stats = true,
-            compact_view = false,
-            highlight_cards = true,
-        }
-    },
 
 	icons = {
 		task_pending = "",
@@ -122,6 +106,7 @@ local defaults = {
 		created = "󰃰",
 		updated = "",
 		note = "",
+		relations = "󱒖 ",
 		due_date = "",
 		recurring = {
 			daily = "",
@@ -209,6 +194,7 @@ local defaults = {
 			live_preview = true,
 		},
 	},
+	title = " LazyDo Tasks ",
 	layout = {
 		width = 0.7, -- Percentage of screen width
 		height = 0.8, -- Percentage of screen height

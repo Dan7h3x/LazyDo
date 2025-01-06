@@ -252,28 +252,6 @@ function M.setup(config)
 			-- bg = colors.selection.bg or colors.task.pending.bg,
 			bold = true,
 		},
-		KanbanHeader = {
-            fg = colors.header.fg,
-            bold = true,
-        },
-        KanbanColumn = {
-            fg = colors.separator.vertical.fg,
-        },
-        KanbanCard = {
-            fg = colors.task.pending.fg,
-            bg = colors.task.pending.bg,
-        },
-        KanbanCardHigh = {
-            fg = colors.priority.high.fg,
-            bold = true,
-        },
-        KanbanCardMedium = {
-            fg = colors.priority.medium.fg,
-        },
-        KanbanCardLow = {
-            fg = colors.priority.low.fg,
-        },
-
 	}
 
 	-- Create all highlight groups

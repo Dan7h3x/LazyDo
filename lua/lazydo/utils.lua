@@ -285,30 +285,6 @@ function Utils.Str.center(text, width)
 	return string.rep(" ", left) .. text .. string.rep(" ", right)
 end
 
-function Utils.Str.truncate(str, width)
-    if not str or width <= 0 then
-        return ""
-    end
-    
-    if vim.fn.strdisplaywidth(str) <= width then
-        return str
-    end
-    
-    local truncated = ""
-    local current_width = 0
-    
-    for char in vim.gsplit(str, "") do
-        local char_width = vim.fn.strdisplaywidth(char)
-        if current_width + char_width > width - 1 then
-            break
-        end
-        truncated = truncated .. char
-        current_width = current_width + char_width
-    end
-    
-    return truncated .. "…"
-end
-
 function Utils.is_floating_window(win_id)
 	local config = vim.api.nvim_win_get_config(win_id)
 	return config.relative ~= ""

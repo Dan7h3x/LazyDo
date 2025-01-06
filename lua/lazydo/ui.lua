@@ -30,24 +30,7 @@ local state = {
 	on_task_update = nil,
 	search_results = {},
 	current_search = nil,
-	config = nil,
-	show_task_info = true,
-	view_mode = "list",
-    last_view_mode = nil,
-    kanban_cursor = {column = 1, row = 1}, -- Track cursor position in kanban view
-}
--- │└─├─ ─╭─╰─
-local ICONS = {
-	SUBTASK_INDENT = "│  ",
-	SUBTASK_LAST = "└──",
-	SUBTASK_MIDDLE = "├──",
-	SEPARATOR = "━", -- Using a different character for main separators
-	NOTE_START = "╭",
-	NOTE_END = "╰",
-	PROGRESS_START = "╭",
-	PROGRESS_END = "╯",
-	PROGRESS_FILL = "█",
-	PROGRESS_EMPTY = "░",
+	show_task_info = false,
 }
 
 local function ensure_number(value, default)
@@ -75,7 +58,7 @@ local function create_task_separator(level, has_subtasks, is_collapsed, width)
 	local separator = indent
 	if has_subtasks then
 		separator = separator
-			.. (is_collapsed and state.config.features.folding.icons.folded or state.config.features.folding.icons.unfolded)
+			.. (is_collapsed and config.features.folding.icons.folded or config.features.folding.icons.unfolded)
 	else
 		separator = separator .. "  "
 	end
@@ -200,7 +183,7 @@ local function clear_state()
 end
 
 local function validate_config()
-	if not state.config then
+	if not config then
 		return false, "Configuration is missing"
 	end
 
@@ -212,18 +195,18 @@ local function validate_config()
 	}
 
 	for _, section in ipairs(required_sections) do
-		if not state.config[section] then
+		if not config[section] then
 			return false, string.format("Missing required configuration section: %s", section)
 		end
 	end
 
 	-- Validate theme colors
-	if not state.config.theme.colors then
+	if not config.theme.colors then
 		return false, "Missing theme colors configuration"
 	end
 
 	-- Validate icons
-	if not state.config.icons.task_pending or not state.config.icons.task_done then
+	if not config.icons.task_pending or not config.icons.task_done then
 		return false, "Missing required task status icons"
 	end
 
@@ -265,7 +248,7 @@ local function create_window()
 		row = size.row,
 		col = size.col,
 		style = "minimal",
-		border = state.config.theme.border or "rounded",
+		border = config.theme.border or "rounded",
 		title = " LazyDo ",
 		title_pos = "center",
 		footer = " [a/A]dd task/subtask, [d]elete, [D]ate, [n]ote, [e]dit task, [z] fold, [p]riority, [?]help ",
@@ -310,8 +293,8 @@ function UI.restore_window_state(state)
 end
 
 local function render_progress_bar(progress, width)
-	local style = state.config.theme.progress_bar.style
-	local bar_width = state.config.theme.progress_bar.width or width
+	local style = config.theme.progress_bar.style
+	local bar_width = config.theme.progress_bar.width or width
 	local filled = math.floor(bar_width * progress / 100)
 	local empty = bar_width - filled
 	progress = progress or 0
@@ -319,7 +302,7 @@ local function render_progress_bar(progress, width)
 
 	-- 󰪞󰪟󰪠󰪡󰪢󰪣󰪤󰪥
 	-- Enhanced progress icons based on percentage
-	local progress_icon = progress == 100 and state.config.icons.task_done
+	local progress_icon = progress == 100 and config.icons.task_done
 		or progress >= 75 and "󰪣"
 		or progress >= 50 and "󰪡"
 		or progress >= 25 and "󰪟"
@@ -328,10 +311,10 @@ local function render_progress_bar(progress, width)
 
 	if style == "modern" then
 		return string.format(
-			"%s[%s%s] %d%%",
+			"%s [%s%s] %d%%",
 			progress_icon,
-			string.rep(state.config.theme.progress_bar.filled, filled),
-			string.rep(state.config.theme.progress_bar.empty, empty),
+			string.rep(config.theme.progress_bar.filled, filled),
+			string.rep(config.theme.progress_bar.empty, empty),
 			progress
 		)
 	elseif style == "minimal" then
@@ -339,8 +322,8 @@ local function render_progress_bar(progress, width)
 	else -- classic
 		return string.format(
 			"%s%s %d%%",
-			string.rep(state.config.theme.progress_bar.filled, filled),
-			string.rep(state.config.theme.progress_bar.empty, empty),
+			string.rep(config.theme.progress_bar.filled, filled),
+			string.rep(config.theme.progress_bar.empty, empty),
 			progress
 		)
 	end
@@ -357,7 +340,7 @@ local function render_note_section(note, indent_level, is_subtask)
 	local regions = {}
 	local current_line = 0
 
-	local note_icon = state.config.icons.note or "󰍨"
+	local note_icon = config.icons.note or "󰍨"
 
 	-- Different connectors and styling for parent vs child tasks
 	local connectors = {
@@ -473,15 +456,15 @@ local function render_note_section(note, indent_level, is_subtask)
 end
 local function render_task_info(task, indent_level)
 	if not state.show_task_info then
-		return "",{}
+		return "", {}
 	end
 	local indent = string.rep("  ", indent_level + 1)
 	local lines = {}
 	local regions = {}
 
 	-- Format timestamps with icons
-	local created_icon = state.config.icons.created or "󰃰"
-	local updated_icon = state.config.icons.updated or "󰦒"
+	local created_icon = config.icons.created or "󰃰"
+	local updated_icon = config.icons.updated or "󰦒"
 	local recurring_icon = "󰑖"
 
 	local created_at = os.date("%Y-%m-%d/%H:%M", task.created_at)
@@ -524,44 +507,8 @@ local function render_task_info(task, indent_level)
 	return single_lines, regions
 end
 
-local function render_metadata(task, indent)
-	if
-		not state.config.features.metadata.enabled
-		or not state.config.features.metadata.display
-		or not task.metadata
-		or vim.tbl_isempty(task.metadata)
-	then
-		return {}, {}
-	end
-
-	local lines = {}
-	local regions = {}
-	local indent_str = string.rep(" ", indent + 2)
-
-	for key, value in pairs(task.metadata) do
-		local line = string.format("%s%s: %s", indent_str, key, tostring(value))
-		table.insert(lines, line)
-
-		-- Add highlights for key and value
-		table.insert(regions, {
-			line = #lines - 1,
-			start = #indent_str,
-			length = #key,
-			hl_group = "LazyDoMetadataKey",
-		})
-		table.insert(regions, {
-			line = #lines - 1,
-			start = #indent_str + #key + 2,
-			length = #tostring(value),
-			hl_group = "LazyDoMetadataValue",
-		})
-	end
-
-	return lines, regions
-end
-
 local function render_tags(task)
-	if not state.config.features.tags.enabled or not task.tags or #task.tags == 0 then
+	if not config.features.tags.enabled or not task.tags or #task.tags == 0 then
 		return "", {}
 	end
 
@@ -570,7 +517,7 @@ local function render_tags(task)
 	local start_col = 0
 
 	for _, tag in ipairs(task.tags) do
-		local formatted_tag = state.config.features.tags.prefix .. tag
+		local formatted_tag = config.features.tags.prefix .. tag
 		table.insert(tags, formatted_tag)
 
 		-- Add highlight for each tag
@@ -590,7 +537,7 @@ local function render_task_header(task, level, is_last)
 		return "", {}
 	end
 
-	-- local base_indent = string.rep(" ", ensure_number(level, 0) * ensure_number(state.confitheme.indent.size, 2))
+	-- local base_indent = string.rep(" ", ensure_number(level, 0) * ensure_number(config.theme.indent.size, 2))
 	local base_indent = string.rep(" ", ensure_number(level, 0) * 2)
 	local regions = {}
 	local current_col = #base_indent
@@ -623,12 +570,12 @@ local function render_task_header(task, level, is_last)
 
 	-- Add connector for subtasks
 	if level > 0 then
-		components.connector = is_last and state.config.theme.indent.last_connector or state.config.theme.indent.connector
+		components.connector = is_last and config.theme.indent.last_connector or config.theme.indent.connector
 		add_region(#components.connector, "LazyDoConnector")
 	end
 
 	-- Add status icon
-	local status_icon = task.status == "done" and state.config.icons.task_done or state.config.icons.task_pending
+	local status_icon = task.status == "done" and config.icons.task_done or config.icons.task_pending
 	local status_hl = task.status == "done" and "LazyDoTaskDone"
 		or (
 			Task.is_overdue(task) and "LazyDoTaskOverdue"
@@ -642,16 +589,16 @@ local function render_task_header(task, level, is_last)
 	add_region(#status_icon, status_hl, 1)
 
 	-- Add priority icon
-	if state.config.icons.priority and state.config.icons.priority[task.priority] then
-		local priority_icon = state.config.icons.priority[task.priority]
+	if config.icons.priority and config.icons.priority[task.priority] then
+		local priority_icon = config.icons.priority[task.priority]
 		components.priority = priority_icon .. " "
 		add_region(#priority_icon, "LazyDoPriority" .. task.priority:sub(1, 1):upper() .. task.priority:sub(2))
 	end
 
 	-- Add folding indicator
-	if state.config.features.folding.enabled and task.subtasks and #task.subtasks > 0 then
+	if config.features.folding.enabled and task.subtasks and #task.subtasks > 0 then
 		components.fold = (
-			task.collapsed and state.config.features.folding.icons.folded or state.config.features.folding.icons.unfolded
+			task.collapsed and config.features.folding.icons.folded or config.features.folding.icons.unfolded
 		) .. " "
 		add_region(#components.fold - 1, "LazyDoFoldIcon", 1)
 	end
@@ -660,7 +607,7 @@ local function render_task_header(task, level, is_last)
 	add_region(#components.content, status_hl, 1)
 
 	-- Add tags
-	if state.config.features.tags.enabled and task.tags and #task.tags > 0 then
+	if config.features.tags.enabled and task.tags and #task.tags > 0 then
 		local tags_str, tag_regions = render_tags(task)
 		if tags_str then
 			components.tags = tags_str
@@ -672,7 +619,7 @@ local function render_task_header(task, level, is_last)
 
 	-- Add due date
 	if task.due_date then
-		local due_text = string.format(" %s %s", state.config.icons.due_date or "", Task.get_due_date_relative(task))
+		local due_text = string.format(" %s %s", config.icons.due_date or "", Task.get_due_date_relative(task))
 		components.due = due_text
 
 		local days_until_due = math.floor((task.due_date - os.time()) / (24 * 60 * 60))
@@ -684,9 +631,9 @@ local function render_task_header(task, level, is_last)
 	end
 
 	-- Add progress bar
-	if state.config.theme.progress_bar and state.config.theme.progress_bar.enabled then
+	if config.theme.progress_bar and config.theme.progress_bar.enabled then
 		local progress = Task.calculate_progress(task)
-		local progress_bar = render_progress_bar(progress, state.config.theme.progress_bar.width)
+		local progress_bar = render_progress_bar(progress, config.theme.progress_bar.width)
 		if progress_bar then
 			local spacer = " | "
 			components.progress = spacer .. progress_bar
@@ -698,7 +645,7 @@ local function render_task_header(task, level, is_last)
 			add_region(#progress_bar, progress_hl, #spacer)
 		end
 	end
-	if state.config.features.task_info and state.config.features.task_info.enabled then
+	if config.features.task_info and config.features.task_info.enabled then
 		local info_lines = render_task_info(task, 0)
 		if info_lines then
 			components.info = info_lines
@@ -809,6 +756,50 @@ local function render_task(task, level, current_line, is_last)
 			current_line = current_line + #sub_lines
 		end
 	end
+
+	current_line = current_line + 1
+	if task.metadata and not vim.tbl_isempty(task.metadata) then
+		local metadata_lines, metadata_regions = UI.render_metadata(task, level + 1)
+		if metadata_lines and #metadata_lines > 0 then
+			-- Add metadata lines
+			for _, line in ipairs(metadata_lines) do
+				table.insert(lines, line)
+			end
+
+			-- Add metadata highlights with proper line offsets
+			for _, region in ipairs(metadata_regions) do
+				table.insert(regions, {
+					line = current_line + region.line,
+					start = ensure_number(region.start, 0),
+					length = ensure_number(region.length, 0),
+					hl_group = region.hl_group,
+				})
+			end
+
+			current_line = current_line + #metadata_lines
+		end
+	end
+	if task.relations and #task.relations > 0 then
+		local relation_lines, relation_regions = UI.render_relations_section(task, level + 1)
+		if relation_lines and #relation_lines > 0 then
+			-- Add relation lines
+			for _, line in ipairs(relation_lines) do
+				table.insert(lines, line)
+			end
+
+			-- Add relation highlights with proper line offsets
+			for _, region in ipairs(relation_regions) do
+				table.insert(regions, {
+					line = current_line + region.line,
+					start = region.start,
+					length = region.length,
+					hl_group = region.hl_group,
+				})
+			end
+
+			current_line = current_line + #relation_lines
+		end
+	end
 	-- Add separator for top-level tasks
 	if level == 0 then
 		local separator =
@@ -838,297 +829,177 @@ local function ensure_valid_window()
 	return true
 end
 
--- function UI.render()
--- 	if not state.buf or not state.win then
--- 		return
--- 	end
--- 	if not ensure_valid_window() then
--- 		return
--- 	end
--- 	vim.api.nvim_buf_clear_namespace(state.buf, ns_id, 0, -1)
--- 	UI.update_task_positions()
-
--- 	if state.view_mode == "kanban" then
---         local lines, regions = UI.render_kanban_view()
---         -- Update buffer with kanban view
---         vim.api.nvim_buf_set_option(state.buf, "modifiable", true)
---         vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, lines)
---         -- Apply highlights
---         for _, region in ipairs(regions) do
---             vim.api.nvim_buf_add_highlight(state.buf, ns_id, region.hl_group, region.line, region.start, region.start + region.length)
---         end
---         vim.api.nvim_buf_set_option(state.buf, "modifiable", false)
---         return
---     end
--- 	vim.api.nvim_buf_clear_namespace(state.buf, ns_id, 0, -1)
-
--- 	local lines = {}
--- 	local all_regions = {}
--- 	local current_line = 0
-
--- 	-- Get window width for proper centering and layout
--- 	local width = get_safe_window_width()
-
--- 	-- Render header section
--- 	local title = state.config.title or " LazyDo Tasks "
--- 	local centered_title = Utils.Str.center(title, width)
--- 	local header_separator = "╭" .. string.rep("━", width - 2) .. "╮"
-
--- 	-- Add header components
--- 	table.insert(lines, centered_title)
--- 	table.insert(all_regions, {
--- 		line = current_line,
--- 		start = math.floor((width - #title) / 2),
--- 		length = #title,
--- 		hl_group = "LazyDoTitle",
--- 	})
--- 	current_line = current_line + 1
-
--- 	-- Add separator after title
--- 	table.insert(lines, header_separator)
--- 	table.insert(all_regions, {
--- 		line = current_line,
--- 		start = 0,
--- 		length = #header_separator,
--- 		hl_group = "LazyDoHeaderSeparator",
--- 	})
--- 	current_line = current_line + 1
-
--- 	-- Add empty line after header
--- 	table.insert(lines, "")
--- 	current_line = current_line + 1
-
--- 	-- Reset task mappings
--- 	state.line_to_task = {}
--- 	state.task_to_line = {}
-
--- 	-- Render tasks
--- 	local tasks_to_render = state.filtered_tasks or state.tasks
--- 	for i, task in ipairs(tasks_to_render) do
--- 		-- Add spacing between tasks based on config
--- 		if i > 1 and state.config.layout.spacing > 0 then
--- 			for _ = 1, state.config.layout.spacing do
--- 				table.insert(lines, "")
--- 				current_line = current_line + 1
--- 			end
--- 		end
-
--- 		-- Render task and its components
--- 		local task_lines, task_regions, task_mappings = render_task(
--- 			task,
--- 			0, -- start at root level
--- 			current_line,
--- 			false -- not last by default
--- 		)
-
--- 		-- Add task content
--- 		vim.list_extend(lines, task_lines)
--- 		vim.list_extend(all_regions, task_regions)
-
--- 		-- Render metadata if enabled
--- 		if state.config.features.metadata and state.config.features.metadata.enabled then
--- 			local metadata_lines, metadata_regions = render_metadata(task, 0)
--- 			vim.list_extend(lines, metadata_lines)
-
--- 			-- Adjust metadata regions to current line position
--- 			for _, region in ipairs(metadata_regions) do
--- 				region.line = region.line + current_line
--- 				table.insert(all_regions, region)
--- 			end
--- 			current_line = current_line + #metadata_lines
--- 		end
-
--- 		-- Update task mappings
--- 		for line_nr, mapping in pairs(task_mappings) do
--- 			state.line_to_task[line_nr] = mapping
--- 			state.task_to_line[mapping.task.id] = line_nr
--- 		end
-
--- 		current_line = current_line + #task_lines
--- 	end
-
--- 	-- Add footer if no tasks
--- 	if #tasks_to_render == 0 then
--- 		local empty_msg = "No tasks found. Press 'a' to add a new task."
--- 		local centered_msg = Utils.Str.center(empty_msg, width)
--- 		table.insert(lines, "")
--- 		table.insert(lines, centered_msg)
--- 		table.insert(all_regions, {
--- 			line = current_line + 1,
--- 			start = math.floor((width - #empty_msg) / 2),
--- 			length = #empty_msg,
--- 			hl_group = "LazyDoEmptyMessage",
--- 		})
--- 	end
-
--- 	-- Add final separator
--- 	local footer_separator = "╰" .. string.rep("━", width - 2) .. "╯"
--- 	table.insert(lines, footer_separator)
--- 	table.insert(all_regions, {
--- 		line = #lines - 1,
--- 		start = 0,
--- 		length = #footer_separator,
--- 		hl_group = "LazyDoHeaderSeparator",
--- 	})
-
--- 	-- Update buffer content
--- 	vim.api.nvim_buf_set_option(state.buf, "modifiable", true)
--- 	vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, lines)
-
--- 	-- Group regions by line for more efficient highlighting
--- 	local grouped_regions = {}
--- 	for _, region in ipairs(all_regions) do
--- 		if region.line and region.start and region.length and region.hl_group then
--- 			grouped_regions[region.line] = grouped_regions[region.line] or {}
--- 			table.insert(grouped_regions[region.line], {
--- 				start = region.start,
--- 				length = region.length,
--- 				hl_group = region.hl_group,
--- 			})
--- 		end
--- 	end
-
--- 	-- Apply highlights efficiently by line
--- 	for line, regions in pairs(grouped_regions) do
--- 		-- Sort regions by start position to ensure proper layering
--- 		table.sort(regions, function(a, b)
--- 			return a.start < b.start
--- 		end)
-
--- 		for _, region in ipairs(regions) do
--- 			pcall(
--- 				vim.api.nvim_buf_add_highlight,
--- 				state.buf,
--- 				ns_id,
--- 				region.hl_group,
--- 				line,
--- 				region.start,
--- 				region.start + region.length
--- 			)
--- 		end
--- 	end
-
--- 	-- Apply search highlights if any
--- 	if #(state.search_results or {}) > 0 then
--- 		highlight_search_results()
--- 	end
-
--- 	-- Lock buffer after rendering
--- 	vim.api.nvim_buf_set_option(state.buf, "modifiable", false)
-
--- 	-- Update status line if configured
--- 	if state.config.features.statusline and state.config.features.statusline.enabled then
--- 		vim.api.nvim_command("redrawstatus!")
--- 	end
--- end
-
 function UI.render()
-    if not state.buf or not state.win then
-        return
-    end
-    if not ensure_valid_window() then
-        return
-    end
-	local config = state.config
+	if not state.buf or not state.win then
+		return
+	end
+	if not ensure_valid_window() then
+		return
+	end
 
-    -- Clear existing highlights and state
-    vim.api.nvim_buf_clear_namespace(state.buf, ns_id, 0, -1)
-    state.line_to_task = {}
-    state.task_to_line = {}
+	vim.api.nvim_buf_clear_namespace(state.buf, ns_id, 0, -1)
 
-    local lines = {}
-    local regions = {}
-    local current_line = 0
+	local lines = {}
+	local all_regions = {}
+	local current_line = 0
 
-    -- Get window dimensions
-    local width = get_safe_window_width()
+	-- Get window width for proper centering and layout
+	local width = get_safe_window_width()
 
-    -- Render header section
-    local title = state.view_mode == "kanban" and " LazyDo Kanban " or " LazyDo Tasks "
-    local centered_title = Utils.Str.center(title, width)
-    local header_separator = "╭" .. string.rep("━", width - 2) .. "╮"
+	-- Render header section
+	local title = config.title or " LazyDo Tasks "
+	local centered_title = Utils.Str.center(title, width)
+	local header_separator = "╭" .. string.rep("━", width - 2) .. "╮"
 
-    -- Add header components
-    table.insert(lines, centered_title)
-    table.insert(regions, {
-        line = current_line,
-        start = math.floor((width - #title) / 2),
-        length = #title,
-        hl_group = "LazyDoTitle",
-    })
-    current_line = current_line + 1
+	-- Add header components
+	table.insert(lines, centered_title)
+	table.insert(all_regions, {
+		line = current_line,
+		start = math.floor((width - #title) / 2),
+		length = #title,
+		hl_group = "LazyDoTitle",
+	})
+	current_line = current_line + 1
 
-    -- Add separator after title
-    table.insert(lines, header_separator)
-    table.insert(regions, {
-        line = current_line,
-        start = 0,
-        length = #header_separator,
-        hl_group = "LazyDoHeaderSeparator",
-    })
-    current_line = current_line + 1
+	-- Add separator after title
+	table.insert(lines, header_separator)
+	table.insert(all_regions, {
+		line = current_line,
+		start = 0,
+		length = #header_separator,
+		hl_group = "LazyDoHeaderSeparator",
+	})
+	current_line = current_line + 1
 
-    -- Add empty line after header
-    table.insert(lines, "")
-    current_line = current_line + 1
+	-- Add empty line after header
+	table.insert(lines, "")
+	current_line = current_line + 1
 
-    -- Render content based on view mode
-    if state.view_mode == "kanban" then
-        local kanban_lines, kanban_regions = UI.render_kanban_view()
-        vim.list_extend(lines, kanban_lines)
-        vim.list_extend(regions, kanban_regions)
-        current_line = current_line + #kanban_lines
-    else
-        -- Render tasks in list view
-        local tasks_to_render = state.filtered_tasks or state.tasks
-        for i, task in ipairs(tasks_to_render) do
-            if i > 1 and config.layout.spacing > 0 then
-                for _ = 1, config.layout.spacing do
-                    table.insert(lines, "")
-                    current_line = current_line + 1
-                end
-            end
+	-- Reset task mappings
+	state.line_to_task = {}
+	state.task_to_line = {}
 
-            local task_lines, task_regions, task_mappings = render_task(task, 0, current_line, false)
-            vim.list_extend(lines, task_lines)
-            vim.list_extend(regions, task_regions)
+	-- Render tasks
+	local tasks_to_render = state.filtered_tasks or state.tasks
+	for i, task in ipairs(tasks_to_render) do
+		-- Add spacing between tasks based on config
+		if i > 1 and config.layout.spacing > 0 then
+			for _ = 1, config.layout.spacing do
+				table.insert(lines, "")
+				current_line = current_line + 1
+			end
+		end
 
-            -- Update task mappings
-            for line_nr, mapping in pairs(task_mappings) do
-                state.line_to_task[line_nr] = mapping
-                state.task_to_line[mapping.task.id] = line_nr
-            end
+		-- Render task and its components
+		local task_lines, task_regions, task_mappings = render_task(
+			task,
+			0, -- start at root level
+			current_line,
+			false -- not last by default
+		)
 
-            current_line = current_line + #task_lines
-        end
-    end
+		-- Add task content
+		vim.list_extend(lines, task_lines)
+		vim.list_extend(all_regions, task_regions)
 
-    -- Add footer
-    local footer_separator = "╰" .. string.rep("━", width - 2) .. "╯"
-    table.insert(lines, footer_separator)
-    table.insert(regions, {
-        line = #lines - 1,
-        start = 0,
-        length = #footer_separator,
-        hl_group = "LazyDoHeaderSeparator",
-    })
+		-- Render task info if enabled
 
-    -- Update buffer content
-    UI.update_buffer_content(lines, regions)
+		-- Render metadata if enabled
+		if config.features.metadata and config.features.metadata.enabled then
+			local metadata_lines, metadata_regions = UI.render_metadata(task, 0)
+			vim.list_extend(lines, metadata_lines)
 
-    -- Apply search highlights if any
-    if #(state.search_results or {}) > 0 then
-        highlight_search_results()
-    end
+			-- Adjust metadata regions to current line position
+			for _, region in ipairs(metadata_regions) do
+				region.line = region.line + current_line
+				table.insert(all_regions, region)
+			end
+			current_line = current_line + #metadata_lines
+		end
 
-    -- Restore cursor position if available
-    if state.last_cursor then
-        pcall(vim.api.nvim_win_set_cursor, state.win, state.last_cursor)
-        state.last_cursor = nil
-    end
+		-- Update task mappings
+		for line_nr, mapping in pairs(task_mappings) do
+			state.line_to_task[line_nr] = mapping
+			state.task_to_line[mapping.task.id] = line_nr
+		end
+
+		current_line = current_line + #task_lines
+	end
+
+	-- Add footer if no tasks
+	if #tasks_to_render == 0 then
+		local empty_msg = "No tasks found. Press 'a' to add a new task."
+		local centered_msg = Utils.Str.center(empty_msg, width)
+		table.insert(lines, "")
+		table.insert(lines, centered_msg)
+		table.insert(all_regions, {
+			line = current_line + 1,
+			start = math.floor((width - #empty_msg) / 2),
+			length = #empty_msg,
+			hl_group = "LazyDoEmptyMessage",
+		})
+	end
+
+	-- Add final separator
+	local footer_separator = "╰" .. string.rep("━", width - 2) .. "╯"
+	table.insert(lines, footer_separator)
+	table.insert(all_regions, {
+		line = #lines - 1,
+		start = 0,
+		length = #footer_separator,
+		hl_group = "LazyDoHeaderSeparator",
+	})
+
+	-- Update buffer content
+	vim.api.nvim_buf_set_option(state.buf, "modifiable", true)
+	vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, lines)
+
+	-- Group regions by line for more efficient highlighting
+	local grouped_regions = {}
+	for _, region in ipairs(all_regions) do
+		if region.line and region.start and region.length and region.hl_group then
+			grouped_regions[region.line] = grouped_regions[region.line] or {}
+			table.insert(grouped_regions[region.line], {
+				start = region.start,
+				length = region.length,
+				hl_group = region.hl_group,
+			})
+		end
+	end
+
+	-- Apply highlights efficiently by line
+	for line, regions in pairs(grouped_regions) do
+		-- Sort regions by start position to ensure proper layering
+		table.sort(regions, function(a, b)
+			return a.start < b.start
+		end)
+
+		for _, region in ipairs(regions) do
+			pcall(
+				vim.api.nvim_buf_add_highlight,
+				state.buf,
+				ns_id,
+				region.hl_group,
+				line,
+				region.start,
+				region.start + region.length
+			)
+		end
+	end
+
+	-- Apply search highlights if any
+	if #(state.search_results or {}) > 0 then
+		highlight_search_results()
+	end
+
+	-- Lock buffer after rendering
+	vim.api.nvim_buf_set_option(state.buf, "modifiable", false)
+
+	-- Update status line if configured
+	if config.features.statusline and config.features.statusline.enabled then
+		vim.api.nvim_command("redrawstatus!")
+	end
 end
-
-
 local function show_help()
 	local help_text = {
 		"LazyDo Keybindings:",
@@ -1199,10 +1070,7 @@ local function show_help()
 		silent = true,
 	})
 end
-function UI.setup(config_opts)
-    state.config = config_opts
-    state.view_mode = config_opts.views and config_opts.views.default or "list"
-end
+
 ---Refresh the UI display
 function UI.refresh()
 	if is_valid_window() and is_valid_buffer() then
@@ -1247,29 +1115,7 @@ function UI.setup_keymaps()
 			Actions.move_task_down(state.tasks, task.id, state.on_task_update)
 		end
 	end, "Move Task Down")
-	map("H", function()
-		if state.view_mode == "kanban" then
-			UI.move_kanban_cursor("left")
-		end
-	end, "Move Left in Kanban")
-	
-	map("L", function()
-		if state.view_mode == "kanban" then
-			UI.move_kanban_cursor("right")
-		end
-	end, "Move Right in Kanban")
-	
-	map("<leader>h", function()
-		if state.view_mode == "kanban" then
-			UI.move_task_to_column("left")
-		end
-	end, "Move Task Left")
-	
-	map("<leader>l", function()
-		if state.view_mode == "kanban" then
-			UI.move_task_to_column("right")
-		end
-	end, "Move Task Right")
+
 	-- Task Status
 	map("<CR>", function()
 		local task = UI.get_task_under_cursor()
@@ -1278,9 +1124,7 @@ function UI.setup_keymaps()
 			UI.refresh()
 		end
 	end, "Toggle Task")
-	map("i", function()
-		UI.toggle_task_info()
-	end, "Toggle Task Info")
+
 	-- Task Management
 	map("d", function()
 		local task = UI.get_task_under_cursor()
@@ -1289,7 +1133,9 @@ function UI.setup_keymaps()
 			UI.refresh()
 		end
 	end, "Delete Task")
-
+	map("i", function()
+		UI.toggle_task_info()
+	end, "Toggle Task Info")
 	map("e", function()
 		local task = UI.get_task_under_cursor()
 		if task then
@@ -1361,21 +1207,47 @@ function UI.setup_keymaps()
 			end)
 		end
 	end, "Convert To SubTask")
-
-	map("r", function()
+	map("<leader>X", function()
 		local task = UI.get_task_under_cursor()
-		if task then
-			vim.ui.select({ "daily", "weekly", "monthly" }, {
-				prompt = "Select Recurring:",
-			}, function(pattern)
-				if pattern then
-					Actions.set_reccuring(state.tasks, pattern)
-					UI.show_feedback("The Recurring set " .. pattern, "info")
-				end
-			end)
+		if not task then
+			UI.show_feedback("No task selected", "warn")
+			return
 		end
-	end, "Set recurring")
 
+		-- Find the parent task by traversing all tasks
+		local function find_parent_and_remove(tasks, target_id)
+			for _, t in ipairs(tasks) do
+				if t.subtasks then
+					for i, subtask in ipairs(t.subtasks) do
+						if subtask.id == target_id then
+							-- Found the subtask, remove it from parent
+							table.remove(t.subtasks, i)
+							return true
+						end
+					end
+					-- Recursively check nested subtasks
+					if find_parent_and_remove(t.subtasks, target_id) then
+						return true
+					end
+				end
+			end
+			return false
+		end
+
+		-- Try to find and remove the task from its parent
+		if find_parent_and_remove(state.tasks, task.id) then
+			-- Add the task to main tasks list
+			table.insert(state.tasks, task)
+
+			if state.on_task_update then
+				state.on_task_update(state.tasks)
+			end
+			UI.show_feedback("Converted subtask to main task")
+			UI.refresh()
+		else
+			UI.show_feedback("Task is not a subtask", "warn")
+		end
+	end, "Convert SubTask to Task")
 	map("<leader>m", function()
 		local task = UI.get_task_under_cursor()
 		if task then
@@ -1395,95 +1267,6 @@ function UI.setup_keymaps()
 	map("?", function()
 		show_help()
 	end, "Help Window")
-
--- new feats
-map("<leader>r", function()
-    UI.add_reminder()
-end, "Add Reminder")
-
-map("<leader>R", function()
-    local task = UI.get_task_under_cursor()
-    if task and task.reminders and #task.reminders > 0 then
-        vim.ui.select(task.reminders, {
-            prompt = "Select reminder:",
-            format_item = function(reminder)
-                return string.format("%s (%s)", 
-                    os.date("%Y-%m-%d %H:%M", reminder.time),
-                    reminder.urgency
-                )
-            end
-        }, function(selected)
-            if selected then
-                -- Show reminder options
-                vim.ui.select({'edit', 'delete'}, {
-                    prompt = "Action:"
-                }, function(action)
-                    if action == 'delete' then
-                        vim.tbl_filter(function(r) return r.id ~= selected.id end, task.reminders)
-                        UI.refresh()
-                    elseif action == 'edit' then
-                        UI.add_reminder() -- Re-use add function for editing
-                    end
-                end)
-            end
-        end)
-    end
-end, "Manage Reminders")
-
--- Relations
-map("<leader>l", function()
-    UI.show_relations()
-end, "Show Relations")
-
-map("<leader>L", function()
-    local task = UI.get_task_under_cursor()
-    if task then
-        vim.ui.select(state.tasks, {
-            prompt = "Select target task:",
-            format_item = function(t) return t.content end
-        }, function(target)
-            if target then
-                vim.ui.select({'blocks', 'depends_on', 'related_to', 'duplicates'}, {
-                    prompt = "Relation type:"
-                }, function(rel_type)
-                    if rel_type then
-                        Task.add_relation(task, target.id, rel_type)
-                        UI.refresh()
-                    end
-                end)
-            end
-        end)
-    end
-end, "Add Relation")
-
--- Kanban View
-map("<leader>k", function()
-    state.view_mode = state.view_mode == "kanban" and "list" or "kanban"
-    UI.refresh()
-    UI.show_feedback("Switched to " .. state.view_mode .. " view")
-end, "Toggle Kanban View")
-
-map("<leader>K", function()
-    if state.view_mode == "kanban" then
-        local task = UI.get_task_under_cursor()
-        if task then
-            vim.ui.select({'todo', 'in_progress', 'blocked', 'done'}, {
-                prompt = "Move to column:"
-            }, function(new_status)
-                if new_status then
-                    task.status = new_status
-                    if state.on_task_update then
-                        state.on_task_update(state.tasks)
-                    end
-                    UI.refresh()
-                end
-            end)
-        end
-    end
-end, "Move Task in Kanban") 
-map("<leader>v", function()
-	UI.toggle_view()
-end, "Toggle View Mode")
 
 	-- Add task creation keymap
 	map("a", function()
@@ -1508,6 +1291,7 @@ end, "Toggle View Mode")
 			end
 		end)
 	end, "Quick Add Task")
+
 	map("z", function()
 		UI.toggle_fold()
 	end, "Toggle Fold")
@@ -1527,59 +1311,65 @@ end, "Toggle View Mode")
 	map("M", function()
 		UI.edit_metadata()
 	end, "Edit Metadata")
+	map("<leader>md", function()
+		local task = UI.get_task_under_cursor()
+		if not task then
+			UI.show_feedback("No task selected", "warn")
+			return
+		end
 
-	-- Add task search
-	map("/", function()
-		vim.ui.input({
-			prompt = "Search tasks:",
-			default = state.current_search or "",
-		}, function(query)
-			if not query or query == "" then
-				state.search_results = {}
-				state.current_search = nil
+		if not task.metadata or vim.tbl_isempty(task.metadata) then
+			UI.show_feedback("No metadata to delete", "warn")
+			return
+		end
+
+		local metadata_keys = vim.tbl_keys(task.metadata)
+		table.sort(metadata_keys)
+
+		vim.ui.select(metadata_keys, {
+			prompt = "Select metadata to delete:",
+			format_item = function(key)
+				return string.format("%s: %s", key, tostring(task.metadata[key]))
+			end,
+		}, function(choice)
+			if choice then
+				task.metadata[choice] = nil
+				if vim.tbl_isempty(task.metadata) then
+					task.metadata = nil
+				end
+				if state.on_task_update then
+					state.on_task_update(state.tasks)
+				end
+				UI.show_feedback("Metadata deleted")
 				UI.refresh()
-				return
 			end
-
-			state.current_search = query
-			state.search_results = {}
-
-			local function search_task(task, parent_indent)
-				local content_lower = task.content:lower()
-				local query_lower = query:lower()
-				local start_idx = content_lower:find(query_lower, 1, true)
-
-				if start_idx then
-					table.insert(state.search_results, {
-						id = task.id,
-						match_start = start_idx + (parent_indent or 0),
-						match_end = start_idx + #query + (parent_indent or 0),
-						line = state.task_to_line[task.id],
-					})
-				end
-
-				if task.subtasks then
-					for _, subtask in ipairs(task.subtasks) do
-						search_task(subtask, (parent_indent or 0) + state.config.theme.indent.size)
-					end
-				end
-			end
-			map("<leader>t", function()
-				UI.edit_tag()
-			end, "Edit Tag")
-			for _, task in ipairs(state.tasks) do
-				search_task(task)
-			end
-
-			if #state.search_results > 0 then
-				UI.show_feedback(string.format("Found %d matches", #state.search_results), "info")
-			else
-				UI.show_feedback("No matches found", "warn")
-			end
-
-			UI.refresh()
 		end)
-	end, "Search")
+	end, "Delete Metadata")
+	map("<leader>l", function()
+		UI.show_relations()
+	end, "Show Relations")
+	map("<leader>L", function()
+		local task = UI.get_task_under_cursor()
+		if task then
+			vim.ui.select(state.tasks, {
+				prompt = "Select target task:",
+				format_item = function(t)
+					return t.content
+				end,
+			}, function(target)
+				if target then
+					vim.ui.select({ "blocks", "depends_on", "related_to", "duplicates" }, {
+						prompt = "Relation type:",
+					}, function(rel_type)
+						if rel_type then
+							Task.add_relation(task, target.id, rel_type)
+							UI.refresh()
+						end
+					end)
+				end
+			end)
+		end
+	end, "Add Relation")
 
 	-- Add sort keymaps
 	map("<leader>sp", function()
@@ -1639,7 +1429,11 @@ function UI.show_feedback(message, level)
 		timeout = 2000,
 	})
 end
-
+function UI.toggle_task_info()
+	state.show_task_info = not state.show_task_info
+	UI.refresh()
+	UI.show_feedback(state.show_task_info and "Task info shown" or "Task info hidden")
+end
 function UI.filter_tasks(filter_fn)
 	if not state.tasks then
 		return
@@ -1647,13 +1441,6 @@ function UI.filter_tasks(filter_fn)
 	local filtered = vim.tbl_filter(filter_fn, state.tasks)
 	state.filtered_tasks = filtered
 	UI.refresh()
-end
-
-
-function UI.toggle_task_info()
-    state.show_task_info = not state.show_task_info
-    UI.refresh()
-    UI.show_feedback(state.show_task_info and "Task info shown" or "Task info hidden")
 end
 
 -- Quick filters
@@ -1895,69 +1682,36 @@ function UI.set_due_date()
 	UI.refresh()
 end
 
-function UI.get_task_at_kanban_position(row, col)
-    local config = state.config.views.kanban
-    local col_width = state.config.column_width == 'auto' 
-        and math.floor(vim.api.nvim_win_get_width(state.win) / #state.config.columns) - 2
-        or state.config.column_width
-
-    local column_index = math.floor(col / col_width) + 1
-    local column = state.config.columns[column_index]
-    
-    if not column then return nil end
-    
-    local tasks_in_column = vim.tbl_filter(function(t)
-        return t.status == column.status
-    end, state.tasks)
-    
-    return tasks_in_column[row - 2] -- Adjust for header row
-end
-
 function UI.get_task_under_cursor()
 	if not state.win or not state.buf then
 		return nil
 	end
-	local cursor = vim.api.nvim_win_get_cursor(state.win)
-    local line_nr = cursor[1]
-    local col_nr = cursor[2]
-	if state.view_mode == "kanban" then
-        local layout = UI.get_kanban_layout()
-        if not layout then return nil end
-        
-        local col_index = math.floor(col_nr / (layout.col_width + 1)) + 1
-        local column = state.config.views.kanban.columns[col_index]
-        
-        if not column then return nil end
-        
-        local tasks_in_column = vim.tbl_filter(function(t)
-            return t.status == column.status
-        end, state.tasks)
-        
-        -- Account for header row
-        local task_index = line_nr - 2
-        return tasks_in_column[task_index]
-	else
-		for task_line, line_info in pairs(state.line_to_task) do
-			local task_end_line = task_line
-			-- Find end of task section (next task start or end of buffer)
-			for i = task_line + 1, vim.api.nvim_buf_line_count(state.buf) do
-				local next_line_info = state.line_to_task[i]
-				if next_line_info then
-					task_end_line = i - 1
-					break
-				end
-				task_end_line = i
-			end
-	
-			-- Check if cursor is within task range
-			if line_nr >= task_line and line_nr <= task_end_line then
-				state.cursor_task = line_info.task
-				return line_info.task
-			end
-		end
-		return state.line_to_task[line_nr] and state.line_to_task[line_nr].task
-    end
 
+	-- Get current cursor position
+	local cursor = vim.api.nvim_win_get_cursor(state.win)
+	local line_nr = cursor[1]
+
+	-- Find the task for current line by checking line range
+	for task_line, line_info in pairs(state.line_to_task) do
+		local task_end_line = task_line
+		-- Find end of task section (next task start or end of buffer)
+		for i = task_line + 1, vim.api.nvim_buf_line_count(state.buf) do
+			local next_line_info = state.line_to_task[i]
+			if next_line_info then
+				task_end_line = i - 1
+				break
+			end
+			task_end_line = i
+		end
+
+		-- Check if cursor is within task range
+		if line_nr >= task_line and line_nr <= task_end_line then
+			state.cursor_task = line_info.task
+			return line_info.task
+		end
+	end
+
+	return nil
 end
 
 function UI.update_task(task)
@@ -2006,32 +1760,6 @@ function UI.update_task_status(task_id, new_status)
 
 	UI.refresh()
 end
-
-function UI.update_task_positions()
-    state.task_to_line = {}
-    if state.view_mode == "kanban" then
-        local current_line = 2 -- Account for header
-        local layout = UI.get_kanban_layout()
-        
-        for col_idx, column in ipairs(state.config.views.kanban.columns) do
-            local tasks = vim.tbl_filter(function(t)
-                return t.status == column.status
-            end, state.tasks)
-            
-            for _, task in ipairs(tasks) do
-                state.task_to_line[task.id] = {
-                    line = current_line,
-                    column = col_idx,
-                    width = layout.col_width
-                }
-                current_line = current_line + 1
-            end
-        end
-    else
-        -- Existing list view task position tracking
-    end
-end
-
 function UI.find_task_by_id(task_id)
 	local function search_tasks(tasks)
 		for _, task in ipairs(tasks) do
@@ -2079,31 +1807,31 @@ function UI.add_tag()
 	end
 end
 function UI.edit_tag()
-    local task = UI.get_task_under_cursor()
-    if not task or not task.tags or #task.tags == 0 then
-        UI.show_feedback("No tags to edit", "warn")
-        return
-    end
+	local task = UI.get_task_under_cursor()
+	if not task or not task.tags or #task.tags == 0 then
+		UI.show_feedback("No tags to edit", "warn")
+		return
+	end
 
-    vim.ui.select(task.tags, {
-        prompt = "Select tag to edit:",
-    }, function(selected_tag)
-        if selected_tag then
-            vim.ui.input({
-                prompt = "Edit tag:",
-                default = selected_tag
-            }, function(new_tag)
-                if new_tag and new_tag ~= "" then
-                    Task.remove_tag(task, selected_tag)
-                    Task.add_tag(task, new_tag)
-                    if state.on_task_update then
-                        state.on_task_update(state.tasks)
-                    end
-                    UI.refresh()
-                end
-            end)
-        end
-    end)
+	vim.ui.select(task.tags, {
+		prompt = "Select tag to edit:",
+	}, function(selected_tag)
+		if selected_tag then
+			vim.ui.input({
+				prompt = "Edit tag:",
+				default = selected_tag,
+			}, function(new_tag)
+				if new_tag and new_tag ~= "" then
+					Task.remove_tag(task, selected_tag)
+					Task.add_tag(task, new_tag)
+					if state.on_task_update then
+						state.on_task_update(state.tasks)
+					end
+					UI.refresh()
+				end
+			end)
+		end
+	end)
 end
 function UI.remove_tag()
 	local task = UI.get_task_under_cursor()
@@ -2225,31 +1953,73 @@ function UI.set_metadata()
 	end
 end
 function UI.edit_metadata()
-    local task = UI.get_task_under_cursor()
-    if not task or not task.metadata or vim.tbl_isempty(task.metadata) then
-        UI.show_feedback("No metadata to edit", "warn")
-        return
-    end
+	local task = UI.get_task_under_cursor()
+	if not task or not task.metadata or vim.tbl_isempty(task.metadata) then
+		UI.show_feedback("No metadata to edit", "warn")
+		return
+	end
 
-    local metadata_keys = vim.tbl_keys(task.metadata)
-    vim.ui.select(metadata_keys, {
-        prompt = "Select metadata to edit:",
-    }, function(selected_key)
-        if selected_key then
-            vim.ui.input({
-                prompt = "Edit metadata value:",
-                default = tostring(task.metadata[selected_key])
-            }, function(new_value)
-                if new_value then
-                    Task.set_metadata(task, selected_key, new_value)
-                    if state.on_task_update then
-                        state.on_task_update(state.tasks)
-                    end
-                    UI.refresh()
-                end
-            end)
-        end
-    end)
+	local metadata_keys = vim.tbl_keys(task.metadata)
+	vim.ui.select(metadata_keys, {
+		prompt = "Select metadata to edit:",
+	}, function(selected_key)
+		if selected_key then
+			vim.ui.input({
+				prompt = "Edit metadata value:",
+				default = tostring(task.metadata[selected_key]),
+			}, function(new_value)
+				if new_value then
+					Task.set_metadata(task, selected_key, new_value)
+					if state.on_task_update then
+						state.on_task_update(state.tasks)
+					end
+					UI.refresh()
+				end
+			end)
+		end
+	end)
+end
+
+function UI.render_metadata(task, indent)
+	if not task.metadata or vim.tbl_isempty(task.metadata) then
+		return {}, {}
+	end
+
+	local lines = {}
+	local regions = {}
+	local indent_str = string.rep(" ", indent + 2)
+
+	-- Sort metadata keys for consistent display
+	local sorted_keys = vim.tbl_keys(task.metadata)
+	table.sort(sorted_keys)
+
+	for _, key in ipairs(sorted_keys) do
+		local value = task.metadata[key]
+		local line = string.format("%s%s: %s", indent_str, key, tostring(value))
+		table.insert(lines, line)
+
+		-- Add highlights for key and value
+		table.insert(regions, {
+			line = #lines - 1,
+			start = #indent_str,
+			length = #key,
+			hl_group = "LazyDoMetadataKey",
+		})
+		table.insert(regions, {
+			line = #lines - 1,
+			start = #indent_str + #key + 2,
+			length = #tostring(value),
+			hl_group = "LazyDoMetadataValue",
+		})
+	end
+
+	-- Add separator lines
+	if #lines > 0 then
+		table.insert(lines, 1, string.rep(" ", indent) .. "┌" .. string.rep("─", 40) .. "┐")
+		table.insert(lines, string.rep(" ", indent) .. "└" .. string.rep("─", 40) .. "┘")
+	end
+
+	return lines, regions
 end
 ---Close UI window
 function UI.close()
@@ -2268,13 +2038,13 @@ end
 ---@param lazy_config? table Configuration to use if not initialized
 function UI.toggle(tasks, on_task_update, lazy_config, last_state)
 	if lazy_config then
-		UI.setup(lazy_config)
+		config = lazy_config
 	end
 
-	if not state.config then
-        error("UI not properly initialized: missing configuration")
-        return
-    end
+	if not config then
+		error("UI not properly initialized: config is missing")
+		return
+	end
 
 	if is_valid_window() then
 		UI.close()
@@ -2336,306 +2106,220 @@ function UI.toggle(tasks, on_task_update, lazy_config, last_state)
 			end,
 		})
 	end
-	if last_state then
-		state.view_mode = last_state.view_mode or state.view_mode
-		UI.restore_window_state(last_state)
-	end
-end
-
-function UI.toggle_view()
-    state.last_view_mode = state.view_mode
-    state.view_mode = state.view_mode == "list" and "kanban" or "list"
-    UI.refresh()
-    UI.show_feedback("Switched to " .. state.view_mode .. " view")
 end
 -- Add new UI components for attachments
-function UI.show_attachments()
-	local task = UI.get_task_under_cursor()
-	if not task or not task.attachments then
-		return
-	end
-
-	local items = {}
-	for _, att in ipairs(task.attachments) do
-		table.insert(items, string.format("%s (%s)", att.name, Utils.format_size(att.size)))
-	end
-
-	vim.ui.select(items, {
-		prompt = "Task Attachments:",
-		format_item = function(item)
-			return item
-		end,
-	}, function(choice)
-		if choice then
-			-- Handle attachment selection
-			local idx = vim.tbl_contains(items, choice)
-			local attachment = task.attachments[idx]
-			vim.fn.system(string.format("xdg-open %s", vim.fn.shellescape(attachment.path)))
-		end
-	end)
-end
+-- function UI.show_attachments()
+-- 	local task = UI.get_task_under_cursor()
+-- 	if not task or not task.attachments then
+-- 		return
+-- 	end
+--
+-- 	local items = {}
+-- 	for _, att in ipairs(task.attachments) do
+-- 		table.insert(items, string.format("%s (%s)", att.name, Utils.format_size(att.size)))
+-- 	end
+--
+-- 	vim.ui.select(items, {
+-- 		prompt = "Task Attachments:",
+-- 		format_item = function(item)
+-- 			return item
+-- 		end,
+-- 	}, function(choice)
+-- 		if choice then
+-- 			-- Handle attachment selection
+-- 			local idx = vim.tbl_contains(items, choice)
+-- 			local attachment = task.attachments[idx]
+-- 			vim.fn.system(string.format("xdg-open %s", vim.fn.shellescape(attachment.path)))
+-- 		end
+-- 	end)
+-- end
 
 -- Add new UI components for relations
 function UI.show_relations()
 	local task = UI.get_task_under_cursor()
-	if not task or not task.relations then
+	if not task then
+		UI.show_feedback("No task selected", "warn")
 		return
 	end
 
-	local items = {}
+	if not task.relations or #task.relations == 0 then
+		UI.show_feedback("No relations found", "warn")
+		return
+	end
+
+	local relation_items = {}
 	for _, rel in ipairs(task.relations) do
 		local target = UI.find_task_by_id(rel.target_id)
 		if target then
-			table.insert(items, string.format("%s: %s", rel.type, target.content))
+			local status_icon = target.status == "done" and config.icons.task_done or icons.task_pending
+			table.insert(relation_items, {
+				relation = rel,
+				target = target,
+				display = string.format(
+					"%s %s → [%s] %s",
+					config.icons.relation,
+					rel.type:gsub("_", " "):upper(),
+					status_icon,
+					target.content
+				),
+			})
 		end
 	end
 
-	vim.ui.select(items, {
+	vim.ui.select(relation_items, {
 		prompt = "Task Relations:",
 		format_item = function(item)
-			return item
+			return item.display
 		end,
 	}, function(choice)
 		if choice then
-			-- Handle relation selection
+			vim.ui.select({
+				"View Target Task",
+				"Remove Relation",
+				"Edit Relation Type",
+			}, {
+				prompt = "Relation Action:",
+			}, function(action)
+				if action == "Remove Relation" then
+					for i, rel in ipairs(task.relations) do
+						if rel.target_id == choice.relation.target_id and rel.type == choice.relation.type then
+							table.remove(task.relations, i)
+							if state.on_task_update then
+								state.on_task_update(state.tasks)
+							end
+							UI.show_feedback("Relation removed")
+							UI.refresh()
+							break
+						end
+					end
+				elseif action == "Edit Relation Type" then
+					vim.ui.select(Task.get_relation_types(), {
+						prompt = "Select new relation type:",
+						format_item = function(item)
+							return item:gsub("_", " "):upper()
+						end,
+					}, function(new_type)
+						if new_type then
+							for _, rel in ipairs(task.relations) do
+								if rel.target_id == choice.relation.target_id then
+									rel.type = new_type
+									if state.on_task_update then
+										state.on_task_update(state.tasks)
+									end
+									UI.show_feedback("Relation type updated")
+									UI.refresh()
+									break
+								end
+							end
+						end
+					end)
+				elseif action == "View Target Task" then
+					-- TODO: Implement jump to target task
+					UI.show_feedback("Viewing target task (not implemented)")
+				end
+			end)
 		end
 	end)
 end
-function UI.toggle_kanban_view()
-    -- Group tasks by status
-    local columns = {
-        todo = { title = "Todo", tasks = {} },
-        in_progress = { title = "In Progress", tasks = {} },
-        blocked = { title = "Blocked", tasks = {} },
-        done = { title = "Done", tasks = {} }
-    }
-    
-    -- Distribute tasks to columns
-    for _, task in ipairs(state.tasks) do
-        if columns[task.status] then
-            table.insert(columns[task.status].tasks, task)
-        end
-    end
-    
-    -- Calculate column width
-    local win_width = vim.api.nvim_win_get_width(state.win)
-    local col_width = math.floor(win_width / 4) - 2
-    
-    -- Render columns
-    local lines = {}
-    local regions = {}
-    
-    -- Add column headers
-    local header_line = ""
-    for _, col in pairs(columns) do
-        local title = Utils.Str.center(col.title, col_width)
-        header_line = header_line .. "│" .. title
-    end
-    
-    table.insert(lines, header_line)
-    
-    -- Render tasks in columns
-    local max_tasks = 0
-    for _, col in pairs(columns) do
-        max_tasks = math.max(max_tasks, #col.tasks)
-    end
-    
-    for i = 1, max_tasks do
-        local line = ""
-        for _, col in pairs(columns) do
-            local task = col.tasks[i]
-            local task_text = task and Utils.Str.truncate(task.content, col_width - 2) or string.rep(" ", col_width - 2)
-            line = line .. "│ " .. task_text .. string.rep(" ", col_width - #task_text - 2)
-        end
-        table.insert(lines, line)
-    end
-    
-    return lines, regions
-end
+function UI.render_relations_section(task, indent_level)
+	if not task.relations or #task.relations == 0 then
+		return {}, {}
+	end
 
-function UI.render_kanban_view()
-    local layout = UI.get_kanban_layout()
-    local lines = {}
-    local regions = {}
-    local current_line = 0
+	local lines = {}
+	local regions = {}
+	local indent = string.rep("  ", indent_level)
+	local base_indent = indent .. "    " -- 4 spaces after base indent
+	local box_width = 50 -- Increased width for better visual appeal
 
-    -- Render column headers
-    local header_line = ""
-    for _, col in ipairs(state.config.views.kanban.columns) do
-        local title = string.format("%s %s", col.icon, col.name)
-        if state.config.views.kanban.show_column_stats then
-            local count = #vim.tbl_filter(function(t) 
-                return t.status == col.status 
-            end, state.tasks)
-            title = title .. string.format(" (%d)", count)
-        end
-        
-        header_line = header_line .. "│" .. Utils.Str.center(title, layout.col_width)
-        table.insert(regions, {
-            line = current_line,
-            start = #header_line - layout.col_width,
-            length = layout.col_width,
-            hl_group = "LazyDoKanbanHeader",
-            color = col.color
-        })
-    end
-    table.insert(lines, header_line)
-    
-    -- Add separator line
-    local separator = "├" .. string.rep("─", layout.col_width) .. "┤"
-    table.insert(lines, separator)
-    current_line = current_line + 2
+	-- Add section header with icon
+	local title = " Relations "
+	local header = indent .. "┌─" .. title .. string.rep("─", box_width - #title - 2) .. "┐"
+	table.insert(lines, header)
 
-    -- Group tasks by status
-    local columns = {}
-    for _, col in ipairs(state.config.views.kanban.columns) do
-        columns[col.status] = vim.tbl_filter(function(t)
-            return t.status == col.status
-        end, state.tasks)
-    end
+	-- Add title highlight
+	table.insert(regions, {
+		line = #lines - 1,
+		start = #indent + 2,
+		length = #title,
+		hl_group = "LazyDoSectionTitle",
+	})
 
-    -- Find maximum column height
-    local max_height = 0
-    for _, tasks in pairs(columns) do
-        max_height = math.max(max_height, #tasks)
-    end
+	-- Add border highlight
+	table.insert(regions, {
+		line = #lines - 1,
+		start = #indent,
+		length = box_width + 2, -- +2 for left and right borders
+		hl_group = "LazyDoNoteBorder",
+	})
 
-    -- Render task cards
-    for row = 1, max_height do
-        local line = ""
-        for _, col in ipairs(state.config.views.kanban.columns) do
-            local tasks = columns[col.status]
-            local task = tasks[row]
-            
-            if task then
-                local card = UI.render_task_card(task, layout.col_width)
-                line = line .. "│" .. card
-                
-                -- Add card highlights
-                table.insert(regions, {
-                    line = current_line,
-                    start = #line - layout.col_width,
-                    length = layout.col_width,
-                    hl_group = "LazyDoKanbanCard" .. task.priority:upper(),
-                    color = col.color
-                })
-            else
-                line = line .. "│" .. string.rep(" ", layout.col_width)
-            end
-        end
-        table.insert(lines, line)
-        current_line = current_line + 1
-    end
+	-- Group relations by type
+	local relations_by_type = {}
+	for _, rel in ipairs(task.relations) do
+		relations_by_type[rel.type] = relations_by_type[rel.type] or {}
+		local target = UI.find_task_by_id(rel.target_id)
+		if target then
+			table.insert(relations_by_type[rel.type], {
+				relation = rel,
+				target = target,
+			})
+		end
+	end
 
-    return lines, regions
-end
-function UI.render_task_card(task, width)
-    local card = {
-        "╭" .. string.rep("─", width - 2) .. "╮",
-        "│" .. Utils.Str.center(Utils.Str.truncate(task.content, width - 4), width - 2) .. "│",
-    }
-    
-    if task.due_date then
-        local due = Utils.Date.relative(task.due_date)
-        card[#card + 1] = "│" .. Utils.Str.center(due, width - 2) .. "│"
-    end
-    
-    if task.tags and #task.tags > 0 then
-        local tags = table.concat(task.tags, ", ")
-        card[#card + 1] = "│" .. Utils.Str.center(Utils.Str.truncate(tags, width - 4), width - 2) .. "│"
-    end
-    
-    card[#card + 1] = "╰" .. string.rep("─", width - 2) .. "╯"
-    
-    return table.concat(card, "\n")
-end
-function UI.move_kanban_cursor(direction)
-    local config = state.config.views.kanban
-    if direction == "left" then
-        state.kanban_cursor.column = math.max(1, state.kanban_cursor.column - 1)
-    elseif direction == "right" then
-        state.kanban_cursor.column = math.min(#state.config.columns, state.kanban_cursor.column + 1)
-    end
-    UI.refresh()
-end
-function UI.get_kanban_layout()
-    local win_width = vim.api.nvim_win_get_width(state.win)
-    local config = state.config.views.kanban
-    local num_columns = #config.columns
-    
-    -- Calculate column width based on configuration
-    local col_width = config.column_width == 'auto'
-        and math.floor((win_width - num_columns - 1) / num_columns)
-        or config.column_width
-        
-    -- Ensure minimum column width
-    col_width = math.max(col_width, 20)
-    
-    return {
-        width = win_width,
-        col_width = col_width,
-        padding = 1,
-        separator = "│"
-    }
-end
-function UI.move_task_to_column(direction)
-    local task = UI.get_task_under_cursor()
-    if not task then return end
+	-- Render relations grouped by type
+	local types = vim.tbl_keys(relations_by_type)
+	table.sort(types)
 
-    local config = state.config.views.kanban
-    local columns = config.columns
-    local current_col_idx
-    
-    -- Find current column index safely
-    for i, col in ipairs(columns) do
-        if col.status == task.status then
-            current_col_idx = i
-            break
-        end
-    end
-    
-    if not current_col_idx then return end
-    
-    -- Calculate new column index
-    local new_col_idx = direction == "left" 
-        and math.max(1, current_col_idx - 1)
-        or math.min(#columns, current_col_idx + 1)
-        
-    -- Update task status
-    if new_col_idx ~= current_col_idx then
-        task.status = columns[new_col_idx].status
-        task.updated_at = os.time()
-        
-        if state.on_task_update then
-            state.on_task_update(state.tasks)
-        end
-        
-        UI.refresh()
-        UI.show_feedback(string.format("Moved task to %s", columns[new_col_idx].name))
-    end
-end
+	for type_idx, type in ipairs(types) do
+		-- Add relation type header with icon (safely handle missing icon)
+		local type_header = type:gsub("_", " "):upper()
+		local relation_icon = (config.icons and config.icons.relation) or "→"
+		local type_line = base_indent .. "│ " .. relation_icon .. " " .. type_header .. ":"
+		table.insert(lines, type_line)
 
-function UI.render_compact_card(task, width)
-    local content = Utils.Str.truncate(task.content, width - 4)
-    local priority_icon = state.config.icons.priority[task.priority]
-    return string.format(" %s %s ", priority_icon, content)
-end
+		-- Add type highlight
+		table.insert(regions, {
+			line = #lines - 1,
+			start = #base_indent + 4, -- After border and icon
+			length = #type_header,
+			hl_group = "LazyDoRelationType",
+		})
 
-function UI.render_detailed_card(task, width)
-    local lines = {}
-    local content = Utils.Str.truncate(task.content, width - 4)
-    local priority_icon = state.config.icons.priority[task.priority]
-    local due_date = task.due_date and Utils.Date.relative(task.due_date) or ""
-    
-    table.insert(lines, string.format(" %s %s", priority_icon, content))
-    if due_date ~= "" then
-        table.insert(lines, string.format(" %s %s", state.config.icons.due_date, due_date))
-    end
-    if task.tags and #task.tags > 0 then
-        table.insert(lines, " " .. table.concat(task.tags, " "))
-    end
-    
-    return table.concat(lines, "\n")
+		-- Add relation targets
+		for _, rel_info in ipairs(relations_by_type[type]) do
+			local status_icon = rel_info.target.status == "done" and (config.icons and config.icons.task_done or "✓")
+				or (config.icons and config.icons.task_pending or "·")
+			local target_line = base_indent .. "│   • [" .. status_icon .. "] " .. rel_info.target.content
+
+			table.insert(lines, target_line)
+
+			-- Add target task highlight
+			table.insert(regions, {
+				line = #lines - 1,
+				start = #base_indent + 8, -- After border, bullet, and status
+				length = #rel_info.target.content,
+				hl_group = "LazyDoRelationTarget",
+			})
+		end
+
+		-- Add separator between types unless it's the last one
+		if type_idx < #types then
+			table.insert(lines, base_indent .. "│" .. string.rep("─", box_width - 4))
+		end
+	end
+
+	-- Add section footer
+	table.insert(lines, indent .. "└" .. string.rep("─", box_width) .. "┘")
+
+	-- Add footer border highlight
+	table.insert(regions, {
+		line = #lines - 1,
+		start = #indent,
+		length = box_width + 2,
+		hl_group = "LazyDoNoteBorder",
+	})
+
+	return lines, regions
 end
 -- Add new UI components for reminders
 function UI.add_reminder()
@@ -2666,106 +2350,6 @@ function UI.add_reminder()
 			end
 		end
 	end)
-end
-
-function UI.get_highlight_group(base_group, fallback)
-    local hl_exists = pcall(vim.api.nvim_get_hl_by_name, base_group, true)
-    return hl_exists and base_group or fallback
-end
-
-
-function UI.update_buffer_content(lines, regions)
-    vim.api.nvim_buf_set_option(state.buf, "modifiable", true)
-    
-    local flat_lines = {}
-    local adjusted_regions = {}
-    local line_offset = 0
-    
-    for i, line in ipairs(lines) do
-        local split_lines = vim.split(line, "\n")
-        vim.list_extend(flat_lines, split_lines)
-        
-        for _, region in ipairs(regions) do
-            if region.line == i - 1 then
-                local new_region = vim.deepcopy(region)
-                new_region.line = new_region.line + line_offset
-                -- Ensure start and length are within line bounds
-                new_region.start = math.min(new_region.start, #split_lines[1] or 0)
-                new_region.length = math.min(new_region.length, (#split_lines[1] or 0) - new_region.start)
-                if new_region.length > 0 then
-                    table.insert(adjusted_regions, new_region)
-                end
-            end
-        end
-        
-        line_offset = line_offset + #split_lines - 1
-    end
-    
-    vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, flat_lines)
-    
-    for _, region in ipairs(adjusted_regions) do
-        local hl_group = UI.get_highlight_group(region.hl_group, "Normal")
-        if region.color then
-            local dynamic_hl = region.hl_group .. region.color:gsub("#", "")
-            vim.api.nvim_set_hl(0, dynamic_hl, { fg = region.color })
-            hl_group = dynamic_hl
-        end
-        
-        pcall(vim.api.nvim_buf_add_highlight,
-            state.buf,
-            ns_id,
-            hl_group,
-            region.line,
-            region.start,
-            region.start + region.length
-        )
-    end
-    
-    vim.api.nvim_buf_set_option(state.buf, "modifiable", false)
-end
-
-
-
--- Add helper method for dynamic window updates
-function UI.handle_window_resize()
-    if state.win and vim.api.nvim_win_is_valid(state.win) then
-        local size = Utils.get_window_size()
-        vim.api.nvim_win_set_config(state.win, {
-            width = size.width,
-            height = size.height,
-            row = size.row,
-            col = size.col,
-        })
-        UI.refresh()
-    end
-end
-
--- Add method for view transitions
-function UI.transition_view(new_view)
-    if new_view ~= state.view_mode then
-        state.last_view_mode = state.view_mode
-        state.view_mode = new_view
-        UI.refresh()
-    end
-end
-
--- Add method for task position lookup
-function UI.get_task_position(task_id)
-    return state.task_to_line[task_id]
-end
-
--- Add method for cursor navigation
-function UI.navigate_to_task(task_id)
-    local pos = UI.get_task_position(task_id)
-    if pos then
-        if type(pos) == "table" then
-            -- Kanban view position
-            vim.api.nvim_win_set_cursor(state.win, {pos.line, pos.column * pos.width})
-        else
-            -- List view position
-            vim.api.nvim_win_set_cursor(state.win, {pos, 0})
-        end
-    end
 end
 
 return UI
