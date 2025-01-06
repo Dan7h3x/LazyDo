@@ -249,9 +249,9 @@ local function create_window()
 		col = size.col,
 		style = "minimal",
 		border = config.theme.border or "rounded",
-		title = " LazyDo ",
+		title = " LazyDo Panel ",
 		title_pos = "center",
-		footer = " [a/A]dd task/subtask, [d]elete, [D]ate, [n]ote, [e]dit task, [z] fold, [p]riority, [?]help ",
+		footer = " [a/A]dd task/subtask, [d]elete, [D]ate, [e]dit task, [K/J]move, [i]nfo, [m/M]etadata, [n]ote, [t/T]ag, [z]fold, [p]riority, [?]help ",
 		footer_pos = "center",
 		zindex = 50, -- Ensure window stays on top
 	}
@@ -303,15 +303,15 @@ local function render_progress_bar(progress, width)
 	-- 󰪞󰪟󰪠󰪡󰪢󰪣󰪤󰪥
 	-- Enhanced progress icons based on percentage
 	local progress_icon = progress == 100 and config.icons.task_done
-		or progress >= 75 and "󰪣"
-		or progress >= 50 and "󰪡"
-		or progress >= 25 and "󰪟"
-		or progress > 0 and "󰪞"
-		or "󰪥"
+		or progress >= 75 and "󰪣 "
+		or progress >= 50 and "󰪡 "
+		or progress >= 25 and "󰪟 "
+		or progress > 0 and "󰪞 "
+		or "󰪥 "
 
 	if style == "modern" then
 		return string.format(
-			"%s [%s%s] %d%%",
+			"%s[%s%s]%d%%",
 			progress_icon,
 			string.rep(config.theme.progress_bar.filled, filled),
 			string.rep(config.theme.progress_bar.empty, empty),
@@ -998,6 +998,7 @@ local function show_help()
 		" <CR>      Toggle task status",
 		" a         Add new task",
 		" A         Add subtask",
+		"<leader>a      Quick task",
 		" d         Delete task",
 		" e         Edit task",
 		"",
@@ -1006,17 +1007,25 @@ local function show_help()
 		" n         Add/edit notes",
 		" D         Set due date",
 		" t         Add tags",
+		" T         Edit tags",
+		"<leader>t   Remove tags",
 		" m         Add metadata",
-		" r         Set recurring",
+		" M         Edit metadata",
+		"<leader>md   Remove metadata",
+		" i         Toggle info",
 		"",
 		"Task Organization:",
 		" K         Move task up",
 		" J         Move task down",
 		" z         Toggle fold",
-		" <leader>x Convert to subtask",
+		"<leader>x  Convert to subtask",
+		"<leader>X  Convert to Task",
+		"",
+		"Links and Relations",
+		"<leader>l  Show relations",
+		"<leader>L  Add relation",
 		"",
 		"Filtering and Sorting:",
-		" /         Search tasks",
 		" <leader>sp Sort by priority",
 		" <leader>sd Sort by due date",
 		" <leader>ss Sort by status",

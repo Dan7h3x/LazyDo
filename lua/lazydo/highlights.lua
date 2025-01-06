@@ -27,6 +27,10 @@ function M.setup(config)
 		ProgressBarBorder = { link = "ProgressBorder" },
 		HeaderSeparator = { fg = colors.header.fg },
 
+		TaskRelation = { link = "Special" },
+		TaskRelationTarget = { link = "String" },
+		TaskRelationType = { link = "Type" },
+
 		-- Header and title components
 		Header = {
 			fg = colors.header.fg,
