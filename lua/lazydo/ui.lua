@@ -2272,8 +2272,8 @@ function UI.render_relations_section(task, indent_level)
 	for type_idx, type in ipairs(types) do
 		-- Add relation type header with icon (safely handle missing icon)
 		local type_header = type:gsub("_", " "):upper()
-		local relation_icon = (config.icons and config.icons.relation) or "→"
-		local type_line = base_indent .. "│ " .. relation_icon .. " " .. type_header .. ":"
+		local relation_icon = (config.icons and config.icons.relations) or "→"
+		local type_line = indent .. "│ " .. relation_icon .. " " .. type_header .. ":"
 		table.insert(lines, type_line)
 
 		-- Add type highlight
@@ -2288,7 +2288,7 @@ function UI.render_relations_section(task, indent_level)
 		for _, rel_info in ipairs(relations_by_type[type]) do
 			local status_icon = rel_info.target.status == "done" and (config.icons and config.icons.task_done or "✓")
 				or (config.icons and config.icons.task_pending or "·")
-			local target_line = base_indent .. "│   • [" .. status_icon .. "] " .. rel_info.target.content
+			local target_line = indent .. "│   • [" .. status_icon .. "] " .. rel_info.target.content
 
 			table.insert(lines, target_line)
 
@@ -2303,7 +2303,7 @@ function UI.render_relations_section(task, indent_level)
 
 		-- Add separator between types unless it's the last one
 		if type_idx < #types then
-			table.insert(lines, base_indent .. "│" .. string.rep("─", box_width - 4))
+			table.insert(lines, indent .. "│" .. string.rep("─", box_width - 4))
 		end
 	end
 
