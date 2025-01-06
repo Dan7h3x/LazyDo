@@ -758,7 +758,12 @@ local function render_task(task, level, current_line, is_last)
 	end
 
 	current_line = current_line + 1
-	if task.metadata and not vim.tbl_isempty(task.metadata) then
+	if
+		config.features.metadata
+		and config.features.metadata.enabled
+		and task.metadata
+		and not vim.tbl_isempty(task.metadata)
+	then
 		local metadata_lines, metadata_regions = UI.render_metadata(task, level + 1)
 		if metadata_lines and #metadata_lines > 0 then
 			-- Add metadata lines
@@ -901,21 +906,6 @@ function UI.render()
 		-- Add task content
 		vim.list_extend(lines, task_lines)
 		vim.list_extend(all_regions, task_regions)
-
-		-- Render task info if enabled
-
-		-- Render metadata if enabled
-		if config.features.metadata and config.features.metadata.enabled then
-			local metadata_lines, metadata_regions = UI.render_metadata(task, 0)
-			vim.list_extend(lines, metadata_lines)
-
-			-- Adjust metadata regions to current line position
-			for _, region in ipairs(metadata_regions) do
-				region.line = region.line + current_line
-				table.insert(all_regions, region)
-			end
-			current_line = current_line + #metadata_lines
-		end
 
 		-- Update task mappings
 		for line_nr, mapping in pairs(task_mappings) do
