@@ -30,20 +30,7 @@ local state = {
 	on_task_update = nil,
 	search_results = {},
 	current_search = nil,
-	lualine_refresh_timer = nil,
-}
--- │└─├─ ─╭─╰─
-local ICONS = {
-	SUBTASK_INDENT = "│  ",
-	SUBTASK_LAST = "└──",
-	SUBTASK_MIDDLE = "├──",
-	SEPARATOR = "━", -- Using a different character for main separators
-	NOTE_START = "╭",
-	NOTE_END = "╰",
-	PROGRESS_START = "╭",
-	PROGRESS_END = "╯",
-	PROGRESS_FILL = "█",
-	PROGRESS_EMPTY = "░",
+	show_task_info = false,
 }
 
 local function ensure_number(value, default)
@@ -468,6 +455,9 @@ local function render_note_section(note, indent_level, is_subtask)
 	return lines, regions
 end
 local function render_task_info(task, indent_level)
+	if not state.show_task_info then
+		return "", {}
+	end
 	local indent = string.rep("  ", indent_level + 1)
 	local lines = {}
 	local regions = {}
@@ -515,42 +505,6 @@ local function render_task_info(task, indent_level)
 	end
 	local single_lines = table.concat(lines, "|")
 	return single_lines, regions
-end
-
-local function render_metadata(task, indent)
-	if
-		not config.features.metadata.enabled
-		or not config.features.metadata.display
-		or not task.metadata
-		or vim.tbl_isempty(task.metadata)
-	then
-		return {}, {}
-	end
-
-	local lines = {}
-	local regions = {}
-	local indent_str = string.rep(" ", indent + 2)
-
-	for key, value in pairs(task.metadata) do
-		local line = string.format("%s%s: %s", indent_str, key, tostring(value))
-		table.insert(lines, line)
-
-		-- Add highlights for key and value
-		table.insert(regions, {
-			line = #lines - 1,
-			start = #indent_str,
-			length = #key,
-			hl_group = "LazyDoMetadataKey",
-		})
-		table.insert(regions, {
-			line = #lines - 1,
-			start = #indent_str + #key + 2,
-			length = #tostring(value),
-			hl_group = "LazyDoMetadataValue",
-		})
-	end
-
-	return lines, regions
 end
 
 local function render_tags(task)
@@ -802,6 +756,50 @@ local function render_task(task, level, current_line, is_last)
 			current_line = current_line + #sub_lines
 		end
 	end
+
+	current_line = current_line + 1
+	if task.metadata and not vim.tbl_isempty(task.metadata) then
+		local metadata_lines, metadata_regions = UI.render_metadata(task, level + 1)
+		if metadata_lines and #metadata_lines > 0 then
+			-- Add metadata lines
+			for _, line in ipairs(metadata_lines) do
+				table.insert(lines, line)
+			end
+
+			-- Add metadata highlights with proper line offsets
+			for _, region in ipairs(metadata_regions) do
+				table.insert(regions, {
+					line = current_line + region.line,
+					start = ensure_number(region.start, 0),
+					length = ensure_number(region.length, 0),
+					hl_group = region.hl_group,
+				})
+			end
+
+			current_line = current_line + #metadata_lines
+		end
+	end
+	if task.relations and #task.relations > 0 then
+		local relation_lines, relation_regions = UI.render_relations_section(task, level + 1)
+		if relation_lines and #relation_lines > 0 then
+			-- Add relation lines
+			for _, line in ipairs(relation_lines) do
+				table.insert(lines, line)
+			end
+
+			-- Add relation highlights with proper line offsets
+			for _, region in ipairs(relation_regions) do
+				table.insert(regions, {
+					line = current_line + region.line,
+					start = region.start,
+					length = region.length,
+					hl_group = region.hl_group,
+				})
+			end
+
+			current_line = current_line + #relation_lines
+		end
+	end
 	-- Add separator for top-level tasks
 	if level == 0 then
 		local separator =
@@ -908,7 +906,7 @@ function UI.render()
 
 		-- Render metadata if enabled
 		if config.features.metadata and config.features.metadata.enabled then
-			local metadata_lines, metadata_regions = render_metadata(task, 0)
+			local metadata_lines, metadata_regions = UI.render_metadata(task, 0)
 			vim.list_extend(lines, metadata_lines)
 
 			-- Adjust metadata regions to current line position
@@ -1135,7 +1133,9 @@ function UI.setup_keymaps()
 			UI.refresh()
 		end
 	end, "Delete Task")
-
+	map("i", function()
+		UI.toggle_task_info()
+	end, "Toggle Task Info")
 	map("e", function()
 		local task = UI.get_task_under_cursor()
 		if task then
@@ -1207,21 +1207,47 @@ function UI.setup_keymaps()
 			end)
 		end
 	end, "Convert To SubTask")
-
-	map("r", function()
+	map("<leader>X", function()
 		local task = UI.get_task_under_cursor()
-		if task then
-			vim.ui.select({ "daily", "weekly", "monthly" }, {
-				prompt = "Select Recurring:",
-			}, function(pattern)
-				if pattern then
-					Actions.set_reccuring(state.tasks, pattern)
-					UI.show_feedback("The Recurring set " .. pattern, "info")
-				end
-			end)
+		if not task then
+			UI.show_feedback("No task selected", "warn")
+			return
 		end
-	end, "Set recurring")
 
+		-- Find the parent task by traversing all tasks
+		local function find_parent_and_remove(tasks, target_id)
+			for _, t in ipairs(tasks) do
+				if t.subtasks then
+					for i, subtask in ipairs(t.subtasks) do
+						if subtask.id == target_id then
+							-- Found the subtask, remove it from parent
+							table.remove(t.subtasks, i)
+							return true
+						end
+					end
+					-- Recursively check nested subtasks
+					if find_parent_and_remove(t.subtasks, target_id) then
+						return true
+					end
+				end
+			end
+			return false
+		end
+
+		-- Try to find and remove the task from its parent
+		if find_parent_and_remove(state.tasks, task.id) then
+			-- Add the task to main tasks list
+			table.insert(state.tasks, task)
+
+			if state.on_task_update then
+				state.on_task_update(state.tasks)
+			end
+			UI.show_feedback("Converted subtask to main task")
+			UI.refresh()
+		else
+			UI.show_feedback("Task is not a subtask", "warn")
+		end
+	end, "Convert SubTask to Task")
 	map("<leader>m", function()
 		local task = UI.get_task_under_cursor()
 		if task then
@@ -1249,6 +1275,22 @@ function UI.setup_keymaps()
 	map("A", function()
 		UI.add_subtask()
 	end, "Add SubTask")
+	map("<leader>a", function()
+		vim.ui.input({
+			prompt = "Quick task:",
+		}, function(content)
+			if content and content ~= "" then
+				local task = Actions.add_task(state.tasks, content, {
+					priority = "medium",
+					due_date = nil,
+				}, state.on_task_update)
+				if task then
+					UI.refresh()
+					UI.show_feedback("Quick task added")
+				end
+			end
+		end)
+	end, "Quick Add Task")
 
 	map("z", function()
 		UI.toggle_fold()
@@ -1258,62 +1300,76 @@ function UI.setup_keymaps()
 		UI.add_tag()
 	end, "Add Tag")
 	map("T", function()
+		UI.edit_tag()
+	end, "Edit Tag")
+	map("<leader>t", function()
 		UI.remove_tag()
 	end, "Remove Tag")
 	map("m", function()
 		UI.set_metadata()
 	end, "Set MetaData")
+	map("M", function()
+		UI.edit_metadata()
+	end, "Edit Metadata")
+	map("<leader>md", function()
+		local task = UI.get_task_under_cursor()
+		if not task then
+			UI.show_feedback("No task selected", "warn")
+			return
+		end
 
-	-- Add task search
-	map("/", function()
-		vim.ui.input({
-			prompt = "Search tasks:",
-			default = state.current_search or "",
-		}, function(query)
-			if not query or query == "" then
-				state.search_results = {}
-				state.current_search = nil
+		if not task.metadata or vim.tbl_isempty(task.metadata) then
+			UI.show_feedback("No metadata to delete", "warn")
+			return
+		end
+
+		local metadata_keys = vim.tbl_keys(task.metadata)
+		table.sort(metadata_keys)
+
+		vim.ui.select(metadata_keys, {
+			prompt = "Select metadata to delete:",
+			format_item = function(key)
+				return string.format("%s: %s", key, tostring(task.metadata[key]))
+			end,
+		}, function(choice)
+			if choice then
+				task.metadata[choice] = nil
+				if vim.tbl_isempty(task.metadata) then
+					task.metadata = nil
+				end
+				if state.on_task_update then
+					state.on_task_update(state.tasks)
+				end
+				UI.show_feedback("Metadata deleted")
 				UI.refresh()
-				return
 			end
-
-			state.current_search = query
-			state.search_results = {}
-
-			local function search_task(task, parent_indent)
-				local content_lower = task.content:lower()
-				local query_lower = query:lower()
-				local start_idx = content_lower:find(query_lower, 1, true)
-
-				if start_idx then
-					table.insert(state.search_results, {
-						id = task.id,
-						match_start = start_idx + (parent_indent or 0),
-						match_end = start_idx + #query + (parent_indent or 0),
-						line = state.task_to_line[task.id],
-					})
-				end
-
-				if task.subtasks then
-					for _, subtask in ipairs(task.subtasks) do
-						search_task(subtask, (parent_indent or 0) + config.theme.indent.size)
-					end
-				end
-			end
-
-			for _, task in ipairs(state.tasks) do
-				search_task(task)
-			end
-
-			if #state.search_results > 0 then
-				UI.show_feedback(string.format("Found %d matches", #state.search_results), "info")
-			else
-				UI.show_feedback("No matches found", "warn")
-			end
-
-			UI.refresh()
 		end)
-	end, "Search")
+	end, "Delete Metadata")
+	map("<leader>l", function()
+		UI.show_relations()
+	end, "Show Relations")
+	map("<leader>L", function()
+		local task = UI.get_task_under_cursor()
+		if task then
+			vim.ui.select(state.tasks, {
+				prompt = "Select target task:",
+				format_item = function(t)
+					return t.content
+				end,
+			}, function(target)
+				if target then
+					vim.ui.select({ "blocks", "depends_on", "related_to", "duplicates" }, {
+						prompt = "Relation type:",
+					}, function(rel_type)
+						if rel_type then
+							Task.add_relation(task, target.id, rel_type)
+							UI.refresh()
+						end
+					end)
+				end
+			end)
+		end
+	end, "Add Relation")
 
 	-- Add sort keymaps
 	map("<leader>sp", function()
@@ -1373,7 +1429,11 @@ function UI.show_feedback(message, level)
 		timeout = 2000,
 	})
 end
-
+function UI.toggle_task_info()
+	state.show_task_info = not state.show_task_info
+	UI.refresh()
+	UI.show_feedback(state.show_task_info and "Task info shown" or "Task info hidden")
+end
 function UI.filter_tasks(filter_fn)
 	if not state.tasks then
 		return
@@ -1746,7 +1806,33 @@ function UI.add_tag()
 		end)
 	end
 end
+function UI.edit_tag()
+	local task = UI.get_task_under_cursor()
+	if not task or not task.tags or #task.tags == 0 then
+		UI.show_feedback("No tags to edit", "warn")
+		return
+	end
 
+	vim.ui.select(task.tags, {
+		prompt = "Select tag to edit:",
+	}, function(selected_tag)
+		if selected_tag then
+			vim.ui.input({
+				prompt = "Edit tag:",
+				default = selected_tag,
+			}, function(new_tag)
+				if new_tag and new_tag ~= "" then
+					Task.remove_tag(task, selected_tag)
+					Task.add_tag(task, new_tag)
+					if state.on_task_update then
+						state.on_task_update(state.tasks)
+					end
+					UI.refresh()
+				end
+			end)
+		end
+	end)
+end
 function UI.remove_tag()
 	local task = UI.get_task_under_cursor()
 
@@ -1866,7 +1952,75 @@ function UI.set_metadata()
 		end)
 	end
 end
+function UI.edit_metadata()
+	local task = UI.get_task_under_cursor()
+	if not task or not task.metadata or vim.tbl_isempty(task.metadata) then
+		UI.show_feedback("No metadata to edit", "warn")
+		return
+	end
 
+	local metadata_keys = vim.tbl_keys(task.metadata)
+	vim.ui.select(metadata_keys, {
+		prompt = "Select metadata to edit:",
+	}, function(selected_key)
+		if selected_key then
+			vim.ui.input({
+				prompt = "Edit metadata value:",
+				default = tostring(task.metadata[selected_key]),
+			}, function(new_value)
+				if new_value then
+					Task.set_metadata(task, selected_key, new_value)
+					if state.on_task_update then
+						state.on_task_update(state.tasks)
+					end
+					UI.refresh()
+				end
+			end)
+		end
+	end)
+end
+
+function UI.render_metadata(task, indent)
+	if not task.metadata or vim.tbl_isempty(task.metadata) then
+		return {}, {}
+	end
+
+	local lines = {}
+	local regions = {}
+	local indent_str = string.rep(" ", indent + 2)
+
+	-- Sort metadata keys for consistent display
+	local sorted_keys = vim.tbl_keys(task.metadata)
+	table.sort(sorted_keys)
+
+	for _, key in ipairs(sorted_keys) do
+		local value = task.metadata[key]
+		local line = string.format("%s%s: %s", indent_str, key, tostring(value))
+		table.insert(lines, line)
+
+		-- Add highlights for key and value
+		table.insert(regions, {
+			line = #lines - 1,
+			start = #indent_str,
+			length = #key,
+			hl_group = "LazyDoMetadataKey",
+		})
+		table.insert(regions, {
+			line = #lines - 1,
+			start = #indent_str + #key + 2,
+			length = #tostring(value),
+			hl_group = "LazyDoMetadataValue",
+		})
+	end
+
+	-- Add separator lines
+	if #lines > 0 then
+		table.insert(lines, 1, string.rep(" ", indent) .. "┌" .. string.rep("─", 40) .. "┐")
+		table.insert(lines, string.rep(" ", indent) .. "└" .. string.rep("─", 40) .. "┘")
+	end
+
+	return lines, regions
+end
 ---Close UI window
 function UI.close()
 	if is_valid_window() then
@@ -1954,59 +2108,219 @@ function UI.toggle(tasks, on_task_update, lazy_config, last_state)
 	end
 end
 -- Add new UI components for attachments
-function UI.show_attachments()
-	local task = UI.get_task_under_cursor()
-	if not task or not task.attachments then
-		return
-	end
-
-	local items = {}
-	for _, att in ipairs(task.attachments) do
-		table.insert(items, string.format("%s (%s)", att.name, Utils.format_size(att.size)))
-	end
-
-	vim.ui.select(items, {
-		prompt = "Task Attachments:",
-		format_item = function(item)
-			return item
-		end,
-	}, function(choice)
-		if choice then
-			-- Handle attachment selection
-			local idx = vim.tbl_contains(items, choice)
-			local attachment = task.attachments[idx]
-			vim.fn.system(string.format("xdg-open %s", vim.fn.shellescape(attachment.path)))
-		end
-	end)
-end
+-- function UI.show_attachments()
+-- 	local task = UI.get_task_under_cursor()
+-- 	if not task or not task.attachments then
+-- 		return
+-- 	end
+--
+-- 	local items = {}
+-- 	for _, att in ipairs(task.attachments) do
+-- 		table.insert(items, string.format("%s (%s)", att.name, Utils.format_size(att.size)))
+-- 	end
+--
+-- 	vim.ui.select(items, {
+-- 		prompt = "Task Attachments:",
+-- 		format_item = function(item)
+-- 			return item
+-- 		end,
+-- 	}, function(choice)
+-- 		if choice then
+-- 			-- Handle attachment selection
+-- 			local idx = vim.tbl_contains(items, choice)
+-- 			local attachment = task.attachments[idx]
+-- 			vim.fn.system(string.format("xdg-open %s", vim.fn.shellescape(attachment.path)))
+-- 		end
+-- 	end)
+-- end
 
 -- Add new UI components for relations
 function UI.show_relations()
 	local task = UI.get_task_under_cursor()
-	if not task or not task.relations then
+	if not task then
+		UI.show_feedback("No task selected", "warn")
 		return
 	end
 
-	local items = {}
+	if not task.relations or #task.relations == 0 then
+		UI.show_feedback("No relations found", "warn")
+		return
+	end
+
+	local relation_items = {}
 	for _, rel in ipairs(task.relations) do
 		local target = UI.find_task_by_id(rel.target_id)
 		if target then
-			table.insert(items, string.format("%s: %s", rel.type, target.content))
+			local status_icon = target.status == "done" and config.icons.task_done or icons.task_pending
+			table.insert(relation_items, {
+				relation = rel,
+				target = target,
+				display = string.format(
+					"%s %s → [%s] %s",
+					config.icons.relation,
+					rel.type:gsub("_", " "):upper(),
+					status_icon,
+					target.content
+				),
+			})
 		end
 	end
 
-	vim.ui.select(items, {
+	vim.ui.select(relation_items, {
 		prompt = "Task Relations:",
 		format_item = function(item)
-			return item
+			return item.display
 		end,
 	}, function(choice)
 		if choice then
-			-- Handle relation selection
+			vim.ui.select({
+				"View Target Task",
+				"Remove Relation",
+				"Edit Relation Type",
+			}, {
+				prompt = "Relation Action:",
+			}, function(action)
+				if action == "Remove Relation" then
+					for i, rel in ipairs(task.relations) do
+						if rel.target_id == choice.relation.target_id and rel.type == choice.relation.type then
+							table.remove(task.relations, i)
+							if state.on_task_update then
+								state.on_task_update(state.tasks)
+							end
+							UI.show_feedback("Relation removed")
+							UI.refresh()
+							break
+						end
+					end
+				elseif action == "Edit Relation Type" then
+					vim.ui.select(Task.get_relation_types(), {
+						prompt = "Select new relation type:",
+						format_item = function(item)
+							return item:gsub("_", " "):upper()
+						end,
+					}, function(new_type)
+						if new_type then
+							for _, rel in ipairs(task.relations) do
+								if rel.target_id == choice.relation.target_id then
+									rel.type = new_type
+									if state.on_task_update then
+										state.on_task_update(state.tasks)
+									end
+									UI.show_feedback("Relation type updated")
+									UI.refresh()
+									break
+								end
+							end
+						end
+					end)
+				elseif action == "View Target Task" then
+					-- TODO: Implement jump to target task
+					UI.show_feedback("Viewing target task (not implemented)")
+				end
+			end)
 		end
 	end)
 end
+function UI.render_relations_section(task, indent_level)
+	if not task.relations or #task.relations == 0 then
+		return {}, {}
+	end
 
+	local lines = {}
+	local regions = {}
+	local indent = string.rep("  ", indent_level)
+	local base_indent = indent .. "    " -- 4 spaces after base indent
+	local box_width = 50 -- Increased width for better visual appeal
+
+	-- Add section header with icon
+	local title = " Relations "
+	local header = indent .. "┌─" .. title .. string.rep("─", box_width - #title - 2) .. "┐"
+	table.insert(lines, header)
+
+	-- Add title highlight
+	table.insert(regions, {
+		line = #lines - 1,
+		start = #indent + 2,
+		length = #title,
+		hl_group = "LazyDoSectionTitle",
+	})
+
+	-- Add border highlight
+	table.insert(regions, {
+		line = #lines - 1,
+		start = #indent,
+		length = box_width + 2, -- +2 for left and right borders
+		hl_group = "LazyDoNoteBorder",
+	})
+
+	-- Group relations by type
+	local relations_by_type = {}
+	for _, rel in ipairs(task.relations) do
+		relations_by_type[rel.type] = relations_by_type[rel.type] or {}
+		local target = UI.find_task_by_id(rel.target_id)
+		if target then
+			table.insert(relations_by_type[rel.type], {
+				relation = rel,
+				target = target,
+			})
+		end
+	end
+
+	-- Render relations grouped by type
+	local types = vim.tbl_keys(relations_by_type)
+	table.sort(types)
+
+	for type_idx, type in ipairs(types) do
+		-- Add relation type header with icon (safely handle missing icon)
+		local type_header = type:gsub("_", " "):upper()
+		local relation_icon = (config.icons and config.icons.relation) or "→"
+		local type_line = base_indent .. "│ " .. relation_icon .. " " .. type_header .. ":"
+		table.insert(lines, type_line)
+
+		-- Add type highlight
+		table.insert(regions, {
+			line = #lines - 1,
+			start = #base_indent + 4, -- After border and icon
+			length = #type_header,
+			hl_group = "LazyDoRelationType",
+		})
+
+		-- Add relation targets
+		for _, rel_info in ipairs(relations_by_type[type]) do
+			local status_icon = rel_info.target.status == "done" and (config.icons and config.icons.task_done or "✓")
+				or (config.icons and config.icons.task_pending or "·")
+			local target_line = base_indent .. "│   • [" .. status_icon .. "] " .. rel_info.target.content
+
+			table.insert(lines, target_line)
+
+			-- Add target task highlight
+			table.insert(regions, {
+				line = #lines - 1,
+				start = #base_indent + 8, -- After border, bullet, and status
+				length = #rel_info.target.content,
+				hl_group = "LazyDoRelationTarget",
+			})
+		end
+
+		-- Add separator between types unless it's the last one
+		if type_idx < #types then
+			table.insert(lines, base_indent .. "│" .. string.rep("─", box_width - 4))
+		end
+	end
+
+	-- Add section footer
+	table.insert(lines, indent .. "└" .. string.rep("─", box_width) .. "┘")
+
+	-- Add footer border highlight
+	table.insert(regions, {
+		line = #lines - 1,
+		start = #indent,
+		length = box_width + 2,
+		hl_group = "LazyDoNoteBorder",
+	})
+
+	return lines, regions
+end
 -- Add new UI components for reminders
 function UI.add_reminder()
 	local task = UI.get_task_under_cursor()

@@ -106,6 +106,7 @@ local defaults = {
 		created = "󰃰",
 		updated = "",
 		note = "",
+		relations = "󱒖 ",
 		due_date = "",
 		recurring = {
 			daily = "",
