@@ -9,6 +9,8 @@
     <a href="#usage">Usage</a> •
     <a href="#-configuration">Configuration</a>
   </p>
+
+  <p>  ... made with  ...</p>
 </div>
 
 ##  Screenshots
@@ -18,14 +20,14 @@
 
 ## ✨ Features
 
-- 📝 Intuitive task management with subtasks support
-- 🎨 Customizable themes and icons
-- 📅 Due dates and reminders
+-  Intuitive task management with subtasks support
+-  Customizable themes and icons
+-  Due dates and reminders
 - 🏷️ Task tagging and categorization
 - 🔍 Advanced sorting
+- 󱒖 Task relationships and dependencies
 - 📊 Progress tracking and filtering (WIP)
-- 📎 File attachments (WIP)
-- 🔄 Task relationships and dependencies (WIP)
+- 󰁦 File attachments (WIP)
 
 ## 📦 Installation
 
@@ -47,7 +49,9 @@ Using [lazy.nvim](https://github.com/folke/lazy.nvim):
     },
 }
 ```
+
 and integration with `lualine.nvim`:
+
 ```lua
 {
     "nvim-lualine/lualine.nvim",
@@ -64,21 +68,30 @@ and integration with `lualine.nvim`:
     end,
   }
 ```
+
 ## Usage
+
 - :LazyDoToggle - Toggle the task manager window
-  - a - Add new task
-  - A - Add subtask
-  - d - Delete task
-  - e - Edit task
-  - D - Set due date
-  - p - Toggle priority
-  - n - Add/edit note
-  - z - Toggle fold
-  - K - Move task up
-  - J - Move task down
-and more in help window using `?`.
+  - `a` - Add new task
+  - `A` - Add subtask
+  - `<leader>a` - Quick Task
+  - `d` - Delete task
+  - `e` - Edit task
+  - `D` - Set due date
+  - `K` - Move task up
+  - `J` - Move task down
+  - `i` - Toggle info
+  - `m` - Add metadata
+  - `M` - Edit metadata
+  - `n` - Add/edit note
+  - `p` - Toggle priority
+  - `t` - Add tags
+  - `T` - Edit tags
+  - `z` - Toggle fold
+    and more in help window using `?`.
 
 ## 🔧 Configuration
+
 All available options:
 
 ```lua
@@ -92,7 +105,7 @@ All available options:
 	metadata_position = "bottom", -- "bottom" or "right"
   },
   theme = {
-    border = "rounded",
+    border = "rounded",󰁦
     colors = {
 		header = { fg = "#7aa2f7", bold = true },
 		title = { fg = "#7dcfff", bold = true },
@@ -190,9 +203,6 @@ All available options:
 		due_date = "",
 		recurring = {
 			daily = "",
-		##  Screenshots
-![Main Panel](https://github.com/user-attachments/assets/da5255fa-90c9-4ddd-adc0-5ab4da2cbff0)
-![StatusLine](https://github.com/user-attachments/assets/e81bc6dd-815d-4a5d-8086-d815ba7cff1d)	weekly = "",
 			monthly = "",
 		},
 		metadata = "󰂵",
@@ -233,5 +243,5 @@ All available options:
 ```
 
 ## 🤝 Contributing
-Contributors are welcome here and thank you btw.
 
+Contributors are welcome here and thank you btw.

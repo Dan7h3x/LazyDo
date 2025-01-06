@@ -249,8 +249,6 @@ local function create_window()
 		col = size.col,
 		style = "minimal",
 		border = config.theme.border or "rounded",
-		title = " LazyDo Panel ",
-		title_pos = "center",
 		footer = " [a/A]dd task/subtask, [d]elete, [D]ate, [e]dit task, [K/J]move, [i]nfo, [m/M]etadata, [n]ote, [t/T]ag, [z]fold, [p]riority, [?]help ",
 		footer_pos = "center",
 		zindex = 50, -- Ensure window stays on top
