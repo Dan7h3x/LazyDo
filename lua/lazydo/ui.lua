@@ -2156,7 +2156,7 @@ function UI.show_relations()
 				target = target,
 				display = string.format(
 					"%s %s → [%s] %s",
-					config.icons.relation,
+					(config.icons.relations or "󱒖"),
 					rel.type:gsub("_", " "):upper(),
 					status_icon,
 					target.content
