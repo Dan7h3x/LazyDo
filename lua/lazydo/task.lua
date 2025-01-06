@@ -385,9 +385,24 @@ function Task.add_relation(task, target_id, relation_type)
 		task.relations = {}
 	end
 
+	-- Define default relation types if config is not available
+	local valid_relation_types = {
+		"blocks",
+		"depends_on",
+		"related_to",
+		"duplicates",
+	}
+
 	-- Validate relation type
-	if not vim.tbl_contains(config.features.relations.types, relation_type) then
+	if not vim.tbl_contains(valid_relation_types, relation_type) then
 		return false, "Invalid relation type"
+	end
+
+	-- Check for existing relation to prevent duplicates
+	for _, rel in ipairs(task.relations) do
+		if rel.target_id == target_id and rel.type == relation_type then
+			return false, "Relation already exists"
+		end
 	end
 
 	local relation = {
@@ -400,6 +415,20 @@ function Task.add_relation(task, target_id, relation_type)
 	return true
 end
 
+-- Add helper function to get relation types
+function Task.get_relation_types()
+	return {
+		"blocks",
+		"depends_on",
+		"related_to",
+		"duplicates",
+	}
+end
+
+-- Add helper function to validate relation type
+function Task.is_valid_relation_type(relation_type)
+	return vim.tbl_contains(Task.get_relation_types(), relation_type)
+end
 -- Add reminder to task
 ---@param task Task
 ---@param time number

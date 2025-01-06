@@ -249,9 +249,9 @@ local function create_window()
 		col = size.col,
 		style = "minimal",
 		border = config.theme.border or "rounded",
-		title = " LazyDo ",
+		title = " LazyDo Panel ",
 		title_pos = "center",
-		footer = " [a/A]dd task/subtask, [d]elete, [D]ate, [n]ote, [e]dit task, [z] fold, [p]riority, [?]help ",
+		footer = " [a/A]dd task/subtask, [d]elete, [D]ate, [e]dit task, [K/J]move, [i]nfo, [m/M]etadata, [n]ote, [t/T]ag, [z]fold, [p]riority, [?]help ",
 		footer_pos = "center",
 		zindex = 50, -- Ensure window stays on top
 	}
@@ -303,15 +303,15 @@ local function render_progress_bar(progress, width)
 	-- 󰪞󰪟󰪠󰪡󰪢󰪣󰪤󰪥
 	-- Enhanced progress icons based on percentage
 	local progress_icon = progress == 100 and config.icons.task_done
-		or progress >= 75 and "󰪣"
-		or progress >= 50 and "󰪡"
-		or progress >= 25 and "󰪟"
-		or progress > 0 and "󰪞"
-		or "󰪥"
+		or progress >= 75 and "󰪣 "
+		or progress >= 50 and "󰪡 "
+		or progress >= 25 and "󰪟 "
+		or progress > 0 and "󰪞 "
+		or "󰪥 "
 
 	if style == "modern" then
 		return string.format(
-			"%s [%s%s] %d%%",
+			"%s[%s%s]%d%%",
 			progress_icon,
 			string.rep(config.theme.progress_bar.filled, filled),
 			string.rep(config.theme.progress_bar.empty, empty),
@@ -758,7 +758,12 @@ local function render_task(task, level, current_line, is_last)
 	end
 
 	current_line = current_line + 1
-	if task.metadata and not vim.tbl_isempty(task.metadata) then
+	if
+		config.features.metadata
+		and config.features.metadata.enabled
+		and task.metadata
+		and not vim.tbl_isempty(task.metadata)
+	then
 		local metadata_lines, metadata_regions = UI.render_metadata(task, level + 1)
 		if metadata_lines and #metadata_lines > 0 then
 			-- Add metadata lines
@@ -902,21 +907,6 @@ function UI.render()
 		vim.list_extend(lines, task_lines)
 		vim.list_extend(all_regions, task_regions)
 
-		-- Render task info if enabled
-
-		-- Render metadata if enabled
-		if config.features.metadata and config.features.metadata.enabled then
-			local metadata_lines, metadata_regions = UI.render_metadata(task, 0)
-			vim.list_extend(lines, metadata_lines)
-
-			-- Adjust metadata regions to current line position
-			for _, region in ipairs(metadata_regions) do
-				region.line = region.line + current_line
-				table.insert(all_regions, region)
-			end
-			current_line = current_line + #metadata_lines
-		end
-
 		-- Update task mappings
 		for line_nr, mapping in pairs(task_mappings) do
 			state.line_to_task[line_nr] = mapping
@@ -1008,6 +998,7 @@ local function show_help()
 		" <CR>      Toggle task status",
 		" a         Add new task",
 		" A         Add subtask",
+		"<leader>a      Quick task",
 		" d         Delete task",
 		" e         Edit task",
 		"",
@@ -1016,17 +1007,25 @@ local function show_help()
 		" n         Add/edit notes",
 		" D         Set due date",
 		" t         Add tags",
+		" T         Edit tags",
+		"<leader>t   Remove tags",
 		" m         Add metadata",
-		" r         Set recurring",
+		" M         Edit metadata",
+		"<leader>md   Remove metadata",
+		" i         Toggle info",
 		"",
 		"Task Organization:",
 		" K         Move task up",
 		" J         Move task down",
 		" z         Toggle fold",
-		" <leader>x Convert to subtask",
+		"<leader>x  Convert to subtask",
+		"<leader>X  Convert to Task",
+		"",
+		"Links and Relations",
+		"<leader>l  Show relations",
+		"<leader>L  Add relation",
 		"",
 		"Filtering and Sorting:",
-		" /         Search tasks",
 		" <leader>sp Sort by priority",
 		" <leader>sd Sort by due date",
 		" <leader>ss Sort by status",
@@ -2151,13 +2150,13 @@ function UI.show_relations()
 	for _, rel in ipairs(task.relations) do
 		local target = UI.find_task_by_id(rel.target_id)
 		if target then
-			local status_icon = target.status == "done" and config.icons.task_done or icons.task_pending
+			local status_icon = target.status == "done" and config.icons.task_done or config.icons.task_pending
 			table.insert(relation_items, {
 				relation = rel,
 				target = target,
 				display = string.format(
 					"%s %s → [%s] %s",
-					config.icons.relation,
+					(config.icons.relations or "󱒖"),
 					rel.type:gsub("_", " "):upper(),
 					status_icon,
 					target.content
@@ -2273,8 +2272,8 @@ function UI.render_relations_section(task, indent_level)
 	for type_idx, type in ipairs(types) do
 		-- Add relation type header with icon (safely handle missing icon)
 		local type_header = type:gsub("_", " "):upper()
-		local relation_icon = (config.icons and config.icons.relation) or "→"
-		local type_line = base_indent .. "│ " .. relation_icon .. " " .. type_header .. ":"
+		local relation_icon = (config.icons and config.icons.relations) or "→"
+		local type_line = indent .. "│ " .. relation_icon .. " " .. type_header .. ":"
 		table.insert(lines, type_line)
 
 		-- Add type highlight
@@ -2289,7 +2288,7 @@ function UI.render_relations_section(task, indent_level)
 		for _, rel_info in ipairs(relations_by_type[type]) do
 			local status_icon = rel_info.target.status == "done" and (config.icons and config.icons.task_done or "✓")
 				or (config.icons and config.icons.task_pending or "·")
-			local target_line = base_indent .. "│   • [" .. status_icon .. "] " .. rel_info.target.content
+			local target_line = indent .. "│   • [" .. status_icon .. "] " .. rel_info.target.content
 
 			table.insert(lines, target_line)
 
@@ -2304,7 +2303,7 @@ function UI.render_relations_section(task, indent_level)
 
 		-- Add separator between types unless it's the last one
 		if type_idx < #types then
-			table.insert(lines, base_indent .. "│" .. string.rep("─", box_width - 4))
+			table.insert(lines, indent .. "│" .. string.rep("─", box_width - 4))
 		end
 	end
 
