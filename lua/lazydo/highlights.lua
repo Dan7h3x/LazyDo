@@ -256,6 +256,13 @@ function M.setup(config)
 			-- bg = colors.selection.bg or colors.task.pending.bg,
 			bold = true,
 		},
+		PinWindowBorder = {
+			fg = config.pin_window.colors.border.fg,
+		},
+		PinWindowTitle = {
+			fg = config.pin_window.colors.title.fg,
+			bold = config.pin_window.colors.title.bold,
+		},
 	}
 
 	-- Create all highlight groups

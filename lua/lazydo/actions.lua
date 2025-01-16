@@ -47,6 +47,29 @@ function Actions.update_task(tasks, task_id, fields, on_update)
 	end
 end
 
+function Actions.toggle_pin(tasks, task_id, on_update)
+    local function toggle_in_list(tasks_list)
+        for _, task in ipairs(tasks_list) do
+            if task.id == task_id then
+                task.pinned = not task.pinned
+                task.updated_at = os.time()
+                return true
+            end
+            if task.subtasks and #task.subtasks > 0 then
+                if toggle_in_list(task.subtasks) then
+                    return true
+                end
+            end
+        end
+        return false
+    end
+
+    if toggle_in_list(tasks) and on_update then
+        on_update(tasks)
+    end
+end
+
+
 function Actions.delete_task(tasks, task_id, on_update)
 	if not task_id then
 		return
@@ -341,7 +364,9 @@ function Actions.set_due_date(tasks, task_id, date_str, on_update)
 					local timestamp = Utils.Date.parse(date_str)
 					if timestamp then
 						task.due_date = timestamp
+						task.updated_at = os.time()
 					else
+						vim.notify("Invalid date format. Use YYYY-MM-DD, MM/DD, Nd, Nw, or keywords (today, tomorrow, next week, next month)", vim.log.levels.WARN)
 						return false
 					end
 				end

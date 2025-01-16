@@ -11,7 +11,7 @@ local Storage = {}
 ---@field encryption boolean Enable basic encryption
 local DEFAULT_OPTIONS = {
 	auto_backup = true,
-	backup_count = 5,
+	backup_count = 4,
 	compression = true,
 	encryption = false,
 }
@@ -96,30 +96,39 @@ local function validate_task(task)
 	return true
 end
 
----Compress data using basic compression
----@diagnostic disable-next-line: undefined-doc-param
+---Compress data using improved compression
 ---@param data string
 ---@return string
-
 local function compress_data(data)
+	-- More robust compression that preserves repeated patterns
 	local compressed = data:gsub("(.)%1+", function(s)
-		local char = s:sub(1, 1)
 		local count = #s
-		if count > 8 then
-			return string.format("##%d##%s", count, char)
+		if count > 3 then
+			return string.format("##%d##%s", count, s:sub(1, 1))
 		end
 		return s
 	end)
+
+	-- Preserve JSON structure markers
+	compressed = compressed:gsub('([{}%[%]":])', function(marker)
+		return string.format("##JSON##%s", marker)
+	end)
+
 	return compressed
 end
 
----Decompress data
+---Decompress data with improved safety
 ---@param data string
 ---@return string
 local function decompress_data(data)
-	local decompressed = data:gsub("##(%d+)##(.)", function(count, char)
+	-- First restore JSON structure markers
+	local decompressed = data:gsub("##JSON##(.)", "%1")
+
+	-- Then decompress repeated patterns
+	decompressed = decompressed:gsub("##(%d+)##(.)", function(count, char)
 		return string.rep(char, tonumber(count))
 	end)
+
 	return decompressed
 end
 ---@param data string
