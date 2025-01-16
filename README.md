@@ -20,10 +20,23 @@ A demo video for `LazyDo`:
 
 Screenshots for `LazyDo`:
 
-<img src="https://github.com/user-attachments/assets/09d1c4c8-481a-4ef9-964c-1622ca3f4fb5" alt="main panel" width="70%">
-<img src="https://github.com/user-attachments/assets/e81bc6dd-815d-4a5d-8086-d815ba7cff1d" alt="`lualine` integration" width="70%">
-<img src="https://github.com/user-attachments/assets/bbd88de8-e947-4fd8-ae87-57187ba7d024" alt="pin window" width="70%">
-<img src="https://github.com/user-attachments/assets/2b6da737-8fd3-4e97-90ed-e64a0e603273" alt="multiline note editor" width="70%">
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/09d1c4c8-481a-4ef9-964c-1622ca3f4fb5" alt="main panel" width="100%">
+main panel
+</p>
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/e81bc6dd-815d-4a5d-8086-d815ba7cff1d" alt="`lualine` integration" width="100%">
+`lualine` integration
+</p>
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/bbd88de8-e947-4fd8-ae87-57187ba7d024" alt="pin window" width="100%">
+pin window for having pending task everywhere
+</p>
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/2b6da737-8fd3-4e97-90ed-e64a0e603273" alt="multiline note editor" width="100%">
+multi-line note editor
+</p>
 
 ## ✨ Features
 
