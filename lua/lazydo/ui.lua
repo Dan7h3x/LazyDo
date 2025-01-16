@@ -2448,7 +2448,7 @@ function UI.create_pin_window(tasks, position)
 
 	-- Window setup
 	local width = config.pin_window.width or 40
-	local height = math.min(#tasks + 2, config.pin_window.max_height or 10)
+	local height = math.min(#tasks, config.pin_window.max_height or 10)
 
 	-- Calculate window position based on config
 	local editor_width = vim.o.columns
@@ -2492,11 +2492,8 @@ function UI.create_pin_window(tasks, position)
 	local lines = {}
 	local highlights = {}
 
-	-- Add header separator
-	-- table.insert(lines, string.rep("─", width))
-
 	-- Render tasks
-	for i, task in ipairs(tasks) do
+	for _, task in ipairs(tasks) do
 		if task.status ~= "done" then
 			local status_icon = config.icons[task.status] or config.icons.task_pending
 			local priority_icon = config.icons.priority[task.priority] or ""
@@ -2531,10 +2528,6 @@ function UI.create_pin_window(tasks, position)
 		end
 	end
 
-	-- Add footer separator
-	-- table.insert(lines, string.rep("─", width))
-
-	-- Set content
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 
 	-- Apply highlights
