@@ -631,14 +631,12 @@ local function render_task_header(task, level, is_last)
 		local relative_date = Utils.Date.relative(task.due_date)
 		local is_overdue = Utils.Date.is_overdue(task.due_date)
 		local is_today = Utils.Date.is_today(task.due_date)
-		
+
 		local due_text = string.format(" %s %s", config.icons.due_date or "", relative_date)
 		components.due = due_text
 
 		-- Determine highlight based on due status
-		local due_hl = is_overdue and "LazyDoDueDateOverdue"
-			or is_today and "LazyDoDueDateToday"
-			or "LazyDoDueDate"
+		local due_hl = is_overdue and "LazyDoDueDateOverdue" or is_today and "LazyDoDueDateToday" or "LazyDoDueDate"
 
 		add_region(#due_text, due_hl, 1)
 	end
@@ -1737,25 +1735,28 @@ function UI.cycle_priority()
 end
 
 function UI.set_due_date()
-    local task = UI.get_task_under_cursor()
-    if not task then
-        return
-    end
+	local task = UI.get_task_under_cursor()
+	if not task then
+		return
+	end
 
-    local current_date = task.due_date and Utils.Date.format(task.due_date) or ""
-    local prompt_text = string.format([[
-Due date: (For valid dates, check docs)]], current_date)
+	local current_date = task.due_date and Utils.Date.format(task.due_date) or ""
+	local prompt_text = string.format(
+		[[
+Due date: (For valid dates, check docs)]],
+		current_date
+	)
 
-    vim.ui.input({
-        prompt = prompt_text,
-        default = current_date,
-    }, function(date_str)
-        if date_str == nil then
-            return
-        end
-        Actions.set_due_date(state.tasks, task.id, date_str, state.on_task_update)
+	vim.ui.input({
+		prompt = prompt_text,
+		default = current_date,
+	}, function(date_str)
+		if date_str == nil then
+			return
+		end
+		Actions.set_due_date(state.tasks, task.id, date_str, state.on_task_update)
 		UI.refresh()
-    end)
+	end)
 end
 
 function UI.get_task_under_cursor()
@@ -2492,7 +2493,7 @@ function UI.create_pin_window(tasks, position)
 	local highlights = {}
 
 	-- Add header separator
-	table.insert(lines, string.rep("─", width))
+	-- table.insert(lines, string.rep("─", width))
 
 	-- Render tasks
 	for i, task in ipairs(tasks) do
@@ -2515,7 +2516,11 @@ function UI.create_pin_window(tasks, position)
 						length = 2,
 						hl = "LazyDoPriority" .. task.priority:sub(1, 1):upper() .. task.priority:sub(2),
 					},
-					{ start = 6, length = #content, hl = Task.is_overdue(task) and "LazyDoTaskOverdue" or "Normal" },
+					{
+						start = 6,
+						length = #content + 4,
+						hl = Task.is_overdue(task) and "LazyDoTaskOverdue" or "Normal",
+					},
 					{
 						start = #line - #due_text,
 						length = #due_text,
@@ -2527,7 +2532,7 @@ function UI.create_pin_window(tasks, position)
 	end
 
 	-- Add footer separator
-	table.insert(lines, string.rep("─", width))
+	-- table.insert(lines, string.rep("─", width))
 
 	-- Set content
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
