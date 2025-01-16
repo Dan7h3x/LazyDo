@@ -364,7 +364,9 @@ function Actions.set_due_date(tasks, task_id, date_str, on_update)
 					local timestamp = Utils.Date.parse(date_str)
 					if timestamp then
 						task.due_date = timestamp
+						task.updated_at = os.time()
 					else
+						vim.notify("Invalid date format. Use YYYY-MM-DD, MM/DD, Nd, Nw, or keywords (today, tomorrow, next week, next month)", vim.log.levels.WARN)
 						return false
 					end
 				end

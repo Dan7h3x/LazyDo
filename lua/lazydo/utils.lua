@@ -45,48 +45,75 @@ function Utils.Date.parse(date_str)
 	if not date_str or date_str == "" then
 		return nil
 	end
-	date_str = date_str:match("^%s*(.-)%s*$")
-	local date = date_str:lower()
+	date_str = date_str:match("^%s*(.-)%s*$"):lower()
 
 	-- Handle special keywords
-	if date == "today" then
-		return os.time({
-			year = os.date("%Y"),
-			month = os.date("%m"),
-			day = os.date("%d"),
-		}) + 86400
-	elseif date == "tomorrow" then
-		return os.time({
-			year = os.date("%Y"),
-			month = os.date("%m"),
-			day = os.date("%d"),
-		}) + 2 * 86400
+	local now = os.time()
+	local today_start = os.time({
+		year = os.date("%Y", now),
+		month = os.date("%m", now),
+		day = os.date("%d", now),
+		hour = 0,
+		min = 0,
+		sec = 0
+	})
+
+	if date_str == "today" then
+		return today_start + 86400 -- End of today
+	elseif date_str == "tomorrow" then
+		return today_start + (2 * 86400) -- End of tomorrow
+	elseif date_str == "next week" then
+		return today_start + (7 * 86400)
+	elseif date_str == "next month" then
+		-- Add roughly one month (30 days)
+		return today_start + (30 * 86400)
 	end
 
-	local days = date_str:match("^(%d+)d$")
-	local weeks = date_str:match("^(%d+)w$")
-	if days or weeks then
-		days = tonumber(days)
-		weeks = tonumber(weeks)
-		if days and days >= 0 then
-			return os.time() + (days * 86400)
-		end
+	-- Handle relative dates (e.g., "3d", "2w", "1m")
+	local amount, unit = date_str:match("^(%d+)([dwmy])$")
+	if amount and unit then
+		amount = tonumber(amount)
+		if not amount or amount < 0 then return nil end
 
-		if weeks and weeks >= 0 then
-			return os.time() + (weeks * 7 * 86400)
-		end
-	else
-		return nil
+		local multipliers = {
+			d = 86400, -- days
+			w = 86400 * 7, -- weeks
+			m = 86400 * 30, -- months (approximate)
+			y = 86400 * 365, -- years (approximate)
+		}
+		return now + (amount * multipliers[unit])
 	end
 
 	-- Handle YYYY-MM-DD format
 	local year, month, day = date_str:match("^(%d%d%d%d)-(%d%d?)-(%d%d?)$")
 	if year and month and day then
-		return os.time({
-			year = tonumber(year),
-			month = tonumber(month),
-			day = tonumber(day),
-		})
+		year, month, day = tonumber(year), tonumber(month), tonumber(day)
+		if month >= 1 and month <= 12 and day >= 1 and day <= 31 then
+			return os.time({
+				year = year,
+				month = month,
+				day = day,
+				hour = 23,
+				min = 59,
+				sec = 59
+			})
+		end
+	end
+
+	-- Handle MM/DD format (assume current year)
+	local mm, dd = date_str:match("^(%d%d?)/(%d%d?)$")
+	if mm and dd then
+		mm, dd = tonumber(mm), tonumber(dd)
+		if mm >= 1 and mm <= 12 and dd >= 1 and dd <= 31 then
+			return os.time({
+				year = tonumber(os.date("%Y")),
+				month = mm,
+				day = dd,
+				hour = 23,
+				min = 59,
+				sec = 59
+			})
+		end
 	end
 
 	return nil
@@ -112,45 +139,66 @@ function Utils.Date.relative(timestamp)
 
 	local now = os.time()
 	local diff = os.difftime(timestamp, now)
+	local abs_diff = math.abs(diff)
 
-	local seconds_in_day = 86400
-	local seconds_in_hour = 3600
-	local seconds_in_minute = 60
+	local function plural(n, word)
+		return n == 1 and word or word .. "s"
+	end
+
+	-- Constants for time periods
+	local MINUTE = 60
+	local HOUR = MINUTE * 60
+	local DAY = HOUR * 24
+	local WEEK = DAY * 7
+	local MONTH = DAY * 30
+	local YEAR = DAY * 365
+
+	-- Helper function to format time periods
+	local function format_period(diff, period, period_name)
+		local n = math.floor(diff / period)
+		return string.format("%d %s", n, plural(n, period_name))
+	end
 
 	if diff < 0 then
 		-- Past time
-		local abs_diff = math.abs(diff)
-		if abs_diff < seconds_in_minute then
+		if abs_diff < MINUTE then
 			return "just now"
-		elseif abs_diff < seconds_in_hour then
-			local minutes = math.floor(abs_diff / seconds_in_minute)
-			return minutes .. (minutes == 1 and " minute ago" or " minutes ago")
-		elseif abs_diff < seconds_in_day then
-			local hours = math.floor(abs_diff / seconds_in_hour)
-			return hours .. (hours == 1 and " hour ago" or " hours ago")
+		elseif abs_diff < HOUR then
+			return format_period(abs_diff, MINUTE, "minute") .. " ago"
+		elseif abs_diff < DAY then
+			return format_period(abs_diff, HOUR, "hour") .. " ago"
+		elseif abs_diff < WEEK then
+			return format_period(abs_diff, DAY, "day") .. " ago"
+		elseif abs_diff < MONTH then
+			return format_period(abs_diff, WEEK, "week") .. " ago"
+		elseif abs_diff < YEAR then
+			return format_period(abs_diff, MONTH, "month") .. " ago"
 		else
-			local days = math.floor(abs_diff / seconds_in_day)
-			return days .. (days == 1 and " day ago" or " days ago")
+			return format_period(abs_diff, YEAR, "year") .. " ago"
 		end
 	else
 		-- Future time
-		if diff < seconds_in_minute then
+		if diff < MINUTE then
 			return "in a few seconds"
-		elseif diff < seconds_in_hour then
-			local minutes = math.floor(diff / seconds_in_minute)
-			return "in " .. minutes .. (minutes == 1 and " minute" or " minutes")
-		elseif diff < seconds_in_day then
-			local hours = math.floor(diff / seconds_in_hour)
-			return "in " .. hours .. (hours == 1 and " hour" or " hours")
-		else
-			local days = math.floor(diff / seconds_in_day)
+		elseif diff < HOUR then
+			return "in " .. format_period(diff, MINUTE, "minute")
+		elseif diff < DAY then
+			return "in " .. format_period(diff, HOUR, "hour")
+		elseif diff < WEEK then
+			local days = math.floor(diff / DAY)
 			if days == 0 then
 				return "today"
 			elseif days == 1 then
 				return "tomorrow"
 			else
-				return "in " .. days .. " days"
+				return "in " .. days .. " " .. plural(days, "day")
 			end
+		elseif diff < MONTH then
+			return "in " .. format_period(diff, WEEK, "week")
+		elseif diff < YEAR then
+			return "in " .. format_period(diff, MONTH, "month")
+		else
+			return "in " .. format_period(diff, YEAR, "year")
 		end
 	end
 end
@@ -539,4 +587,27 @@ function Utils.write_json_file(path, data)
 	end
 	return false
 end
+
+---Check if two timestamps are on the same day
+---@param ts1 number
+---@param ts2 number
+---@return boolean
+function Utils.Date.is_same_day(ts1, ts2)
+	return os.date("%Y-%m-%d", ts1) == os.date("%Y-%m-%d", ts2)
+end
+
+---Check if timestamp is today
+---@param timestamp number
+---@return boolean
+function Utils.Date.is_today(timestamp)
+	return Utils.Date.is_same_day(timestamp, os.time())
+end
+
+---Check if timestamp is overdue
+---@param timestamp number
+---@return boolean
+function Utils.Date.is_overdue(timestamp)
+	return timestamp < os.time()
+end
+
 return Utils

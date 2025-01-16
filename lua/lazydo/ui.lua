@@ -628,12 +628,16 @@ local function render_task_header(task, level, is_last)
 
 	-- Add due date
 	if task.due_date then
-		local due_text = string.format(" %s %s", config.icons.due_date or "", Task.get_due_date_relative(task))
+		local relative_date = Utils.Date.relative(task.due_date)
+		local is_overdue = Utils.Date.is_overdue(task.due_date)
+		local is_today = Utils.Date.is_today(task.due_date)
+		
+		local due_text = string.format(" %s %s", config.icons.due_date or "", relative_date)
 		components.due = due_text
 
-		local days_until_due = math.floor((task.due_date - os.time()) / (24 * 60 * 60))
-		local due_hl = days_until_due < 0 and "LazyDoDueDateOverdue"
-			or days_until_due <= 2 and "LazyDoDueDateNear"
+		-- Determine highlight based on due status
+		local due_hl = is_overdue and "LazyDoDueDateOverdue"
+			or is_today and "LazyDoDueDateToday"
 			or "LazyDoDueDate"
 
 		add_region(#due_text, due_hl, 1)
@@ -1733,20 +1737,25 @@ function UI.cycle_priority()
 end
 
 function UI.set_due_date()
-	local task = UI.get_task_under_cursor()
-	if not task then
-		return
-	end
+    local task = UI.get_task_under_cursor()
+    if not task then
+        return
+    end
 
-	vim.ui.input({
-		prompt = "Set due date (Y-M-D/today/tomorrow/nd/nw):",
-		default = task.due_date and Utils.Date.format(task.due_date) or "",
-	}, function(date_str)
-		if date_str then
-			Actions.set_due_date(state.tasks, task.id, date_str, state.on_task_update)
-			UI.refresh()
-		end
-	end)
+    local current_date = task.due_date and Utils.Date.format(task.due_date) or ""
+    local prompt_text = string.format([[
+Due date: (For valid dates, check docs)]], current_date)
+
+    vim.ui.input({
+        prompt = prompt_text,
+        default = current_date,
+    }, function(date_str)
+        if date_str == nil then
+            return
+        end
+        Actions.set_due_date(state.tasks, task.id, date_str, state.on_task_update)
+		UI.refresh()
+    end)
 end
 
 function UI.get_task_under_cursor()
