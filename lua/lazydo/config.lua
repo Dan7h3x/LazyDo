@@ -8,6 +8,25 @@ local Config = {}
 
 ---Default configuration
 local defaults = {
+	title = " LazyDo Tasks ",
+	layout = {
+		width = 0.7, -- Percentage of screen width
+		height = 0.8, -- Percentage of screen height
+		spacing = 1, -- Lines between tasks
+		task_padding = 1, -- Padding around task content
+	},
+	pin_window = {
+		enabled = true,
+		width = 40,
+		max_height = 10,
+		position = "topright", -- "topright", "topleft", "bottomright", "bottomleft"
+		title = " LazyDo Tasks ",
+		auto_sync = true, -- Enable automatic synchronization with main window
+		colors = {
+			border = { fg = "#3b4261" },
+			title = { fg = "#7dcfff", bold = true },
+		},
+	},
 	theme = {
 		border = "rounded",
 		colors = {
@@ -88,12 +107,10 @@ local defaults = {
 			style = "modern", -- "classic", "modern", "minimal"
 		},
 		indent = {
-			marker = "│",
 			connector = "├─",
 			last_connector = "└─",
 		},
 	},
-
 	icons = {
 		task_pending = "",
 		task_done = "",
@@ -116,8 +133,6 @@ local defaults = {
 		metadata = "󰂵",
 		important = "",
 	},
-	date_format = "%Y-%m-%d",
-	storage_path = nil, -- Uses default if not specified
 	features = {
 		task_info = {
 			enabled = true,
@@ -138,69 +153,17 @@ local defaults = {
 			},
 			prefix = "󰓹 ",
 		},
-		-- attachments = {
-		-- 	enabled = true,
-		-- 	storage = "local", -- "local" or "git"
-		-- 	path = "~/.local/share/lazydo/attachments",
-		-- 	max_size = 10 * 1024 * 1024, -- 10MB
-		-- 	allowed_types = {
-		-- 		"image/*",
-		-- 		"text/*",
-		-- 		"application/pdf",
-		-- 	},
-		-- },
-
-		-- templates = {
-		-- 	enabled = true,
-		-- 	path = "~/.config/lazydo/templates",
-		-- 	default_template = "basic",
-		-- },
 		relations = {
 			enabled = true,
-			types = {
-				"blocks",
-				"depends_on",
-				"related_to",
-				"duplicates",
-			},
 		},
-
 		metadata = {
 			enabled = true,
-			display = true,
 			colors = {
 				key = { fg = "#f0caf5", bg = "#bb9af7", bold = true },
 				value = { fg = "#c0faf5", bg = "#7dcfff" },
 				section = { fg = "#00caf5", bg = "#bb9af7", bold = true, italic = true },
 			},
 		},
-		progress = {
-			enabled = true,
-			style = "modern", -- "classic", "modern", "minimal"
-			colors = {
-				low = "#f7768e",
-				medium = "#e0af68",
-				high = "#9ece6a",
-			},
-		},
-		search = {
-			live_update = true,
-			highlight_matches = true,
-			case_sensitive = false,
-			fuzzy = true,
-			include_notes = true,
-			include_tags = true,
-			include_metadata = true,
-			live_preview = true,
-		},
-	},
-	title = " LazyDo Tasks ",
-	layout = {
-		width = 0.7, -- Percentage of screen width
-		height = 0.8, -- Percentage of screen height
-		spacing = 1, -- Lines between tasks
-		task_padding = 1, -- Padding around task content
-		metadata_position = "bottom", -- "bottom" or "right"
 	},
 }
 ---Setup configuration

@@ -238,7 +238,7 @@ local function create_window()
 		vim.api.nvim_buf_set_option(buf, opt, val)
 	end
 
-	local size = Utils.get_window_size()
+	local size = Utils.get_window_size(config)
 
 	-- Enhanced window options
 	local win_opts = {
@@ -249,8 +249,6 @@ local function create_window()
 		col = size.col,
 		style = "minimal",
 		border = config.theme.border or "rounded",
-		title = " LazyDo Panel ",
-		title_pos = "center",
 		footer = " [a/A]dd task/subtask, [d]elete, [D]ate, [e]dit task, [K/J]move, [i]nfo, [m/M]etadata, [n]ote, [t/T]ag, [z]fold, [p]riority, [?]help ",
 		footer_pos = "center",
 		zindex = 50, -- Ensure window stays on top
@@ -340,111 +338,121 @@ local function render_note_section(note, indent_level, is_subtask)
 	local regions = {}
 	local current_line = 0
 
-	local note_icon = config.icons.note or "󰍨"
-
-	-- Different connectors and styling for parent vs child tasks
-	local connectors = {
-		parent = {
-			top_left = "╭",
-			top_right = "╮",
-			vertical = "│",
-			bottom_left = "╰",
-			bottom_right = "╯",
-			horizontal = "─",
-		},
-		child = {
-			top_left = "├",
-			top_right = "╮",
-			vertical = "│",
-			bottom_left = "└",
-			bottom_right = "╯",
-			horizontal = "─",
-		},
+	local note_icon = config.icons.note or ""
+	local box = {
+		top_left = is_subtask and "├" or "╭",
+		top_right = "╮",
+		vertical = "│",
+		horizontal = "─",
+		bottom_left = is_subtask and "└" or "╰",
+		bottom_right = "╯",
+		separator = "┄",
 	}
 
-	local style = is_subtask and connectors.child or connectors.parent
-
-	-- Render header with icon and title
-	local header =
-		string.format("%s%s%s%s %s Note: ", indent, style.top_left, style.horizontal, style.horizontal, note_icon)
-	local header_padding = string.rep(style.horizontal, width - vim.fn.strwidth(header) + #indent)
-	header = header .. header_padding .. style.top_right
-
+	-- Create header
+	local header = string.format("%s%s%s %s Notes ", indent, box.top_left, box.horizontal, note_icon)
+	local header_padding = string.rep(box.horizontal, width - vim.fn.strwidth(header) + #indent)
+	header = header .. header_padding .. box.top_right
 	table.insert(lines, header)
 
-	-- Add header highlights
+	-- Header highlights
 	table.insert(regions, {
 		line = current_line,
 		col = #indent,
-		length = #indent + 7, -- connector length
+		length = #box.top_left + 1,
 		hl_group = "LazyDoNotesBorder",
 	})
 	table.insert(regions, {
 		line = current_line,
-		col = #indent + 8,
-		length = 6,
+		col = #indent + #box.top_left + 3,
+		length = #note_icon + 7,
 		hl_group = "LazyDoNotesIcon",
 	})
-	-- table.insert(regions, {
-	-- 	line = current_line,
-	-- 	col = #indent + #note_icon + 4,
-	-- 	length = 6, -- "Note" text
-	-- 	hl_group = "LazyDoNotesIcon",
-	-- })
 	table.insert(regions, {
 		line = current_line,
-		col = #indent + 19,
-		length = #header_padding + 9,
+		col = #indent + 17,
+		length = #header_padding + #box.top_right,
 		hl_group = "LazyDoNotesBorder",
 	})
 
 	current_line = current_line + 1
 
-	-- Render note content with proper padding and borders
-	local content_line = string.format("%s%s %s ", indent, style.vertical, note)
+	-- Process note content with improved paragraph handling
+	local paragraphs = vim.split(note, "\n", { plain = true })
 
-	-- Add padding to align with width
-	-- local content_padding = width - vim.fn.strwidth(note) - 2
-	-- if content_padding > 0 then
-	-- 	content_line = content_line:sub(1, -2) .. string.rep(" ", content_padding) .. style.vertical
-	-- end
+	for i, paragraph in ipairs(paragraphs) do
+		if paragraph == "" then
+			-- Empty line handling
+			local empty_line = string.format("%s%s%s%s", indent, box.vertical, string.rep(" ", width - 2), box.vertical)
+			table.insert(lines, empty_line)
 
-	table.insert(lines, content_line)
+			-- Border highlights
+			table.insert(regions, {
+				line = current_line,
+				col = #indent,
+				length = 1,
+				hl_group = "LazyDoNotesBorder",
+			})
+			table.insert(regions, {
+				line = current_line,
+				col = #empty_line - 1,
+				length = 1,
+				hl_group = "LazyDoNotesBorder",
+			})
 
-	-- Add content highlights
-	table.insert(regions, {
-		line = current_line,
-		col = #indent,
-		length = 1,
-		hl_group = "LazyDoNotesBorder",
-	})
-	table.insert(regions, {
-		line = current_line,
-		col = #indent + 2,
-		length = #note + #indent,
-		hl_group = "LazyDoNotesBody",
-	})
-	table.insert(regions, {
-		line = current_line,
-		col = #content_line - 1,
-		length = 1,
-		hl_group = "LazyDoNotesBorder",
-	})
+			current_line = current_line + 1
+		else
+			-- Word wrap the paragraph content
+			local wrapped_lines = Utils.Str.wrap(paragraph, width - 4)
+			for _, line_content in ipairs(wrapped_lines) do
+				local padding = width - vim.fn.strwidth(line_content) - 2
+				local content_line = string.format(
+					"%s%s %s%s%s",
+					indent,
+					box.vertical,
+					line_content,
+					string.rep(" ", padding),
+					box.vertical
+				)
 
-	current_line = current_line + 1
+				table.insert(lines, content_line)
 
-	-- Render footer
-	local footer = string.format(
-		"%s%s%s%s",
-		indent,
-		style.bottom_left,
-		string.rep(style.horizontal, width - 1),
-		style.bottom_right
-	)
+				-- Content line highlights
+				table.insert(regions, {
+					line = current_line,
+					col = #indent,
+					length = 1,
+					hl_group = "LazyDoNotesBorder",
+				})
+				table.insert(regions, {
+					line = current_line,
+					col = #indent + width + 2,
+					length = 1,
+					hl_group = "LazyDoNotesBorder",
+				})
+				table.insert(regions, {
+					line = current_line,
+					col = #indent + 2,
+					length = #line_content + 2,
+					hl_group = "LazyDoNotesBody",
+				})
+				table.insert(regions, {
+					line = current_line,
+					col = #content_line - 1,
+					length = 1,
+					hl_group = "LazyDoNotesBorder",
+				})
 
+				current_line = current_line + 1
+			end
+		end
+	end
+
+	-- Add footer
+	local footer =
+		string.format("%s%s%s%s", indent, box.bottom_left, string.rep(box.horizontal, width - 1), box.bottom_right)
 	table.insert(lines, footer)
 
-	-- Add footer highlights
 	table.insert(regions, {
 		line = current_line,
 		col = #indent,
@@ -454,6 +462,7 @@ local function render_note_section(note, indent_level, is_subtask)
 
 	return lines, regions
 end
+
 local function render_task_info(task, indent_level)
 	if not state.show_task_info then
 		return "", {}
@@ -784,7 +793,7 @@ local function render_task(task, level, current_line, is_last)
 			current_line = current_line + #metadata_lines
 		end
 	end
-	if task.relations and #task.relations > 0 then
+	if config.features.relations.enabled and task.relations and #task.relations > 0 then
 		local relation_lines, relation_regions = UI.render_relations_section(task, level + 1)
 		if relation_lines and #relation_lines > 0 then
 			-- Add relation lines
@@ -989,7 +998,12 @@ function UI.render()
 	if config.features.statusline and config.features.statusline.enabled then
 		vim.api.nvim_command("redrawstatus!")
 	end
+
+	if state.tasks and config and config.pin_window and config.pin_window.enabled then
+		UI.sync_pin_window(state.tasks, config)
+	end
 end
+
 local function show_help()
 	local help_text = {
 		"LazyDo Keybindings:",
@@ -1126,11 +1140,7 @@ function UI.setup_keymaps()
 
 	-- Task Management
 	map("d", function()
-		local task = UI.get_task_under_cursor()
-		if task then
-			Actions.delete_task(state.tasks, task.id, state.on_task_update)
-			UI.refresh()
-		end
+		UI.delete_task()
 	end, "Delete Task")
 	map("i", function()
 		UI.toggle_task_info()
@@ -1152,41 +1162,14 @@ function UI.setup_keymaps()
 
 	-- Task Properties
 	map("p", function()
-		local task = UI.get_task_under_cursor()
-		if task then
-			Actions.cycle_priority(state.tasks, task.id, state.on_task_update)
-			UI.refresh()
-		end
+		UI.cycle_priority()
 	end, "Toggle Priority")
 
 	map("n", function()
-		local task = UI.get_task_under_cursor()
-		if task then
-			vim.ui.input({
-				prompt = "Add note:",
-				default = task.notes or "",
-			}, function(notes)
-				if notes then
-					Actions.set_notes(state.tasks, task.id, notes, state.on_task_update)
-					UI.refresh()
-				end
-			end)
-		end
-	end, "Set Note")
-
+		UI.add_multi_note()
+	end, "add multi note")
 	map("D", function()
-		local task = UI.get_task_under_cursor()
-		if task then
-			vim.ui.input({
-				prompt = "Set due (YYYY-MM-DD/today/tomorrow/Nd):",
-				default = task.due_date and Utils.Date.format(task.due_date) or "",
-			}, function(date_str)
-				if date_str then
-					Actions.set_due_date(state.tasks, task.id, date_str, state.on_task_update)
-					UI.refresh()
-				end
-			end)
-		end
+		UI.set_due_date()
 	end, "Set Date")
 
 	-- Task Hierarchy
@@ -1411,6 +1394,71 @@ function UI.setup_keymaps()
 		UI.refresh()
 	end, "Sort by Status")
 end
+
+function UI.delete_task()
+	local task = UI.get_task_under_cursor()
+	if not task then
+		UI.show_feedback("No task selected", "warn")
+		return nil
+	end
+
+	-- Configure confirmation dialog with improved options
+	local confirm_opts = {
+		prompt = string.format("Delete Task: %s", task.content:sub(1, 30) .. (task.content:len() > 30 and "..." or "")),
+		kind = "warning",
+		default = false,
+		format_item = function(item)
+			return item == "y" and "Yes, delete this task" or "No, keep it"
+		end,
+	}
+
+	-- Show task details in the confirmation
+	local details = {
+		"",
+		"Task Details:",
+		"  • Status: " .. task.status,
+		"  • Priority: " .. task.priority,
+		task.due_date and ("  • Due: " .. Utils.Date.format(task.due_date)) or nil,
+		#(task.subtasks or {}) > 0 and ("  • Subtasks: " .. #task.subtasks) or nil,
+		task.notes and "  • Has notes" or nil,
+		"",
+		"Are you sure you want to delete this task?",
+		"This action cannot be undone.",
+	}
+
+	-- Filter out nil entries and join with newlines
+	confirm_opts.prompt = confirm_opts.prompt
+		.. "\n"
+		.. table.concat(
+			vim.tbl_filter(function(item)
+				return item ~= nil
+			end, details),
+			"\n"
+		)
+
+	-- Show confirmation dialog
+	vim.ui.select({ "y", "n" }, confirm_opts, function(choice)
+		if choice == "y" then
+			-- Attempt to delete the task
+			local success, err = pcall(function()
+				Actions.delete_task(state.tasks, task.id, state.on_task_update)
+			end)
+
+			if success then
+				UI.show_feedback("Task deleted successfully")
+				UI.refresh()
+				return true
+			else
+				UI.show_feedback("Failed to delete task: " .. tostring(err), "error")
+				return nil
+			end
+		else
+			UI.show_feedback("Task deletion cancelled")
+			return nil
+		end
+	end)
+end
+
 ---Show feedback to user
 ---@param message string Message to show
 ---@param level? "info"|"warn"|"error" Feedback level
@@ -1580,7 +1628,7 @@ function UI.add_task()
 			end
 
 			vim.ui.input({
-				prompt = "Due (YYYY-MM-DD/today/tomorrow/Nd, optional):",
+				prompt = "Due (Y-M-D/today/tomorrow/nd/nw, optional):",
 			}, function(due_date)
 				local timestamp = due_date and due_date ~= "" and Utils.Date.parse(due_date)
 
@@ -1650,9 +1698,28 @@ function UI.add_note()
 	}, function(notes)
 		if notes then
 			Actions.set_notes(state.tasks, task.id, notes, state.on_task_update)
+			UI.refresh()
 		end
 	end)
-	UI.refresh()
+end
+
+function UI.add_multi_note()
+	local task = UI.get_task_under_cursor()
+	if not task then
+		return
+	end
+
+	Utils.multiline_input({
+		prompt = "Add multiline note:",
+		default = task.notes or "",
+		width = 60,
+		height = 10,
+	}, function(notes)
+		if notes then
+			Actions.set_notes(state.tasks, task.id, notes, state.on_task_update)
+			UI.refresh()
+		end
+	end)
 end
 
 function UI.cycle_priority()
@@ -1662,6 +1729,7 @@ function UI.cycle_priority()
 	end
 
 	Actions.cycle_priority(state.tasks, task.id, state.on_task_update)
+	UI.refresh()
 end
 
 function UI.set_due_date()
@@ -1671,14 +1739,14 @@ function UI.set_due_date()
 	end
 
 	vim.ui.input({
-		prompt = "Set due date (YYYY-MM-DD/today/tomorrow/Nd):",
+		prompt = "Set due date (Y-M-D/today/tomorrow/nd/nw):",
 		default = task.due_date and Utils.Date.format(task.due_date) or "",
 	}, function(date_str)
 		if date_str then
 			Actions.set_due_date(state.tasks, task.id, date_str, state.on_task_update)
+			UI.refresh()
 		end
 	end)
-	UI.refresh()
 end
 
 function UI.get_task_under_cursor()
@@ -2093,7 +2161,7 @@ function UI.toggle(tasks, on_task_update, lazy_config, last_state)
 			buffer = state.buf,
 			callback = function()
 				if is_valid_window() then
-					local size = Utils.get_window_size()
+					local size = Utils.get_window_size(config)
 					vim.api.nvim_win_set_config(state.win, {
 						width = size.width,
 						height = size.height,
@@ -2349,6 +2417,173 @@ function UI.add_reminder()
 			end
 		end
 	end)
+end
+
+local pin_window_state = {
+	buf = nil,
+	win = nil,
+	last_update = 0,
+}
+
+function UI.create_pin_window(tasks, position)
+	if not config.pin_window or not config.pin_window.enabled then
+		return
+	end
+
+	-- If window exists, close it (toggle behavior)
+	if pin_window_state.win and vim.api.nvim_win_is_valid(pin_window_state.win) then
+		UI.close_pin_window()
+		return
+	end
+
+	-- Window setup
+	local width = config.pin_window.width or 40
+	local height = math.min(#tasks + 2, config.pin_window.max_height or 10)
+
+	-- Calculate window position based on config
+	local editor_width = vim.o.columns
+	local editor_height = vim.o.lines
+	local row = 1
+	local col = editor_width - width - 2
+	local position = position or config.pin_window.position
+
+	-- Position the window according to configuration
+	if position == "topleft" then
+		row = 1
+		col = 1
+	elseif position == "bottomright" then
+		row = editor_height - height - 4
+		col = editor_width - width - 2
+	elseif position == "bottomleft" then
+		row = editor_height - height - 4
+		col = 1
+	end
+
+	-- Create buffer and window
+	local buf = vim.api.nvim_create_buf(false, true)
+	local win = vim.api.nvim_open_win(buf, false, {
+		relative = "editor",
+		width = width,
+		height = height,
+		row = row,
+		col = col,
+		style = "minimal",
+		border = "rounded",
+		title = config.pin_window.title or " LazyDo Tasks ",
+		title_pos = "center",
+		zindex = 50,
+	})
+
+	-- Apply window highlights using config colors
+	local win_hl = string.format("Normal:LazyDoFloat,FloatBorder:LazyDoPinWindowBorder,FloatTitle:LazyDoPinWindowTitle")
+	vim.api.nvim_win_set_option(win, "winhl", win_hl)
+
+	-- Render content
+	local lines = {}
+	local highlights = {}
+
+	-- Add header separator
+	table.insert(lines, string.rep("─", width))
+
+	-- Render tasks
+	for i, task in ipairs(tasks) do
+		if task.status ~= "done" then
+			local status_icon = config.icons[task.status] or config.icons.task_pending
+			local priority_icon = config.icons.priority[task.priority] or ""
+			local due_text = task.due_date and Utils.Date.relative(task.due_date) or ""
+
+			local content = Utils.Str.truncate(task.content, width - #due_text - 8)
+			local line = string.format("%s %s %s %s", status_icon, priority_icon, content, due_text)
+			table.insert(lines, line)
+
+			-- Add highlights using config colors
+			table.insert(highlights, {
+				line = #lines - 1,
+				segments = {
+					{ start = 0, length = 2, hl = "LazyDoTaskStatus" },
+					{
+						start = 3,
+						length = 2,
+						hl = "LazyDoPriority" .. task.priority:sub(1, 1):upper() .. task.priority:sub(2),
+					},
+					{ start = 6, length = #content, hl = Task.is_overdue(task) and "LazyDoTaskOverdue" or "Normal" },
+					{
+						start = #line - #due_text,
+						length = #due_text,
+						hl = Task.is_overdue(task) and "LazyDoDueDateOverdue" or "LazyDoDueDate",
+					},
+				},
+			})
+		end
+	end
+
+	-- Add footer separator
+	table.insert(lines, string.rep("─", width))
+
+	-- Set content
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+
+	-- Apply highlights
+	for _, hl in ipairs(highlights) do
+		for _, segment in ipairs(hl.segments) do
+			vim.api.nvim_buf_add_highlight(buf, -1, segment.hl, hl.line, segment.start, segment.start + segment.length)
+		end
+	end
+
+	-- Add basic keymaps
+	local function map(key, fn, desc)
+		vim.api.nvim_buf_set_keymap(buf, "n", key, "", {
+			callback = fn,
+			noremap = true,
+			silent = true,
+			desc = desc,
+		})
+	end
+
+	map("q", function()
+		UI.close_pin_window()
+	end, "Close window")
+
+	map("<ESC>", function()
+		UI.close_pin_window()
+	end, "Close window")
+
+	-- Store state
+	pin_window_state.buf = buf
+	pin_window_state.win = win
+
+	return win, buf
+end
+
+function UI.close_pin_window()
+	if pin_window_state.win and vim.api.nvim_win_is_valid(pin_window_state.win) then
+		vim.api.nvim_win_close(pin_window_state.win, true)
+	end
+
+	if pin_window_state.buf and vim.api.nvim_buf_is_valid(pin_window_state.buf) then
+		vim.api.nvim_buf_delete(pin_window_state.buf, { force = true })
+	end
+
+	pin_window_state.win = nil
+	pin_window_state.buf = nil
+end
+
+function UI.refresh_pin_window(tasks, position)
+	if pin_window_state.win and vim.api.nvim_win_is_valid(pin_window_state.win) then
+		UI.close_pin_window()
+		UI.create_pin_window(tasks, position)
+	end
+end
+
+-- Add this function to handle automatic updates
+function UI.sync_pin_window(tasks, position)
+	if not config.pin_window or not config.pin_window.enabled then
+		return
+	end
+
+	if pin_window_state.win and vim.api.nvim_win_is_valid(pin_window_state.win) then
+		UI.refresh_pin_window(tasks, position)
+	end
 end
 
 return UI

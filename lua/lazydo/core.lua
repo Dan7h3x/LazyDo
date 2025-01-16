@@ -229,6 +229,8 @@ function Core:get_task_statistics()
 	return stats
 end
 
+--- API Functions
+
 ---Cleanup resources
 function Core:cleanup()
 	-- Ensure tasks is initialized
@@ -284,19 +286,6 @@ function Core:convert_to_subtask(task_id, parent_id)
 	end)
 end
 
----Filter tasks
----@param filter table
-function Core:filter_tasks(filter)
-	if not filter then
-		return
-	end
-	self._last_filter = filter
-	Actions.filter_tasks(self.tasks, filter, function(filtered_tasks)
-		self.tasks = filtered_tasks
-		self:refresh_ui()
-	end)
-end
-
 ---Sort tasks
 ---@param criteria string
 function Core:sort_tasks(criteria)
@@ -310,4 +299,30 @@ function Core:sort_tasks(criteria)
 	end)
 end
 
+-- Add to Core class
+function Core:get_active_tasks()
+	local active_tasks = {}
+	for _, task in ipairs(self.tasks) do
+		if task.status ~= "done" then
+			table.insert(active_tasks, {
+				content = task.content,
+				status = task.status,
+				due_date = task.due_date,
+				priority = task.priority,
+			})
+		end
+	end
+	return active_tasks
+end
+
+function Core:toggle_pin_view(position)
+	if self._pin_visible then
+		UI.close_pin_window()
+		self._pin_visible = false
+	else
+		UI.create_pin_window(self:get_active_tasks(), position)
+		self._pin_visible = true
+	end
+end
 return Core
+
