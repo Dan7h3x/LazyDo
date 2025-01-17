@@ -17,7 +17,7 @@ local defaults = {
 	},
 	pin_window = {
 		enabled = true,
-		width = 40,
+		width = 50,
 		max_height = 10,
 		position = "topright", -- "topright", "topleft", "bottomright", "bottomleft"
 		title = " LazyDo Tasks ",

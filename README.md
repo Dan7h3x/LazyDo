@@ -1,6 +1,6 @@
 <div align="center">
   <h1> LazyDo</h1>
-  <p>A smart, feature-rich task manager for Neovim</p>
+  <p>A smart, feature-rich task/todo manager for neovim lovers</p>
 
   <p>
     <a href="#-screenshots">Screenshots</a> •
@@ -10,7 +10,7 @@
     <a href="#-configuration">Configuration</a>
   </p>
 
-  <p>  ... made with  ...</p>
+  <p>  ... made with love ...</p>
 </div>
 
 ##  Screenshots
@@ -82,10 +82,10 @@ and integration with `lualine.nvim`:
     opts = function(_, opts)
       table.insert(opts.sections.lualine_x, {
         function()
-          return require("lazydo").get_lualine_stats()
+          return require("lazydo").get_lualine_stats() -- status
         end,
         cond = function()
-          return require("lazydo")._initialized
+          return require("lazydo")._initialized  -- condition for lualine
         end,
       })
     end,
@@ -94,7 +94,12 @@ and integration with `lualine.nvim`:
 
 ## Usage
 
-- :LazyDoToggle - Toggle the task manager window
+> [!WARNING]
+> For having `pin window` first spawn `LazyDoToggle` to load plugin up just
+> once, when ever you enter `neovim`
+
+- :`LazyDoToggle` - Toggle the task manager window
+
   - `a` - Add new task
   - `A` - Add subtask
   - `<leader>a` - Quick Task
@@ -113,7 +118,10 @@ and integration with `lualine.nvim`:
   - `z` - Toggle fold
     and more in help window using `?`.
 
-#### Valid dates
+- :`LazyDoPin position`
+  - available positions are {default:`topright`,`topleft`,`bottomright`,`bottomleft`}.
+
+### Valid dates
 
 Example Dates:
 
@@ -127,7 +135,7 @@ Example Dates:
 - tomorrow
 - next week
 - next month
-- <empty> to clear
+- leave empty to clear
 
 ## 🔧 Configuration
 
@@ -144,7 +152,7 @@ All available options:
   },
   pin_window = {
     enabled = true,
-    width = 40,
+    width = 50,
     max_height = 10,
     position = "topright", -- "topright", "topleft", "bottomright", "bottomleft"
     title = " LazyDo Tasks ",
@@ -263,7 +271,6 @@ All available options:
     task_info = {
       enabled = true,
     },
-
     folding = {
       enabled = true,
       default_folded = false,

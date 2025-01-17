@@ -26,10 +26,18 @@ function Core.new(config)
 		config = config,
 		tasks = {},
 		_ui_visible = false,
+		_pin_visible = false,
+		_pin_position = config.pin_window and config.pin_window.position or "topright",
 		_last_search = nil,
 		_last_filter = nil,
 		_last_sort = nil,
 		_template_cache = {},
+		_last_ui_state = nil,
+		_pin_window_state = {
+			visible = false,
+			position = config.pin_window and config.pin_window.position or "topright",
+			last_update = os.time(),
+		},
 	}, Core)
 
 	-- Load tasks
@@ -39,14 +47,16 @@ function Core.new(config)
 		self:apply_saved_view()
 	end
 
+	-- Initialize pin window if configured to show on startup
+	if config.pin_window and config.pin_window.enabled and config.pin_window.show_on_startup then
+		self:toggle_pin_view(self._pin_position)
+	end
+
 	return self
 end
 
 ---Apply saved view settings (filters, sorts)
 function Core:apply_saved_view()
-	if self._last_filter then
-		self:filter_tasks(self._last_filter)
-	end
 	if self._last_sort then
 		self:sort_tasks(self._last_sort)
 	end
@@ -316,13 +326,34 @@ function Core:get_active_tasks()
 end
 
 function Core:toggle_pin_view(position)
+	-- Update position if provided
+	if position then
+		self._pin_position = position
+		self._pin_window_state.position = position
+	end
+
 	if self._pin_visible then
 		UI.close_pin_window()
 		self._pin_visible = false
+		self._pin_window_state.visible = false
 	else
-		UI.create_pin_window(self:get_active_tasks(), position)
+		UI.create_pin_window(self:get_active_tasks(), self._pin_position)
 		self._pin_visible = true
+		self._pin_window_state.visible = true
+		self._pin_window_state.last_update = os.time()
 	end
 end
-return Core
 
+function Core:is_pin_visible()
+	return self._pin_visible
+end
+
+function Core:get_pin_state()
+	return {
+		visible = self._pin_visible,
+		position = self._pin_position,
+		last_update = self._pin_window_state.last_update,
+	}
+end
+
+return Core
