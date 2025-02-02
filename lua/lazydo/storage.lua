@@ -4,30 +4,106 @@ local Utils = require("lazydo.utils")
 ---@class Storage
 local Storage = {}
 
----@class StorageOptions
----@field auto_backup boolean Enable automatic backups
----@field backup_count number Number of backups to keep
----@field compression boolean Enable data compression
----@field encryption boolean Enable basic encryption
-local DEFAULT_OPTIONS = {
-	auto_backup = true,
-	backup_count = 4,
-	compression = true,
-	encryption = false,
-}
+-- Private config variable
+local config = nil
 
--- Private functions
+---Setup storage with configuration
+---@param user_config LazyDoConfig
+---@return nil
+function Storage.setup(user_config)
+	if not user_config then
+		error("Storage configuration is required")
+	end
+	config = user_config
+end
+
+---@return string
+local function get_git_root()
+	if not config then
+		error("Storage not initialized. Call setup() first")
+	end
+
+	-- Only try git root if configured
+	if not (config.storage.project.enabled and config.storage.project.use_git_root) then
+		return "Global"
+	end
+
+	local git_cmd = "git rev-parse --show-toplevel"
+	local ok, result = pcall(vim.fn.systemlist, git_cmd)
+	if ok and result[1]:match("^fatal:") then
+		-- Not a git directory or git command failed
+		return "Global"
+	end
+	return result[1]
+end
+
+---@return string
+local function get_project_root()
+	local cwd = vim.fn.getcwd()
+	if not config then
+		error("Storage not initialized. Call setup() first")
+	end
+
+	if not config.storage.project.enabled then
+		return "Global"
+	end
+
+	-- Try git root first if configured
+	local git_root = get_git_root()
+	if git_root and git_root ~= "Global" then
+		return git_root
+	end
+
+	-- Fallback to current working directory if not "Global"
+	if git_root == "Global" then
+		return cwd
+	end
+
+	return vim.fn.getcwd()
+end
+
+---@return string
 local function get_storage_path()
-	local data_dir = Utils.get_data_dir()
-	return data_dir .. "/tasks.json"
+    if not config then
+        error("Storage not initialized. Call setup() first")
+    end
+
+    -- Check for global storage path first
+    if not config.storage.project.enabled and config.storage.global_path then
+        Utils.ensure_dir(vim.fn.fnamemodify(config.storage.global_path, ":h"))
+        return vim.fn.expand(config.storage.global_path)
+    end
+
+    if config.storage.project.enabled then
+        local project_root = get_project_root()
+        if project_root and project_root ~= "Global" then
+            local project_path = string.format(config.storage.project.path_pattern, project_root)
+            return project_path
+        end
+    end
+
+    -- Fallback to default path in data directory
+    local data_dir = Utils.get_data_dir()
+    return data_dir .. "/tasks.json"
 end
 
+
+---@param timestamp? string
+---@return string
 local function get_backup_path(timestamp)
-	local data_dir = Utils.get_data_dir()
-	return string.format("%s/tasks.backup.%s.json", data_dir, timestamp or os.date("%Y%m%d%H%M%S"))
+	local storage_path = get_storage_path()
+	local dir = vim.fn.fnamemodify(storage_path, ":h")
+	local base = vim.fn.fnamemodify(storage_path, ":t:r")
+	return string.format("%s/%s.backup.%s.json", dir, base, timestamp or os.date("%Y%m%d%H%M%S"))
 end
 
+---Create backup of current storage
+---@return nil
 local function create_backup()
+	if not config or not config.storage.auto_backup then
+		return
+	end
+
 	local current_file = get_storage_path()
 	if not Utils.path_exists(current_file) then
 		return
@@ -37,63 +113,16 @@ local function create_backup()
 	vim.fn.writefile(vim.fn.readfile(current_file), backup_file)
 
 	-- Cleanup old backups
-	local data_dir = Utils.get_data_dir()
-	local backups = vim.fn.glob(data_dir .. "/tasks.backup.*.json", true, true)
+	local dir = vim.fn.fnamemodify(current_file, ":h")
+	local pattern = vim.fn.fnamemodify(current_file, ":t:r") .. ".backup.*.json"
+	local backups = vim.fn.glob(dir .. "/" .. pattern, true, true)
 	table.sort(backups)
 
-	-- Keep only the most recent backups
-	while #backups > DEFAULT_OPTIONS.backup_count do
+	-- Keep only the configured number of backups
+	while #backups > config.storage.backup_count do
 		vim.fn.delete(backups[1])
 		table.remove(backups, 1)
 	end
-end
-
----Validate task data structure
----@param task table
----@return boolean
----@return string? error
-local function validate_task(task)
-	if type(task) ~= "table" then
-		return false, "Task must be a table"
-	end
-
-	-- Check required fields
-	local required_fields = { "id", "content", "status", "priority", "created_at", "updated_at" }
-	for _, field in ipairs(required_fields) do
-		if task[field] == nil then
-			return false, string.format("Missing required field: %s", field)
-		end
-	end
-
-	-- Validate status
-	if not vim.tbl_contains({ "pending", "done" }, task.status) then
-		return false, "Invalid status value"
-	end
-
-	-- Validate priority
-	if not vim.tbl_contains({ "low", "medium", "high" }, task.priority) then
-		return false, "Invalid priority value"
-	end
-
-	-- Validate dates
-	if task.due_date and type(task.due_date) ~= "number" then
-		return false, "Invalid due_date format"
-	end
-
-	-- Validate subtasks recursively
-	if task.subtasks then
-		if type(task.subtasks) ~= "table" then
-			return false, "Subtasks must be a table"
-		end
-		for _, subtask in ipairs(task.subtasks) do
-			local valid, err = validate_task(subtask)
-			if not valid then
-				return false, "Invalid subtask: " .. err
-			end
-		end
-	end
-
-	return true
 end
 
 ---Compress data using improved compression
@@ -131,6 +160,8 @@ local function decompress_data(data)
 
 	return decompressed
 end
+
+---Basic encryption
 ---@param data string
 ---@return string
 local function encrypt_data(data)
@@ -154,11 +185,13 @@ local function decrypt_data(data)
 	return table.concat(result)
 end
 
--- Public API
-
 ---Load tasks from storage
 ---@return Task[]
 function Storage.load()
+	if not config then
+		error("Storage not initialized. Call setup() first")
+	end
+
 	local file_path = get_storage_path()
 	if not Utils.path_exists(file_path) then
 		return {}
@@ -171,11 +204,11 @@ function Storage.load()
 
 	local data = table.concat(content, "\n")
 
-	-- Handle compression and encryption
-	if DEFAULT_OPTIONS.encryption then
+	-- Handle encryption and compression based on config
+	if config.storage.encryption then
 		data = decrypt_data(data)
 	end
-	if DEFAULT_OPTIONS.compression then
+	if config.storage.compression then
 		data = decompress_data(data)
 	end
 
@@ -185,24 +218,26 @@ function Storage.load()
 		return {}
 	end
 
-	-- Validate loaded data
-	local tasks = {}
-	for _, task_data in ipairs(decoded) do
-		local valid, err = validate_task(task_data)
-		if valid then
-			table.insert(tasks, task_data)
-		else
-			vim.notify("Invalid task data: " .. err, vim.log.levels.WARN)
+	-- Add project information to loaded tasks
+	if config.storage.project.enabled then
+		local project_root = get_project_root()
+		for _, task in ipairs(decoded) do
+			task.project_root = project_root
+			task.project_path = file_path
 		end
 	end
 
-	return tasks
+	return decoded
 end
 
 ---Save tasks to storage
 ---@param tasks Task[]
 function Storage.save(tasks)
-	if DEFAULT_OPTIONS.auto_backup then
+	if not config then
+		error("Storage not initialized. Call setup() first")
+	end
+
+	if config.storage.auto_backup then
 		create_backup()
 	end
 
@@ -212,12 +247,12 @@ function Storage.save(tasks)
 		return
 	end
 
-	-- Handle compression and encryption
+	-- Handle compression and encryption based on config
 	local data = encoded
-	if DEFAULT_OPTIONS.compression then
+	if config.storage.compression then
 		data = compress_data(data)
 	end
-	if DEFAULT_OPTIONS.encryption then
+	if config.storage.encryption then
 		data = encrypt_data(data)
 	end
 
@@ -237,11 +272,47 @@ function Storage.save(tasks)
 		pcall(vim.fn.delete, temp_file)
 	end
 end
+---Toggle between project and global storage
+---@param mode? "project"|"global" Optional mode to set directly
+---@return boolean is_project_mode
+function Storage.toggle_mode(mode)
+    if not config then
+        error("Storage not initialized. Call setup() first")
+    end
 
+    -- If mode is specified, set it directly
+    if mode then
+        config.storage.project.enabled = (mode == "project")
+    else
+        -- Toggle current mode
+        config.storage.project.enabled = not config.storage.project.enabled
+    end
+
+    -- Create backup before switching modes
+    if config.storage.auto_backup then
+        create_backup()
+    end
+
+    -- Load tasks from previous location
+    local old_tasks = Storage.load()
+    
+    -- Notify user of mode change
+    local mode_str = config.storage.project.enabled and "Project" or "Global"
+    vim.notify(string.format("Switched to %s storage mode: %s", mode_str, get_storage_path()), vim.log.levels.INFO)
+
+    -- Save tasks to new location
+    Storage.save(old_tasks)
+
+    return config.storage.project.enabled
+end
 ---Restore from backup
 ---@param backup_date? string Optional backup date in format YYYYMMDDHHMMSS
 ---@return boolean success
 function Storage.restore_backup(backup_date)
+	if not config then
+		error("Storage not initialized. Call setup() first")
+	end
+
 	local backup_file
 	if backup_date then
 		backup_file = get_backup_path(backup_date)
@@ -272,6 +343,45 @@ function Storage.restore_backup(backup_date)
 	end
 end
 
+---Get project information
+---@return table
+function Storage.get_project_info()
+	if not config then
+		error("Storage not initialized. Call setup() first")
+	end
+
+	local root = get_project_root()
+	local is_global = root == "Global"
+
+	return {
+		enabled = config.storage.project.enabled,
+		root = is_global and nil or root,
+		storage_path = get_storage_path(),
+		is_project_based = not is_global and config.storage.project.enabled,
+	}
+end
+
+
+---@return table
+function Storage.get_status()
+    if not config then
+        error("Storage not initialized. Call setup() first")
+    end
+	local root = get_project_root()
+	local is_global = root == "Global"
+    return {
+        mode = config.storage.project.enabled and "project" or "global",
+        current_path = get_storage_path(),
+        global_path = config.storage.global_path,
+		root = is_global and nil or root,
+        project_enabled = config.storage.project.enabled,
+        use_git_root = config.storage.project.use_git_root,
+        compression = config.storage.compression,
+        encryption = config.storage.encryption,
+        auto_backup = config.storage.auto_backup,
+        backup_count = config.storage.backup_count
+    }
+end
 -- Create debounced save function
 Storage.save_debounced = Utils.debounce(Storage.save, 1000)
 
