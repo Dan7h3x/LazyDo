@@ -48,6 +48,17 @@ local function get_safe_window_width()
   return ok and width or 80
 end
 
+---@return string
+local function get_storage_mode_info()
+  local storage_info = require("lazydo.storage").get_status()
+  if storage_info.mode == "project" then
+      local root = vim.fn.fnamemodify(storage_info.root, ":t")
+      return string.format(" Project: %s ", root)
+  end
+  return " Global "
+end
+
+
 local function create_task_separator(level, has_subtasks, is_collapsed, width)
   level = level or 0
   width = width or get_safe_window_width()
@@ -865,17 +876,28 @@ function UI.render()
   local width = get_safe_window_width()
 
   -- Render header section
-  local title = config.title or " LazyDo Tasks "
+  local storage_mode = get_storage_mode_info()
+
+  local title = (config.title or " LazyDo Tasks ") .. storage_mode
   local centered_title = Utils.Str.center(title, width)
   local header_separator = "╭" .. string.rep("━", width - 2) .. "╮"
 
   -- Add header components
   table.insert(lines, centered_title)
+  local base_title_start = math.floor((width - #title) / 2)
   table.insert(all_regions, {
-    line = current_line,
-    start = math.floor((width - #title) / 2),
-    length = #title,
-    hl_group = "LazyDoTitle",
+      line = current_line,
+      start = base_title_start,
+      length = #config.title,
+      hl_group = "LazyDoTitle",
+  })
+  
+  -- Add storage mode highlight
+  table.insert(all_regions, {
+      line = current_line,
+      start = base_title_start + #config.title,
+      length = #storage_mode,
+      hl_group = "LazyDoStorageMode",
   })
   current_line = current_line + 1
 

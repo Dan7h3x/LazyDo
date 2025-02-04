@@ -6,7 +6,7 @@ local Utils = require("lazydo.utils")
 local UI = require("lazydo.ui")
 
 ---@class LazyDoCore
----@field private config LazyDoConfig
+---@field public config LazyDoConfig
 ---@field private tasks Task[]
 ---@field private _ui_visible boolean
 ---@field private _last_search string?
@@ -21,6 +21,8 @@ function Core.new(config)
   if not config then
     error("Configuration is required")
   end
+
+  Storage.setup(config)
 
   local self = setmetatable({
     config = config,

@@ -1,21 +1,10 @@
----@mod lazydo Task Manager for Neovim
----@brief [[
---- LazyDo is a modern, functional task manager for Neovim
---- Features:
----   - Clean and intuitive UI
----   - Task management with priorities and due dates
----   - Project-specific tasks
----   - Powerful search and filter capabilities
----   - Statistics and analytics
----@brief ]]
-
 local Config = require("lazydo.config")
 local Core = require("lazydo.core")
 local Highlights = require("lazydo.highlights")
 
 ---@class LazyDo
 ---@field private _instance LazyDoCore?
----@field private _config LazyDoConfig
+---@field public _config LazyDoConfig
 ---@field private _initialized boolean
 local LazyDo = {
   _instance = nil,
@@ -53,16 +42,52 @@ local function create_commands()
     {
       name = "LazyDoPin",
       callback = function(opts)
-          LazyDo._instance:toggle_pin_view(opts.args)
+        LazyDo._instance:toggle_pin_view(opts.args)
       end,
       opts = {
-          nargs = "?",
-          complete = function()
-              return { "topleft", "topright", "bottomleft", "bottomright" }
-          end,
+        nargs = "?",
+        complete = function()
+          return { "topleft", "topright", "bottomleft", "bottomright" }
+        end,
       },
       error_msg = "Failed to toggle corner view",
-  },
+    },
+    {
+      name = "LazyDoToggleStorage",
+      callback = function(opts)
+        local mode = opts.args ~= "" and opts.args or nil
+        local storage = require("lazydo.storage")
+        storage.toggle_mode(mode)
+
+        -- Show current storage status
+        local status = storage.get_status()
+        local lines = {
+          "Storage Status:",
+          string.format("Mode: %s", status.mode),
+          string.format("Current Path: %s", status.current_path),
+          string.format("Global Path: %s", status.global_path or "default"),
+          string.format("Project Mode: %s", status.project_enabled and "enabled" or "disabled"),
+          string.format("Git Root: %s", status.use_git_root and "enabled" or "disabled"),
+          string.format("Compression: %s", status.compression and "enabled" or "disabled"),
+          string.format("Encryption: %s", status.encryption and "enabled" or "disabled"),
+        }
+
+        vim.api.nvim_echo(
+          vim.tbl_map(function(line)
+            return { line .. "\n", "Normal" }
+          end, lines),
+          true,
+          {}
+        )
+      end,
+      opts = {
+        nargs = "?",
+        complete = function()
+          return { "project", "global" }
+        end,
+      },
+      error_msg = "Failed to toggle storage mode",
+    },
   }
 
   -- Register commands with error handling
