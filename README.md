@@ -46,6 +46,7 @@ multi-line note editor
 - 🏷️ Task tagging and categorization
 - 🔍 Advanced sorting
 - 󱒖 Task relationships and dependencies
+- (\*) Smart Storage
 - 📊 Progress tracking and filtering (WIP)
 - 󰁦 File attachments (WIP)
 
