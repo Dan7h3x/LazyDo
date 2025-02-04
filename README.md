@@ -58,7 +58,7 @@ return {
   {
     "Dan7h3x/LazyDo",
     branch = "main",
-    cmd = {"LazyDoToggle","LazyDoPin"},
+    cmd = {"LazyDoToggle","LazyDoPin","LazyDoToggleStorage"},
     keys = { -- recommended keymap for easy toggle LazyDo in normal and insert modes (arbitrary)
 	    {
         "<F2>","<ESC><CMD>LazyDoToggle<CR>",
@@ -95,8 +95,8 @@ and integration with `lualine.nvim`:
 ## Usage
 
 > [!WARNING]
-> For having `pin window` first spawn `LazyDoToggle` to load plugin up just
-> once, when ever you enter `neovim`
+> For having `pin window` or `storage toggling` first spawn `LazyDoToggle` to load plugin up just
+> once, when ever you enter `neovim`.
 
 - :`LazyDoToggle` - Toggle the task manager window
 
@@ -119,7 +119,11 @@ and integration with `lualine.nvim`:
     and more in help window using `?`.
 
 - :`LazyDoPin position`
+
   - available positions are {default:`topright`,`topleft`,`bottomright`,`bottomleft`}.
+
+- :`LazyDoToggleStorage mode`
+  - available modes are `project` and `global`
 
 ### Valid dates
 
@@ -145,9 +149,9 @@ All available options:
 {
   title = " LazyDo Tasks ",
   layout = {
-    width = 0.7, -- Percentage of screen width
-    height = 0.8, -- Percentage of screen height
-    spacing = 1, -- Lines between tasks
+    width = 0.7,      -- Percentage of screen width
+    height = 0.8,     -- Percentage of screen height
+    spacing = 1,      -- Lines between tasks
     task_padding = 1, -- Padding around task content
   },
   pin_window = {
@@ -156,11 +160,23 @@ All available options:
     max_height = 10,
     position = "topright", -- "topright", "topleft", "bottomright", "bottomleft"
     title = " LazyDo Tasks ",
-    auto_sync = true, -- Enable automatic synchronization with main window
+    auto_sync = true,      -- Enable automatic synchronization with main window
     colors = {
       border = { fg = "#3b4261" },
       title = { fg = "#7dcfff", bold = true },
     },
+  },
+  storage = {
+    global_path = nil, -- Custom storage path (nil means use default)
+    project = {
+      enabled = false,
+      use_git_root = true,
+      path_pattern = "s/.lazydo/tasks.json",
+    },
+    auto_backup = true,
+    backup_count = 1,
+    compression = true,
+    encryption = false,
   },
   theme = {
     border = "rounded",
@@ -181,6 +197,7 @@ All available options:
         low = { fg = "#9ece6a" },
         urgent = { fg = "#db4b4b", bold = true, undercurl = true },
       },
+      storage = { fg = "#a24db3", bold = true },
       notes = {
         header = {
           fg = "#7dcfff",
@@ -228,10 +245,10 @@ All available options:
         indicator = { fg = "#fb42f1", bold = true },
       },
       search = {
-        match = { fg = "#c0caf5", bg = "#445588", bold = true },
+        match = { fg = "#c0caf5", bold = true },
       },
-      selection = { fg = "#c0caf5", bg = "#283457", bold = true },
-      cursor = { fg = "#c0caf5", bg = "#364a82", bold = true },
+      selection = { fg = "#c0caf5", bold = true },
+      cursor = { fg = "#c0caf5", bold = true },
     },
     progress_bar = {
       width = 15,
@@ -271,6 +288,7 @@ All available options:
     task_info = {
       enabled = true,
     },
+
     folding = {
       enabled = true,
       default_folded = false,
