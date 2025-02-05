@@ -52,8 +52,8 @@ end
 local function get_storage_mode_info()
   local storage_info = require("lazydo.storage").get_status()
   if storage_info.mode == "project" then
-      local root = vim.fn.fnamemodify(storage_info.root, ":t")
-      return string.format(" Project: %s ", root)
+    local root = vim.fn.fnamemodify(storage_info.root, ":t")
+    return string.format(" Project: %s ", root)
   end
   return " Global "
 end
@@ -63,9 +63,9 @@ local function create_task_separator(level, has_subtasks, is_collapsed, width)
   level = level or 0
   width = width or get_safe_window_width()
 
-  local left_separator_char = config.theme.task_separator.left
-  local right_separator_char = config.theme.task_separator.right
-  local center_separator_char = config.theme.task_separator.center
+  local left_separator_char = config and config.theme.task_separator.left
+  local right_separator_char = config and config.theme.task_separator.right
+  local center_separator_char = config and config.theme.task_separator.center
   local indent = string.rep("  ", level)
   local separator_char = level == 0 and center_separator_char
   local separator_width = math.max(0, width - #indent - 2) -- Ensure non-negative
@@ -889,18 +889,18 @@ function UI.render()
   table.insert(lines, centered_title)
   local base_title_start = math.floor((width - #title) / 2)
   table.insert(all_regions, {
-      line = current_line,
-      start = base_title_start,
-      length = #config.title,
-      hl_group = "LazyDoTitle",
+    line = current_line,
+    start = base_title_start,
+    length = #config.title,
+    hl_group = "LazyDoTitle",
   })
-  
+
   -- Add storage mode highlight
   table.insert(all_regions, {
-      line = current_line,
-      start = base_title_start + #config.title,
-      length = #storage_mode,
-      hl_group = "LazyDoStorageMode",
+    line = current_line,
+    start = base_title_start + #config.title,
+    length = #storage_mode,
+    hl_group = "LazyDoStorageMode",
   })
   current_line = current_line + 1
 

@@ -126,7 +126,7 @@ local defaults = {
       left = "",
       right = "",
       center = "░"
-	},
+    },
   },
   icons = {
     task_pending = "",
