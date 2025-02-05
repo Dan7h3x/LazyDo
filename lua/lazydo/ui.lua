@@ -63,8 +63,11 @@ local function create_task_separator(level, has_subtasks, is_collapsed, width)
   level = level or 0
   width = width or get_safe_window_width()
 
+  local left_separator_char = config.theme.task_separator.left
+  local right_separator_char = config.theme.task_separator.right
+  local center_separator_char = config.theme.task_separator.center
   local indent = string.rep("  ", level)
-  local separator_char = level == 0 and "░"
+  local separator_char = level == 0 and center_separator_char
   local separator_width = math.max(0, width - #indent - 2) -- Ensure non-negative
   local separator = indent
   if has_subtasks then
@@ -78,7 +81,7 @@ local function create_task_separator(level, has_subtasks, is_collapsed, width)
 
   if level == 0 then
     -- Add fancy ends for top-level tasks
-    separator = indent .. "" .. string.rep(separator_char, separator_width) .. ""
+    separator = indent .. left_separator_char .. string.rep(separator_char, separator_width) .. right_separator_char
   end
 
   return separator
