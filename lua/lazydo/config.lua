@@ -122,6 +122,11 @@ local defaults = {
       connector = "├─",
       last_connector = "└─",
     },
+    task_separator = {
+      left = "",
+      right = "",
+      center = "░"
+	},
   },
   icons = {
     task_pending = "",
