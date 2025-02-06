@@ -104,6 +104,7 @@ and integration with `lualine.nvim`:
   - `a` - Add new task
   - `A` - Add subtask
   - `<leader>a` - Quick Task
+  - `<leader>A` - Quick Subtask
   - `d` - Delete task
   - `e` - Edit task
   - `D` - Set due date

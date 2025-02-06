@@ -1042,6 +1042,7 @@ local function show_help()
     " a         Add new task",
     " A         Add subtask",
     "<leader>a      Quick task",
+    "<leader>A      Quick subtask",
     " d         Delete task",
     " e         Edit task",
     "",
@@ -1308,6 +1309,41 @@ function UI.setup_keymaps()
       end
     end)
   end, "Quick Add Task")
+
+  map("<leader>A", function()
+    local parent_task = UI.get_task_under_cursor()
+      if not parent_task then
+      UI.show_feedback("No task selected", "warn")
+      return
+    end
+
+    vim.ui.input({
+      prompt = "Subtask content:",
+    }, function(content)
+      if content and content ~= "" then
+        local subtask = Task.new(content, {
+          priority = "medium",
+          parent_id = parent_task.id,
+          due_date = nil,
+        })
+
+        parent_task.subtasks = parent_task.subtasks or {}
+        table.insert(parent_task.subtasks, subtask)
+
+        if state.on_task_update then
+          state.on_task_update(state.tasks)
+        end
+
+        UI.show_feedback(string.format("Added subtask to '%s'", parent_task.content))
+        UI.refresh()
+
+        if parent_task.collapsed then
+          parent_task.collapsed = false
+          UI.refresh()
+        end
+      end
+    end)
+  end, "Quick Add Subtask")
 
   map("z", function()
     UI.toggle_fold()
