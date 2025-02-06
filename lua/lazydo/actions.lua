@@ -386,6 +386,25 @@ function Actions.set_due_date(tasks, task_id, date_str, on_update)
 	end
 end
 
+function Actions.delete_note(tasks, task_id,on_update)
+	local function delete_from_list(tasks_list)
+		for _, task in ipairs(tasks_list) do
+			if task.id == task_id then
+				task.notes = nil
+				return true
+			end
+			if task.subtasks and #task.subtasks > 0 then
+				if delete_from_list(task.subtasks) then
+					return true
+				end
+			end
+		end
+		return false
+	end
+	if delete_from_list(tasks) and on_update then
+		on_update(tasks)
+	end
+end
 -- Task Notes Actions
 function Actions.set_notes(tasks, task_id, notes, on_update)
 	local function set_in_list(tasks_list)

@@ -1048,6 +1048,7 @@ local function show_help()
     "Task Properties:",
     " p         Cycle priority",
     " n         Add/edit notes",
+    " N         Delete note",
     " D         Set due date",
     " t         Add tags",
     " T         Edit tags",
@@ -1197,6 +1198,11 @@ function UI.setup_keymaps()
   map("n", function()
     UI.add_multi_note()
   end, "add multi note")
+
+  map("N", function()
+    UI.delete_note()
+  end, "delete note")
+
   map("D", function()
     UI.set_due_date()
   end, "Set Date")
@@ -1716,6 +1722,38 @@ function UI.edit_task()
     end
   end)
   UI.refresh()
+end
+
+function UI.delete_note()
+  local task = UI.get_task_under_cursor()
+  if not task then
+    UI.show_feedback("No task selected", "warn")
+    return
+  end
+
+  if task.notes == nil then
+    UI.show_feedback("No task note", "warn")
+    return
+  end
+
+  local confirm_opts = {
+    prompt = string.format("Delete Note: \n%s", task.notes:sub(1, 60) .. (task.notes:len() > 60 and "..." or "")),
+    kind = "warning",
+    default = false,
+    format_item = function(item)
+      return item == "y" and "Yes, delete this Note" or "No, keep it"
+    end,
+  }
+
+  vim.ui.select({ "y", "n" }, confirm_opts, function(choice)
+    if choice == "y" then
+        Actions.delete_note(state.tasks, task.id, state.on_task_update())
+        UI.show_feedback("Note deleted successfully")
+        UI.refresh()
+    else
+      UI.show_feedback("Note deletion cancelled")
+    end
+  end)
 end
 
 function UI.add_note()
