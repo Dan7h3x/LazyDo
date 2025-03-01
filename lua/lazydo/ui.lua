@@ -1076,7 +1076,7 @@ local function show_help()
     " <leader>ss Sort by status",
     "",
     "Export/Import:",
-    " <leader>m  Save to markdown file",
+    " <leader>E  Save to markdown file",
     "",
     "Other:",
     " ?         Show this help",
@@ -1267,7 +1267,7 @@ function UI.setup_keymaps()
       UI.show_feedback("Task is not a subtask", "warn")
     end
   end, "Convert SubTask to Task")
-  map("<leader>m", function()
+  map("<leader>E", function()
     local task = UI.get_task_under_cursor()
     if task then
       vim.ui.input({
