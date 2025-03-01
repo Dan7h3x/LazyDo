@@ -118,6 +118,7 @@ and integration with `lualine.nvim`:
   - `t` - Add tags
   - `T` - Edit tags
   - `z` - Toggle fold
+  - `q` - Close window
     and more in help window using `?`.
 
 - :`LazyDoPin position`
