@@ -1080,6 +1080,7 @@ local function show_help()
     "",
     "Other:",
     " ?         Show this help",
+    " q         Close window",
   }
 
   local buf = vim.api.nvim_create_buf(false, true)
@@ -1285,6 +1286,11 @@ function UI.setup_keymaps()
   map("?", function()
     show_help()
   end, "Help Window")
+
+  -- Add window control keymap
+  map("q", function()
+    UI.close()
+  end, "Close window")
 
   -- Add task creation keymap
   map("a", function()
