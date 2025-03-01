@@ -223,6 +223,11 @@ function LazyDo.get_lualine_stats()
   if not success then
     return "Error retrieving stats"
   end
+  
+  -- Return empty string if there are no tasks
+  if result.total == 0 then
+    return ""
+  end
 
   local icons = {
     total = "",
