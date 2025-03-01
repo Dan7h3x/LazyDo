@@ -280,6 +280,12 @@ function Storage.toggle_mode(mode)
         error("Storage not initialized. Call setup() first")
     end
 
+    -- Get current storage path before changing mode
+    local old_storage_path = get_storage_path()
+    
+    -- Load tasks from current location before switching modes
+    local old_tasks = Storage.load()
+    
     -- If mode is specified, set it directly
     if mode then
         config.storage.project.enabled = (mode == "project")
@@ -289,16 +295,16 @@ function Storage.toggle_mode(mode)
     end
 
     -- Create backup before switching modes
-    if config.storage.auto_backup then
+    if config.storage.auto_backup and Utils.path_exists(old_storage_path) then
         create_backup()
     end
-
-    -- Load tasks from previous location
-    local old_tasks = Storage.load()
+    
+    -- Get new storage path after mode change
+    local new_storage_path = get_storage_path()
     
     -- Notify user of mode change
     local mode_str = config.storage.project.enabled and "Project" or "Global"
-    vim.notify(string.format("Switched to %s storage mode: %s", mode_str, get_storage_path()), vim.log.levels.INFO)
+    vim.notify(string.format("Switched to %s storage mode: %s", mode_str, new_storage_path), vim.log.levels.INFO)
 
     -- Save tasks to new location
     Storage.save(old_tasks)
