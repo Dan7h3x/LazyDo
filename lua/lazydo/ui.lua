@@ -1056,7 +1056,7 @@ local function show_help()
     "<leader>t   Remove tags",
     " m         Add metadata",
     " M         Edit metadata",
-    "<leader>md   Remove metadata",
+    "<leader>mD   Remove metadata",
     " i         Toggle info",
     "",
     "Task Organization:",
@@ -1364,7 +1364,7 @@ function UI.setup_keymaps()
   map("M", function()
     UI.edit_metadata()
   end, "Edit Metadata")
-  map("<leader>md", function()
+  map("<leader>mD", function()
     local task = UI.get_task_under_cursor()
     if not task then
       UI.show_feedback("No task selected", "warn")
