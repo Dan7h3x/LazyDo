@@ -228,6 +228,14 @@ function M.setup(config)
   for name, opts in pairs(highlights) do
     create_highlight(name, opts)
   end
+
+  -- Kanban view highlights
+  if config.views and config.views.kanban and config.views.kanban.enabled then
+    vim.api.nvim_set_hl(0, "LazyDoKanbanColumnHeader", config.views.kanban.colors.column_header)
+    vim.api.nvim_set_hl(0, "LazyDoKanbanCardBorder", config.views.kanban.colors.card_border)
+    vim.api.nvim_set_hl(0, "LazyDoKanbanCardTitle", config.views.kanban.colors.card_title)
+    vim.api.nvim_set_hl(0, "LazyDoKanbanDragActive", { fg = "#ffffff", bg = "#7aa2f7", bold = true })
+  end
 end
 
 function M.groups()
