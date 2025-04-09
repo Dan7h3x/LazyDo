@@ -4,6 +4,7 @@
 ---@field icons table Icon configuration
 ---@field date_format string Date format string
 ---@field storage table storage config
+---@field views table view configuration
 local Config = {}
 
 ---Default configuration
@@ -28,16 +29,81 @@ local defaults = {
     },
   },
   storage = {
-    global_path = nil, -- Custom storage path (nil means use default)
+    startup_detect = false, -- Enable auto-detection of projects on startup
+    silent = false,         -- Disable notifications when switching storage mode
+    global_path = nil,      -- Custom storage path (nil means use default)
     project = {
       enabled = false,
       use_git_root = true,
       path_pattern = "%s/.lazydo/tasks.json",
+      auto_detect = false,                                                     -- Auto-detect project and switch storage mode
+      always_use_cwd = false,                                                  -- Always use current working directory as project root
+      create_marker = true,                                                    -- Create .lazydo marker in project directories
+      markers = { ".git", ".lazydo", "package.json", "Cargo.toml", "go.mod" }, -- Project markers
+      custom = {
+        enabled = true,                                                        -- Allow custom project storage
+        show_selection_on_startup = false,                                     -- Show project selection UI on startup if multiple projects exist
+        remember_last = true,                                                  -- Remember the last used custom project per directory
+        directory_pattern = "%s/.lazydo/%s",                                   -- Pattern for custom project directory (root, project_name)
+      },
     },
     auto_backup = true,
     backup_count = 1,
     compression = true,
     encryption = false,
+  },
+  views = {
+    default_view = "list", -- "list" or "kanban"
+    -- kanban = {
+    --   enabled = true,
+    --   columns = {
+    --     { id = "backlog",     title = "Backloggggg", filter = { status = "pending" } },
+    --     { id = "in_progress", title = "In Progress", filter = { status = "in_progress" } },
+    --     { id = "blocked",     title = "Blocked",     filter = { status = "blocked" } },
+    --     { id = "done",        title = "Done",        filter = { status = "done" } },
+    --   },
+    --   colors = {
+    --     column_header = { fg = "#7dcfff", bold = true },
+    --     column_border = { fg = "#3b4261" },
+    --     card_border = { fg = "#565f89" },
+    --     card_title = { fg = "#c0caf5", bold = true },
+    --     card = {
+    --       urgent = { fg = "#f7768e", bold = true }, -- Red
+    --       high = { fg = "#ff9e64", bold = true },   -- Orange
+    --       medium = { fg = "#e0af68" },              -- Yellow
+    --       low = { fg = "#9ece6a" },                 -- Green
+    --     },
+    --     status = {
+    --       done = { fg = "#9ece6a", bold = true },        -- Green
+    --       blocked = { fg = "#f7768e", bold = true },     -- Red
+    --       in_progress = { fg = "#7aa2f7", bold = true }, -- Blue
+    --       pending = { fg = "#bb9af7" },                  -- Purple
+    --     },
+    --     metadata = {
+    --       due_date = { fg = "#bb9af7" },            -- Purple for dates
+    --       tags = { fg = "#2ac3de", italic = true }, -- Cyan for tags
+    --       progress = { fg = "#7aa2f7" },            -- Blue for progress
+    --     },
+    --     ui = {
+    --       pagination = { fg = "#bb9af7", italic = true },
+    --       icon = { fg = "#2ac3de" },
+    --       drag_active = { fg = "#c0caf5", bg = "#3d59a1", bold = true },
+    --     },
+    --   },
+    --   card_width = 30,
+    --   show_task_count = true,
+    --   drag_and_drop = true,
+    --   max_tasks_per_column = 100, -- Limit for performance optimization with pagination
+    --   pagination = {
+    --     enabled = true,
+    --     tasks_per_page = 10,
+    --     navigation_icons = {
+    --       prev = "«",
+    --       next = "»",
+    --       current = "•",
+    --     },
+    --   },
+    -- },
   },
   theme = {
     border = "rounded",
@@ -123,14 +189,16 @@ local defaults = {
       last_connector = "└─",
     },
     task_separator = {
-      left = "",
-      right = "",
-      center = "░"
+      left = "",
+      right = "",
+      center = "",
     },
   },
   icons = {
-    task_pending = "",
-    task_done = "",
+    task_pending = "",
+    task_done = "󰾨",
+    task_in_progress = "󰦕",
+    task_blocked = "󱡣",
     priority = {
       low = "󰘄",
       medium = "󰁭",
@@ -138,23 +206,41 @@ local defaults = {
       urgent = "󰀦",
     },
     created = "󰃰",
-    updated = "",
-    note = "",
+    updated = "󰇡",
+    note = "󰎞",
     relations = "󱒖 ",
-    due_date = "",
-    recurring = {
-      daily = "",
-      weekly = "",
-      monthly = "",
-    },
+    due_date = "󰃭",
     metadata = "󰂵",
-    important = "",
+    -- kanban = {
+    --   move_left = "",
+    --   move_right = "",
+    --   column = "",
+    --   card = "󰆼",
+    --   collapse = "▼",
+    --   expand = "▶",
+    --   task_status = {
+    --     pending = "",
+    --     done = "",
+    --     in_progress = "",
+    --     blocked = "",
+    --   },
+    --   card_actions = {
+    --     edit = "",
+    --     delete = "",
+    --     add = "",
+    --     move = "󰘕",
+    --   },
+    --   pagination = {
+    --     prev = "«",
+    --     next = "»",
+    --     indicator = "•",
+    --   },
+    -- },
   },
   features = {
     task_info = {
       enabled = true,
     },
-
     folding = {
       enabled = true,
       default_folded = false,

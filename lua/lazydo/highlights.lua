@@ -222,6 +222,12 @@ function M.setup(config)
       bold = config.pin_window.colors.title.bold,
     },
     StorageMode = { fg = colors.storage.fg, bold = colors.storage.bold },
+
+    -- Status line and UI elements
+    Status = {
+      fg = "#c0caf5",
+      bold = true,
+    },
   }
 
   -- Create all highlight groups

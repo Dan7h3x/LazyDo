@@ -52,36 +52,39 @@ end
 local function get_storage_mode_info()
   local storage_info = require("lazydo.storage").get_status()
   if storage_info.mode == "project" then
-    local root = vim.fn.fnamemodify(storage_info.root, ":t")
+    local root = vim.fn.fnamemodify(storage_info.project_root, ":t")
     return string.format(" Project: %s ", root)
   end
   return " Global "
 end
 
-
 local function create_task_separator(level, has_subtasks, is_collapsed, width)
   level = level or 0
   width = width or get_safe_window_width()
 
-  local left_separator_char = config and config.theme.task_separator.left
-  local right_separator_char = config and config.theme.task_separator.right
-  local center_separator_char = config and config.theme.task_separator.center
-  local indent = string.rep("  ", level)
-  local separator_char = level == 0 and center_separator_char
+  local left_separator_char = config and config.theme.task_separator.left or "❮"
+  local right_separator_char = config and config.theme.task_separator.right or "❯"
+  local center_separator_char = config and config.theme.task_separator.center or "─"
+  local indent = string.rep("x", level)
+  local separator_char = level == 0 and center_separator_char or "─"
   local separator_width = math.max(0, width - #indent - 2) -- Ensure non-negative
   local separator = indent
-  if has_subtasks then
-    separator = separator
-        .. (is_collapsed and config.features.folding.icons.folded or config.features.folding.icons.unfolded)
-  else
-    separator = separator .. "  "
-  end
 
-  separator = separator .. string.rep(separator_char, separator_width)
+  -- Add folding indicator with better styling
+  -- if has_subtasks then
+  --   local fold_icon = is_collapsed and config.features.folding.icons.folded or config.features.folding.icons.unfolded
+  --   separator = separator .. fold_icon .. " "
+  -- else
+  --   separator = separator .. "  "
+  -- end
 
+  -- Use different separator styles for top-level vs nested tasks
   if level == 0 then
-    -- Add fancy ends for top-level tasks
-    separator = indent .. left_separator_char .. string.rep(separator_char, separator_width) .. right_separator_char
+    -- Add fancy ends for top-level tasks with improved visual appearance
+    separator = indent .. left_separator_char .. string.rep(separator_char, separator_width - 2) .. right_separator_char
+  else
+    -- For nested tasks, use a simpler but still visually distinctive separator
+    separator = separator .. string.rep(separator_char, separator_width - 2)
   end
 
   return separator
@@ -562,6 +565,15 @@ local function render_task_header(task, level, is_last)
     return "", {}
   end
 
+  -- Get priority color
+  local priority_colors = {
+    urgent = "ErrorMsg",
+    high = "WarningMsg",
+    medium = "Normal",
+    low = "Comment",
+  }
+  local priority_color = priority_colors[task.priority] or "Normal"
+
   -- local base_indent = string.rep(" ", ensure_number(level, 0) * ensure_number(config.theme.indent.size, 2))
   local base_indent = string.rep(" ", ensure_number(level, 0) * 2)
   local regions = {}
@@ -594,10 +606,10 @@ local function render_task_header(task, level, is_last)
   }
 
   -- Add connector for subtasks
-  if level > 0 then
-    components.connector = is_last and config.theme.indent.last_connector or config.theme.indent.connector
-    add_region(#components.connector, "LazyDoConnector")
-  end
+  -- if level > 0 then
+  --   components.connector = is_last and config.theme.indent.last_connector or config.theme.indent.connector
+  --   add_region(#components.connector, "LazyDoConnector")
+  -- end
 
   -- Add status icon
   local status_icon = task.status == "done" and config.icons.task_done or config.icons.task_pending
@@ -704,6 +716,9 @@ local function render_task(task, level, current_line, is_last)
     return {}, {}, {}
   end
 
+  -- Get priority and status for styling
+  local priority = task.priority or "medium"
+  local status = task.status or "pending"
   level = ensure_number(level, 0)
   current_line = ensure_number(current_line, 0)
 
@@ -711,7 +726,15 @@ local function render_task(task, level, current_line, is_last)
   local regions = {}
   local mappings = {}
 
-  -- Render task header
+  -- Calculate indentation
+  local base_indent = string.rep("  ", level)
+  local connector_indent = string.rep("  ", math.max(0, level - 1))
+
+  -- Define connector characters based on task position
+  local connector = level > 0 and (is_last and "└─" or "├─") or ""
+  local vertical_line = level > 0 and "│ " or ""
+
+  -- Render task header with improved connectors
   local header_line, header_regions = render_task_header(task, level, is_last)
   table.insert(lines, header_line)
 
@@ -722,6 +745,16 @@ local function render_task(task, level, current_line, is_last)
       start = ensure_number(region.col, 0),
       length = ensure_number(region.length, 0),
       hl_group = region.hl_group or "Normal",
+    })
+  end
+
+  -- Add connector highlight if it exists
+  if level > 0 then
+    table.insert(regions, {
+      line = current_line,
+      start = #connector_indent,
+      length = 2,
+      hl_group = "LazyDoConnector",
     })
   end
 
@@ -739,39 +772,57 @@ local function render_task(task, level, current_line, is_last)
 
   current_line = current_line + 1
 
+  -- Add notes with proper indentation and connectors
   if task.notes then
     local note_lines, note_regions = render_note_section(task.notes, level + 1, level > 0)
     if note_lines and #note_lines > 0 then
-      -- Add note lines
-      for _, line in ipairs(note_lines) do
-        table.insert(lines, line)
-      end
+      -- Add vertical connector before notes if task has subtasks
+      if task.subtasks and #task.subtasks > 0 then
+        for i, line in ipairs(note_lines) do
+          local note_line = connector_indent .. vertical_line .. "  " .. line
+          table.insert(lines, note_line)
 
-      -- Add note highlights with proper line offsets
-      for _, region in ipairs(note_regions) do
-        table.insert(regions, {
-          line = current_line + region.line,
-          start = ensure_number(region.col, 0),
-          length = ensure_number(region.length, 0),
-          hl_group = region.hl_group,
-        })
+          -- Add vertical line highlight
+          table.insert(regions, {
+            line = current_line + i - 1,
+            start = #connector_indent,
+            length = 1,
+            hl_group = "LazyDoConnector",
+          })
+        end
+      else
+        -- Just add notes with proper indentation
+        for _, line in ipairs(note_lines) do
+          table.insert(lines, base_indent .. "  " .. line)
+        end
       end
-
       current_line = current_line + #note_lines
     end
   end
 
-  -- Add spacing for top-level tasks
-  if level == 2 then
-    table.insert(lines, "")
-    current_line = current_line + 1
-  end
 
-  -- Render subtasks
+
+  -- Render subtasks with improved connectors
   if task.subtasks and #task.subtasks > 0 and not task.collapsed then
     for i, subtask in ipairs(task.subtasks) do
-      local sub_lines, sub_regions, sub_mappings =
-          render_task(subtask, level + 1, current_line, i == #task.subtasks)
+      -- Add vertical connector line before subtask
+      -- if i > 1 then
+      --   -- table.insert(lines, connector_indent .. vertical_line)
+      --   table.insert(regions, {
+      --     line = current_line,
+      --     start = #connector_indent - 1,
+      --     length = 1,
+      --     hl_group = "LazyDoConnector",
+      --   })
+      --   current_line = current_line + 1
+      -- end
+
+      local sub_lines, sub_regions, sub_mappings = render_task(
+        subtask,
+        level + 1,
+        current_line,
+        i == #task.subtasks
+      )
 
       vim.list_extend(lines, sub_lines)
       vim.list_extend(regions, sub_regions)
@@ -784,58 +835,10 @@ local function render_task(task, level, current_line, is_last)
     end
   end
 
-  current_line = current_line + 1
-  if
-      config.features.metadata
-      and config.features.metadata.enabled
-      and task.metadata
-      and not vim.tbl_isempty(task.metadata)
-  then
-    local metadata_lines, metadata_regions = UI.render_metadata(task, level + 1)
-    if metadata_lines and #metadata_lines > 0 then
-      -- Add metadata lines
-      for _, line in ipairs(metadata_lines) do
-        table.insert(lines, line)
-      end
-
-      -- Add metadata highlights with proper line offsets
-      for _, region in ipairs(metadata_regions) do
-        table.insert(regions, {
-          line = current_line + region.line,
-          start = ensure_number(region.start, 0),
-          length = ensure_number(region.length, 0),
-          hl_group = region.hl_group,
-        })
-      end
-
-      current_line = current_line + #metadata_lines
-    end
-  end
-  if config.features.relations.enabled and task.relations and #task.relations > 0 then
-    local relation_lines, relation_regions = UI.render_relations_section(task, level + 1)
-    if relation_lines and #relation_lines > 0 then
-      -- Add relation lines
-      for _, line in ipairs(relation_lines) do
-        table.insert(lines, line)
-      end
-
-      -- Add relation highlights with proper line offsets
-      for _, region in ipairs(relation_regions) do
-        table.insert(regions, {
-          line = current_line + region.line,
-          start = region.start,
-          length = region.length,
-          hl_group = region.hl_group,
-        })
-      end
-
-      current_line = current_line + #relation_lines
-    end
-  end
   -- Add separator for top-level tasks
   if level == 0 then
-    local separator =
-        create_task_separator(level, task.subtasks and #task.subtasks > 0, task.collapsed, get_safe_window_width())
+    local separator = create_task_separator(level, task.subtasks and #task.subtasks > 0, task.collapsed,
+      get_safe_window_width())
     table.insert(lines, separator)
     table.insert(regions, {
       line = current_line,
@@ -926,7 +929,7 @@ function UI.render()
   local tasks_to_render = state.filtered_tasks or state.tasks
   for i, task in ipairs(tasks_to_render) do
     -- Add spacing between tasks based on config
-    if i > 1 and config.layout.spacing > 0 then
+    if i > 1 and config.layout.spacing > 1 then
       for _ = 1, config.layout.spacing do
         table.insert(lines, "")
         current_line = current_line + 1
@@ -1056,7 +1059,7 @@ local function show_help()
     "<leader>t   Remove tags",
     " m         Add metadata",
     " M         Edit metadata",
-    "<leader>mD   Remove metadata",
+    "<leader>md   Remove metadata",
     " i         Toggle info",
     "",
     "Task Organization:",
@@ -1076,11 +1079,10 @@ local function show_help()
     " <leader>ss Sort by status",
     "",
     "Export/Import:",
-    " <leader>E  Save to markdown file",
+    " <leader>m  Save to markdown file",
     "",
     "Other:",
     " ?         Show this help",
-    " q         Close window",
   }
 
   local buf = vim.api.nvim_create_buf(false, true)
@@ -1142,9 +1144,14 @@ function UI.setup_keymaps()
       callback = wrap_action_callback(fn),
       noremap = true,
       silent = true,
-      desc = "LazyDo: " .. desc,
+      desc = desc,
     })
   end
+
+  -- Add 'q' to close list view
+  map("q", function()
+    UI.close()
+  end, "Close list view")
 
   -- Task Movement
   map("K", function()
@@ -1267,7 +1274,7 @@ function UI.setup_keymaps()
       UI.show_feedback("Task is not a subtask", "warn")
     end
   end, "Convert SubTask to Task")
-  map("<leader>E", function()
+  map("<leader>m", function()
     local task = UI.get_task_under_cursor()
     if task then
       vim.ui.input({
@@ -1287,11 +1294,6 @@ function UI.setup_keymaps()
     show_help()
   end, "Help Window")
 
-  -- Add window control keymap
-  map("q", function()
-    UI.close()
-  end, "Close window")
-
   -- Add task creation keymap
   map("a", function()
     UI.add_task()
@@ -1304,10 +1306,22 @@ function UI.setup_keymaps()
       prompt = "Quick task:",
     }, function(content)
       if content and content ~= "" then
-        local task = Actions.add_task(state.tasks, content, {
-          priority = "medium",
-          due_date = nil,
-        }, state.on_task_update)
+        local task
+
+        -- Use core method with immediate saving if available
+        if state.core and state.core.add_task then
+          task = state.core:add_task(content, {
+            priority = "medium",
+            due_date = nil,
+          })
+        else
+          -- Fallback to old method
+          task = Actions.add_task(state.tasks, content, {
+            priority = "medium",
+            due_date = nil,
+          }, state.on_task_update)
+        end
+
         if task then
           UI.refresh()
           UI.show_feedback("Quick task added")
@@ -1318,7 +1332,7 @@ function UI.setup_keymaps()
 
   map("<leader>A", function()
     local parent_task = UI.get_task_under_cursor()
-      if not parent_task then
+    if not parent_task then
       UI.show_feedback("No task selected", "warn")
       return
     end
@@ -1370,7 +1384,7 @@ function UI.setup_keymaps()
   map("M", function()
     UI.edit_metadata()
   end, "Edit Metadata")
-  map("<leader>mD", function()
+  map("<leader>md", function()
     local task = UI.get_task_under_cursor()
     if not task then
       UI.show_feedback("No task selected", "warn")
@@ -1716,15 +1730,30 @@ function UI.add_task()
           prompt = "Notes (optional):",
           completion = "file",
         }, function(notes)
-          local task = Actions.add_task(state.tasks, content, {
-            priority = priority,
-            due_date = timestamp,
-            notes = notes ~= "" and notes or nil,
-          }, state.on_task_update)
+          -- Check if we have a core reference for immediate saving
+          if state.core and state.core.add_task then
+            local task = state.core:add_task(content, {
+              priority = priority,
+              due_date = timestamp,
+              notes = notes ~= "" and notes or nil,
+            })
 
-          if task then
-            UI.refresh()
-            UI.show_feedback("Task added successfully")
+            if task then
+              UI.refresh()
+              UI.show_feedback("Task added successfully")
+            end
+          else
+            -- Fallback to old method if core reference not available
+            local task = Actions.add_task(state.tasks, content, {
+              priority = priority,
+              due_date = timestamp,
+              notes = notes ~= "" and notes or nil,
+            }, state.on_task_update)
+
+            if task then
+              UI.refresh()
+              UI.show_feedback("Task added successfully")
+            end
           end
         end)
       end)
@@ -1789,9 +1818,9 @@ function UI.delete_note()
 
   vim.ui.select({ "y", "n" }, confirm_opts, function(choice)
     if choice == "y" then
-        Actions.delete_note(state.tasks, task.id, state.on_task_update())
-        UI.show_feedback("Note deleted successfully")
-        UI.refresh()
+      Actions.delete_note(state.tasks, task.id, state.on_task_update())
+      UI.show_feedback("Note deleted successfully")
+      UI.refresh()
     else
       UI.show_feedback("Note deletion cancelled")
     end
@@ -2229,7 +2258,15 @@ end
 ---@param tasks Task[] Current tasks
 ---@param on_task_update? function Callback for task updates
 ---@param lazy_config? table Configuration to use if not initialized
-function UI.toggle(tasks, on_task_update, lazy_config, last_state)
+---@param last_state? table Previous UI state for restoration
+---@param core_instance? LazyDoCore Core instance for direct method calls
+function UI.toggle(tasks, on_task_update, lazy_config, last_state, core_instance)
+  -- Check if window already exists and is valid
+  if UI.is_valid() then
+    UI.close()
+    return
+  end
+
   if lazy_config then
     config = lazy_config
   end
@@ -2247,6 +2284,7 @@ function UI.toggle(tasks, on_task_update, lazy_config, last_state)
   clear_state()
   state.tasks = type(tasks) == "table" and tasks or {}
   state.on_task_update = on_task_update
+  state.core = core_instance -- Store reference to core instance for direct method calls
 
   local success, buf_or_err, win_or_err = pcall(create_window)
   if not success then
@@ -2573,8 +2611,7 @@ function UI.create_pin_window(tasks, position)
 
   -- Window setup
   local width = config.pin_window.width or 40
-  local height = pending_tasks and #pending_tasks > 0
-      and math.min(#pending_tasks, config.pin_window.max_height or 10)
+  local height = pending_tasks and #pending_tasks > 0 and math.min(#pending_tasks, config.pin_window.max_height or 10)
       or 1 -- Height for empty message
 
   -- Calculate window position based on config
@@ -2631,9 +2668,9 @@ function UI.create_pin_window(tasks, position)
         {
           start = math.floor((width - #empty_msg) / 2),
           length = #empty_msg,
-          hl = "LazyDoNotesBody"
-        }
-      }
+          hl = "LazyDoNotesBody",
+        },
+      },
     })
   else
     -- Render tasks
