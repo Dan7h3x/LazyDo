@@ -47,12 +47,13 @@ local function create_commands()
           LazyDo._instance:toggle_storage_mode("auto")
         end
 
-        -- If LazyDo is initialized, just toggle the UI
-        LazyDo.toggle()
+        -- If LazyDo is initialized, open/close using the panel command
+        LazyDo.open_panel()
       end,
       opts = {},
       error_msg = "Failed to toggle LazyDo window",
     },
+
     {
       name = "LazyDoPin",
       callback = function(opts)
@@ -105,29 +106,29 @@ local function create_commands()
         end
 
         -- Show current storage status
-        local status = LazyDo._instance:get_storage_status()
-        local lines = {
-          "Storage Status:",
-          string.format("Mode: %s", status.mode),
-          string.format("Current Path: %s", status.current_path),
-          string.format("Global Path: %s", status.global_path or "default"),
-          string.format("Project Mode: %s", status.project_enabled and "enabled" or "disabled"),
-        }
-
-        if status.mode == "project" or status.selected_storage == "custom" then
-          table.insert(lines, string.format("Project Root: %s", status.project_root or "N/A"))
-          if status.custom_project_name then
-            table.insert(lines, string.format("Custom Project: %s", status.custom_project_name))
-          end
-        end
-
-        vim.api.nvim_echo(
-          vim.tbl_map(function(line)
-            return { line .. "\n", "Normal" }
-          end, lines),
-          true,
-          {}
-        )
+        -- local status = LazyDo._instance:get_storage_status()
+        -- local lines = {
+        --   "Storage Status:",
+        --   string.format("Mode: %s", status.mode),
+        --   string.format("Current Path: %s", status.current_path),
+        --   string.format("Global Path: %s", status.global_path or "default"),
+        --   string.format("Project Mode: %s", status.project_enabled and "enabled" or "disabled"),
+        -- }
+        --
+        -- if status.mode == "project" or status.selected_storage == "custom" then
+        --   table.insert(lines, string.format("Project Root: %s", status.project_root or "N/A"))
+        --   if status.custom_project_name then
+        --     table.insert(lines, string.format("Custom Project: %s", status.custom_project_name))
+        --   end
+        -- end
+        --
+        -- vim.api.nvim_echo(
+        --   vim.tbl_map(function(line)
+        --     return { line .. "\n", "Normal" }
+        --   end, lines),
+        --   true,
+        --   {}
+        -- )
       end,
       opts = {
         nargs = "?",
@@ -137,28 +138,45 @@ local function create_commands()
       },
       error_msg = "Failed to toggle storage mode",
     },
-    {
-      name = "LazyDoToggleView",
-      callback = function()
-        LazyDo._instance:toggle_view()
-        local current_view = LazyDo._instance:get_current_view()
-        vim.notify("Switched to " .. current_view .. " view", vim.log.levels.INFO)
-      end,
-      opts = {},
-      error_msg = "Failed to toggle view",
-    },
-    {
-      name = "LazyDoKanban",
-      callback = function()
-        if LazyDo._instance:get_current_view() ~= "kanban" then
-          LazyDo._instance:toggle_view()
-        else
-          LazyDo.toggle()
-        end
-      end,
-      opts = {},
-      error_msg = "Failed to open Kanban view",
-    },
+    -- {
+    --   name = "LazyDoToggleView",
+    --   callback = function()
+    --     LazyDo._instance:toggle_view()
+    --     local current_view = LazyDo._instance:get_current_view()
+    --     vim.notify("Switched to " .. current_view .. " view", vim.log.levels.INFO)
+    --   end,
+    --   opts = {},
+    --   error_msg = "Failed to toggle view",
+    -- },
+    -- {
+    --   name = "LazyDoKanban",
+    --   callback = function()
+    --     -- Auto-initialize if not already initialized
+    --     if not LazyDo._initialized then
+    --       vim.notify("Initializing LazyDo for the first time", vim.log.levels.INFO)
+    --       local init_success, _ = pcall(LazyDo.setup, {})
+    --       if not init_success then
+    --         vim.notify("Failed to initialize LazyDo automatically", vim.log.levels.ERROR)
+    --         return
+    --       end
+    --
+    --       -- After initialization, activate the smart project detection
+    --       LazyDo._instance:toggle_storage_mode("auto")
+    --     end
+    --
+    --     -- Open kanban view directly
+    --     if LazyDo._instance:get_current_view() ~= "kanban" then
+    --       LazyDo._instance:toggle_view()
+    --     end
+    --
+    --     -- Ensure the panel is visible
+    --     if not LazyDo._instance:is_visible() then
+    --       LazyDo.open_panel("kanban")
+    --     end
+    --   end,
+    --   opts = {},
+    --   error_msg = "Failed to open Kanban view",
+    -- },
   }
 
   -- Register commands with error handling
@@ -227,6 +245,7 @@ function LazyDo.setup(opts)
       end,
     })
 
+    -- Auto-detect projects on startup and directory change
     if LazyDo._config.storage.project.auto_detect then
       -- Auto-detect on directory change
       vim.api.nvim_create_autocmd("DirChanged", {
@@ -238,23 +257,26 @@ function LazyDo.setup(opts)
         end,
       })
     end
-    -- if LazyDo._config.storage.startup_detect then
-    --   vim.api.nvim_create_autocmd("VimEnter", {
-    --     group = augroup,
-    --     callback = function()
-    --       if LazyDo._instance then
-    --         -- Ensure we're using the correct storage mode on startup
-    --         local success, _ = pcall(function()
-    --           LazyDo._instance:toggle_storage_mode("auto")
-    --         end)
-    --
-    --         if not success then
-    --           vim.notify("Failed to auto-detect project storage mode on startup", vim.log.levels.WARN)
-    --         end
-    --       end
-    --     end,
-    --   })
-    -- end
+
+    if LazyDo._config.storage.startup_detect then
+      vim.api.nvim_create_autocmd("VimEnter", {
+        group = augroup,
+        callback = function()
+          if LazyDo._instance then
+            -- Use a slight delay to ensure UI is ready
+            vim.defer_fn(function()
+              local success, _ = pcall(function()
+                LazyDo._instance:toggle_storage_mode("auto")
+              end)
+
+              if not success then
+                vim.notify("Failed to auto-detect project storage mode on startup", vim.log.levels.WARN)
+              end
+            end, 100) -- 100ms delay
+          end
+        end,
+      })
+    end
 
     -- Create commands
     create_commands()
@@ -376,6 +398,38 @@ function LazyDo.get_lualine_stats()
     )
   else
     return ""
+  end
+end
+
+---New function to open the panel with selected storage
+---@param view? "list"|"kanban" Optional view to open
+function LazyDo.open_panel(view)
+  if not LazyDo._initialized then
+    vim.notify("LazyDo is not initialized. Call setup() first.", vim.log.levels.ERROR)
+    return
+  end
+
+  local toggle_success, err = pcall(function()
+    -- If already visible, close it (toggle behavior)
+    if LazyDo._instance:is_visible() then
+      LazyDo._instance:toggle() -- Use toggle to close
+      return
+    end
+
+    -- Reload tasks from current storage
+    LazyDo._instance:reload_tasks()
+
+    -- Set view if specified
+    if view and LazyDo._instance:get_current_view() ~= view then
+      LazyDo._instance:toggle_view()
+    end
+
+    -- Open the panel using toggle
+    LazyDo._instance:toggle()
+  end)
+
+  if not toggle_success then
+    vim.notify("Error opening LazyDo panel: " .. tostring(err), vim.log.levels.ERROR)
   end
 end
 

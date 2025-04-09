@@ -4,7 +4,6 @@ local Storage = require("lazydo.storage")
 local Actions = require("lazydo.actions")
 local Utils = require("lazydo.utils")
 local UI = require("lazydo.ui")
-local Kanban = require("lazydo.kanban")
 
 ---@class LazyDoCore
 ---@field public config LazyDoConfig
@@ -105,11 +104,7 @@ function Core:toggle(view)
     end
 
     -- Close current view
-    if self._current_view == "kanban" then
-      Kanban.close()
-    else
-      UI.close()
-    end
+    UI.close()
 
     self._ui_visible = false
     Utils.Window.restore_state(prev_win_state)
@@ -144,61 +139,41 @@ function Core:toggle(view)
   end
 
   -- Open the appropriate view with task modification callbacks
-  if self._current_view == "kanban" then
-    local on_task_update = function(task)
-      if task and task.id then
-        self:update_task(task.id, task)
-        -- Save tasks immediately after any modification
-        Storage.save_immediate(self.tasks)
-        Kanban.refresh(self.tasks)
-      end
+  local on_task_update = function(task)
+    if task and task.id then
+      self:update_task(task.id, task)
+      -- Save tasks immediately after any modification
+      Storage.save_immediate(self.tasks)
+      UI.refresh()
     end
-
-    local on_task_delete = function(task_id)
-      if task_id then
-        self:delete_task(task_id)
-        -- Save tasks immediately after deletion
-        Storage.save_immediate(self.tasks)
-        Kanban.refresh(self.tasks)
-      end
-    end
-
-    Kanban.toggle(self.tasks, on_task_update, self.config)
-  else
-    local on_task_update = function(task)
-      if task and task.id then
-        self:update_task(task.id, task)
-        -- Save tasks immediately after any modification
-        Storage.save_immediate(self.tasks)
-        UI.refresh()
-      end
-    end
-
-    local on_task_delete = function(task_id)
-      if task_id then
-        self:delete_task(task_id)
-        -- Save tasks immediately after deletion
-        Storage.save_immediate(self.tasks)
-        UI.refresh()
-      end
-    end
-
-    UI.toggle(self.tasks, on_task_update, self.config, self._last_ui_state, self)
   end
+
+  -- local on_task_delete = function(task_id)
+  --   if task_id then
+  --     self:delete_task(task_id)
+  --     -- Save tasks immediately after deletion
+  --     Storage.save_immediate(self.tasks)
+  --     UI.refresh()
+  --   end
+  -- end
+
+  UI.toggle(self.tasks, on_task_update, self.config, self._last_ui_state, self)
 
   self._ui_visible = true
 
   -- Get storage status for notification
-  local status = Storage.get_status()
-  local mode_str
+  if self.config.storage.silent then
+    local status = Storage.get_status()
+    local mode_str = ""
 
-  if status.selected_storage == "custom" and status.custom_project_name then
-    mode_str = "custom project '" .. status.custom_project_name .. "'"
-  else
-    mode_str = status.mode == "project" and "project" or "global"
+    if status.selected_storage == "custom" and status.custom_project_name then
+      mode_str = "custom project '" .. status.custom_project_name .. "'"
+    else
+      mode_str = status.mode == "project" and "project" or "global"
+    end
+
+    vim.notify("Using " .. mode_str .. " storage: " .. status.current_path, vim.log.levels.INFO)
   end
-
-  vim.notify("Using " .. mode_str .. " storage: " .. status.current_path, vim.log.levels.INFO)
 end
 
 ---Toggle between list and kanban view
@@ -214,11 +189,7 @@ function Core:toggle_view()
   local current_tasks = Utils.deep_copy(self.tasks)
 
   -- Close current view
-  if self._current_view == "kanban" then
-    Kanban.close()
-  else
-    UI.close()
-  end
+  UI.close()
 
   -- Toggle view
   self._current_view = self._current_view == "list" and "kanban" or "list"
@@ -245,36 +216,35 @@ end
 
 function Core:is_visible()
   return self._ui_visible and (
-    (self._current_view == "list" and UI.is_valid()) or
-    (self._current_view == "kanban" and Kanban.is_valid())
+    self._current_view == "list" and UI.is_valid()
   )
 end
 
 ---Refresh UI display
-function Core:refresh_ui()
-  if not self._ui_visible then
-    return
-  end
-
-  if self._current_view == "kanban" then
-    -- Use the new refresh method if available, otherwise toggle
-    if Kanban.refresh then
-      Kanban.refresh(self.tasks)
-    else
-      Kanban.toggle(self.tasks, function(task)
-        if task and task.id then
-          self:update_task(task.id, task)
-        end
-      end, self.config)
-    end
-  else
-    UI.toggle(self.tasks, function(task)
-      if task and task.id then
-        self:update_task(task.id, task)
-      end
-    end, self.config)
-  end
-end
+-- function Core:refresh_ui()
+--   if not self._ui_visible then
+--     return
+--   end
+--
+--   if self._current_view == "kanban" then
+--     -- Use the new refresh method if available, otherwise toggle
+--     if Kanban.refresh then
+--       Kanban.refresh(self.tasks)
+--     else
+--       Kanban.toggle(self.tasks, function(task)
+--         if task and task.id then
+--           self:update_task(task.id, task)
+--         end
+--       end, self.config)
+--     end
+--   else
+--     UI.toggle(self.tasks, function(task)
+--       if task and task.id then
+--         self:update_task(task.id, task)
+--       end
+--     end, self.config)
+--   end
+-- end
 
 ---Get all tasks
 ---@return Task[]
@@ -414,9 +384,6 @@ function Core:cleanup()
   UI.close()
 end
 
----Update task
----@param task_id string
----@param fields table
 ---Update a task by ID and save immediately
 ---@param task_id string
 ---@param fields table
@@ -593,8 +560,21 @@ function Core:toggle_storage_mode(mode)
   -- Save current tasks before switching
   local current_tasks = self.tasks
 
+  -- Get current status to detect changes
+  local prev_status = Storage.get_status()
+
   -- Toggle storage mode
   local is_project = Storage.toggle_mode(mode)
+
+  -- Get new status after toggling
+  local new_status = Storage.get_status()
+
+  -- If storage didn't change (user cancelled), don't reload tasks
+  if prev_status.current_path == new_status.current_path and
+      prev_status.selected_storage == new_status.selected_storage and
+      prev_status.custom_project_name == new_status.custom_project_name then
+    return is_project
+  end
 
   -- Reload tasks from new storage location
   local load_ok, loaded_tasks = pcall(Storage.load)
@@ -605,11 +585,7 @@ function Core:toggle_storage_mode(mode)
 
     -- Refresh UI if visible
     if self._ui_visible then
-      if self._current_view == "kanban" then
-        Kanban.refresh(self.tasks)
-      else
-        UI.refresh()
-      end
+      UI.refresh()
 
       -- Get storage status for notification
       local status = Storage.get_status()
@@ -640,30 +616,21 @@ function Core:toggle_storage_mode(mode)
         pcall(Storage.save_immediate, self.tasks)
 
         -- Refresh UI if visible
-        if self._ui_visible then
-          if self._current_view == "kanban" then
-            Kanban.refresh(self.tasks)
-          else
-            UI.refresh()
-          end
-        end
+        UI.refresh()
       else
         -- Revert to previous storage mode
-        local revert_ok = pcall(Storage.toggle_mode, is_project and "global" or "project")
+        local revert_mode = prev_status.mode == "project" and "global" or "project"
+        local revert_ok = pcall(Storage.toggle_mode, revert_mode)
         if revert_ok then
           vim.notify("Reverted to previous storage mode", vim.log.levels.INFO)
+        end
 
-          -- Restore original tasks
-          self.tasks = current_tasks
+        -- Restore original tasks
+        self.tasks = current_tasks
 
-          -- Refresh UI if visible
-          if self._ui_visible then
-            if self._current_view == "kanban" then
-              Kanban.refresh(self.tasks)
-            else
-              UI.refresh()
-            end
-          end
+        -- Refresh UI if visible
+        if self._ui_visible then
+          UI.refresh()
         end
       end
     end)
@@ -695,11 +662,7 @@ function Core:refresh_ui(tasks)
     return
   end
 
-  if self._current_view == "kanban" then
-    Kanban.refresh(self.tasks)
-  else
-    UI.refresh()
-  end
+  UI.refresh()
 
   if self._pin_window_state.visible then
     self:update_pin_window()
@@ -710,6 +673,96 @@ end
 ---@return table status Storage status information
 function Core:get_storage_status()
   return Storage.get_status()
+end
+
+---Open task manager window in the specified view
+---@param view? "list"|"kanban" Optional view to open
+function Core:open(view)
+  -- If already visible, just refresh
+  if self._ui_visible then
+    if view and self._current_view ~= view then
+      -- Switch to specified view if different
+      self._current_view = view
+      self:refresh_ui()
+    else
+      -- Just refresh current view
+      self:refresh_ui()
+    end
+    return
+  end
+
+  -- If view is specified, set it as current view
+  if view and (view == "list" or view == "kanban") then
+    self._current_view = view
+  end
+
+  -- Load tasks if needed
+  local should_load = true
+  if self.tasks and #self.tasks > 0 and self._last_task_load_time and
+      (os.time() - self._last_task_load_time < 5) then
+    should_load = false
+  end
+
+  if should_load then
+    local load_ok, loaded_tasks = pcall(Storage.load)
+    if load_ok and loaded_tasks then
+      self.tasks = loaded_tasks
+      self._last_task_load_time = os.time()
+    else
+      if not self.tasks or #self.tasks == 0 then
+        vim.notify("Error loading tasks. Initializing with empty task list.", vim.log.levels.WARN)
+        self.tasks = {}
+      else
+        vim.notify("Error loading tasks from storage. Using previously loaded tasks.", vim.log.levels.WARN)
+      end
+    end
+  end
+
+  -- Open appropriate view
+  local on_task_update = function(task)
+    if task and task.id then
+      self:update_task(task.id, task)
+      Storage.save_immediate(self.tasks)
+      UI.refresh()
+    end
+  end
+
+  UI.toggle(self.tasks, on_task_update, self.config, self._last_ui_state, self)
+
+  self._ui_visible = true
+
+  -- Get storage status for notification
+  local status = Storage.get_status()
+  local mode_str = status.selected_storage == "custom" and status.custom_project_name
+      and "custom project '" .. status.custom_project_name .. "'"
+      or (status.mode == "project" and "project" or "global")
+
+  vim.notify("Using " .. mode_str .. " storage: " .. status.current_path, vim.log.levels.INFO)
+end
+
+---Close task manager window
+function Core:close()
+  if not self._ui_visible then
+    return
+  end
+
+  -- Save current state before closing
+  self._last_ui_state = {
+    cursor = vim.api.nvim_win_get_cursor(0),
+    scroll = vim.fn.winsaveview(),
+    view = self._current_view
+  }
+
+  -- Save tasks state immediately
+  local save_success = Storage.save_immediate(self.tasks)
+  if not save_success then
+    vim.notify("Warning: Failed to save task data when closing window", vim.log.levels.WARN)
+  end
+
+  -- Close current view
+  UI.close()
+
+  self._ui_visible = false
 end
 
 return Core
