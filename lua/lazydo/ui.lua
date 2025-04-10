@@ -357,7 +357,7 @@ local function render_note_section(note, indent_level, is_subtask)
   local regions = {}
   local current_line = 0
 
-  local note_icon = config.icons.note or ""
+  local note_icon = config.icons.note or "󰎞"
   local box = {
     top_left = is_subtask and "├" or "╭",
     top_right = "╮",
@@ -368,29 +368,36 @@ local function render_note_section(note, indent_level, is_subtask)
     separator = "┄",
   }
 
-  -- Create header
+  -- Create header with improved styling
   local header = string.format("%s%s%s %s Notes ", indent, box.top_left, box.horizontal, note_icon)
   local header_padding = string.rep(box.horizontal, width - vim.fn.strwidth(header) + #indent)
   header = header .. header_padding .. box.top_right
   table.insert(lines, header)
 
-  -- Header highlights
+  -- Add virtual text for indentation guide
+  -- vim.api.nvim_buf_set_extmark(state.buf, ns_id, current_line, 0, {
+  --   virt_text = { { string.rep("│ ", indent_level), "LazyDoIndentGuide" } },
+  --   virt_text_pos = "overlay",
+  --   hl_mode = "combine",
+  -- })
+
+  -- Header highlights with improved visual hierarchy
   table.insert(regions, {
     line = current_line,
-    col = #indent,
-    length = #box.top_left + 1,
+    col = #indent + 1,
+    length = #box.top_left + 3,
     hl_group = "LazyDoNotesBorder",
   })
   table.insert(regions, {
     line = current_line,
     col = #indent + #box.top_left + 3,
-    length = #note_icon + 7,
+    length = #note_icon + 4,
     hl_group = "LazyDoNotesIcon",
   })
   table.insert(regions, {
     line = current_line,
-    col = #indent + 17,
-    length = #header_padding + #box.top_right,
+    col = #indent + 20,
+    length = #header_padding + #box.top_right + 1,
     hl_group = "LazyDoNotesBorder",
   })
 
@@ -401,9 +408,16 @@ local function render_note_section(note, indent_level, is_subtask)
 
   for i, paragraph in ipairs(paragraphs) do
     if paragraph == "" then
-      -- Empty line handling
+      -- Empty line handling with virtual text
       local empty_line = string.format("%s%s%s%s", indent, box.vertical, string.rep(" ", width - 2), box.vertical)
       table.insert(lines, empty_line)
+
+      -- Add virtual text for indentation guide
+      -- vim.api.nvim_buf_set_extmark(state.buf, ns_id, current_line, 0, {
+      --   virt_text = { { string.rep("│ ", indent_level), "LazyDoIndentGuide" } },
+      --   virt_text_pos = "overlay",
+      --   hl_mode = "combine",
+      -- })
 
       -- Border highlights
       table.insert(regions, {
@@ -436,7 +450,14 @@ local function render_note_section(note, indent_level, is_subtask)
 
         table.insert(lines, content_line)
 
-        -- Content line highlights
+        -- Add virtual text for indentation guide
+        -- vim.api.nvim_buf_set_extmark(state.buf, ns_id, current_line, 0, {
+        --   virt_text = { { string.rep("│ ", indent_level), "LazyDoIndentGuide" } },
+        --   virt_text_pos = "overlay",
+        --   hl_mode = "combine",
+        -- })
+
+        -- Content line highlights with improved visual hierarchy
         table.insert(regions, {
           line = current_line,
           col = #indent,
@@ -445,14 +466,14 @@ local function render_note_section(note, indent_level, is_subtask)
         })
         table.insert(regions, {
           line = current_line,
-          col = #indent + width + 2,
+          col = #indent + 2,
           length = 1,
           hl_group = "LazyDoNotesBorder",
         })
         table.insert(regions, {
           line = current_line,
-          col = #indent + 2,
-          length = #line_content + 2,
+          col = #indent + 3,
+          length = #line_content + 4,
           hl_group = "LazyDoNotesBody",
         })
         table.insert(regions, {
@@ -467,10 +488,17 @@ local function render_note_section(note, indent_level, is_subtask)
     end
   end
 
-  -- Add footer
-  local footer =
-      string.format("%s%s%s%s", indent, box.bottom_left, string.rep(box.horizontal, width - 1), box.bottom_right)
+  -- Add footer with virtual text
+  local footer = string.format("%s%s%s%s", indent, box.bottom_left, string.rep(box.horizontal, width - 1),
+    box.bottom_right)
   table.insert(lines, footer)
+
+  -- Add virtual text for indentation guide
+  -- vim.api.nvim_buf_set_extmark(state.buf, ns_id, current_line, 0, {
+  --   virt_text = { { string.rep("│ ", indent_level), "LazyDoIndentGuide" } },
+  --   virt_text_pos = "overlay",
+  --   hl_mode = "combine",
+  -- })
 
   table.insert(regions, {
     line = current_line,
@@ -606,10 +634,10 @@ local function render_task_header(task, level, is_last)
   }
 
   -- Add connector for subtasks
-  -- if level > 0 then
-  --   components.connector = is_last and config.theme.indent.last_connector or config.theme.indent.connector
-  --   add_region(#components.connector, "LazyDoConnector")
-  -- end
+  if level > 0 then
+    components.connector = is_last and config.theme.indent.last_connector or config.theme.indent.connector
+    add_region(#components.connector, "LazyDoConnector")
+  end
 
   -- Add status icon
   local status_icon = task.status == "done" and config.icons.task_done or config.icons.task_pending
@@ -727,8 +755,8 @@ local function render_task(task, level, current_line, is_last)
   local mappings = {}
 
   -- Calculate indentation
-  local base_indent = string.rep("  ", level)
-  local connector_indent = string.rep("  ", math.max(0, level - 1))
+  local base_indent = string.rep("ab", level)
+  local connector_indent = string.rep("xy", math.max(0, level - 2))
 
   -- Define connector characters based on task position
   local connector = level > 0 and (is_last and "└─" or "├─") or ""
@@ -738,6 +766,15 @@ local function render_task(task, level, current_line, is_last)
   local header_line, header_regions = render_task_header(task, level, is_last)
   table.insert(lines, header_line)
 
+  -- Add virtual text for indentation guide
+  -- if level > 0 then
+  --   vim.api.nvim_buf_set_extmark(state.buf, ns_id, current_line, 0, {
+  --     virt_text = { { string.rep("│ ", level - 1) .. connector, "LazyDoIndentConnector" } },
+  --     virt_text_pos = "overlay",
+  --     hl_mode = "combine",
+  --   })
+  -- end
+
   -- Add header highlights
   for _, region in ipairs(header_regions) do
     table.insert(regions, {
@@ -745,16 +782,6 @@ local function render_task(task, level, current_line, is_last)
       start = ensure_number(region.col, 0),
       length = ensure_number(region.length, 0),
       hl_group = region.hl_group or "Normal",
-    })
-  end
-
-  -- Add connector highlight if it exists
-  if level > 0 then
-    table.insert(regions, {
-      line = current_line,
-      start = #connector_indent,
-      length = 2,
-      hl_group = "LazyDoConnector",
     })
   end
 
@@ -782,47 +809,57 @@ local function render_task(task, level, current_line, is_last)
           local note_line = connector_indent .. vertical_line .. "  " .. line
           table.insert(lines, note_line)
 
-          -- Add vertical line highlight
+          -- Add virtual text for indentation guide
+          -- vim.api.nvim_buf_set_extmark(state.buf, ns_id, current_line + i - 1, 0, {
+          --   virt_text = { { string.rep("│ ", level) .. "│ ", "LazyDoIndentGuide" } },
+          --   virt_text_pos = "overlay",
+          --   hl_mode = "combine",
+          -- })
+        end
+        for _, region in ipairs(note_regions) do
           table.insert(regions, {
-            line = current_line + i - 1,
-            start = #connector_indent,
-            length = 1,
-            hl_group = "LazyDoConnector",
+            line = current_line + region.line,
+            start = ensure_number(region.col, 0) + #connector_indent,
+            length = ensure_number(region.length, 0) + #connector_indent,
+            hl_group = region.hl_group,
           })
         end
       else
         -- Just add notes with proper indentation
         for _, line in ipairs(note_lines) do
-          table.insert(lines, base_indent .. "  " .. line)
+          table.insert(lines, connector_indent .. "  " .. line)
+        end
+        for _, region in ipairs(note_regions) do
+          table.insert(regions, {
+            line = current_line + region.line,
+            start = ensure_number(region.col, 0),
+            length = ensure_number(region.length, 0),
+            hl_group = region.hl_group,
+          })
         end
       end
       current_line = current_line + #note_lines
     end
   end
 
-
-
   -- Render subtasks with improved connectors
   if task.subtasks and #task.subtasks > 0 and not task.collapsed then
     for i, subtask in ipairs(task.subtasks) do
-      -- Add vertical connector line before subtask
-      -- if i > 1 then
-      --   -- table.insert(lines, connector_indent .. vertical_line)
-      --   table.insert(regions, {
-      --     line = current_line,
-      --     start = #connector_indent - 1,
-      --     length = 1,
-      --     hl_group = "LazyDoConnector",
-      --   })
-      --   current_line = current_line + 1
-      -- end
-
       local sub_lines, sub_regions, sub_mappings = render_task(
         subtask,
         level + 1,
         current_line,
         i == #task.subtasks
       )
+
+      -- Add virtual text for subtask connectors
+      -- if level > 0 then
+      --   vim.api.nvim_buf_set_extmark(state.buf, ns_id, current_line, 0, {
+      --     virt_text = { { string.rep("│ ", level), "LazyDoIndentGuide" } },
+      --     virt_text_pos = "overlay",
+      --     hl_mode = "combine",
+      --   })
+      -- end
 
       vim.list_extend(lines, sub_lines)
       vim.list_extend(regions, sub_regions)
