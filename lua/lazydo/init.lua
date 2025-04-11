@@ -83,52 +83,46 @@ local function create_commands()
         local mode = opts.args ~= "" and opts.args or nil
 
         -- Toggle storage mode
-        local success, _ = pcall(function()
-          LazyDo._instance:toggle_storage_mode(mode)
+        local success, result = pcall(function()
+          return LazyDo._instance:toggle_storage_mode(mode)
         end)
 
         if not success then
-          vim.notify("Failed to toggle storage mode", vim.log.levels.ERROR)
+          vim.notify("Failed to toggle storage mode: " .. tostring(result), vim.log.levels.ERROR)
           return
         end
 
         -- Refresh UI if it's open
         if LazyDo._instance:is_visible() then
           -- Reload tasks from the new storage
-          local reload_success, _ = pcall(function()
-            local tasks = LazyDo._instance:reload_tasks()
-            LazyDo._instance:refresh_ui(tasks)
+          local reload_success, tasks = pcall(function()
+            return LazyDo._instance:reload_tasks()
           end)
 
           if not reload_success then
-            vim.notify("Failed to refresh UI with new storage", vim.log.levels.WARN)
+            vim.notify("Failed to reload tasks from new storage", vim.log.levels.WARN)
+            return
           end
+
+          -- Refresh UI with new tasks
+          pcall(function()
+            LazyDo._instance:refresh_ui(tasks)
+          end)
         end
 
-        -- Show current storage status
-        -- local status = LazyDo._instance:get_storage_status()
-        -- local lines = {
-        --   "Storage Status:",
-        --   string.format("Mode: %s", status.mode),
-        --   string.format("Current Path: %s", status.current_path),
-        --   string.format("Global Path: %s", status.global_path or "default"),
-        --   string.format("Project Mode: %s", status.project_enabled and "enabled" or "disabled"),
-        -- }
-        --
-        -- if status.mode == "project" or status.selected_storage == "custom" then
-        --   table.insert(lines, string.format("Project Root: %s", status.project_root or "N/A"))
-        --   if status.custom_project_name then
-        --     table.insert(lines, string.format("Custom Project: %s", status.custom_project_name))
-        --   end
-        -- end
-        --
-        -- vim.api.nvim_echo(
-        --   vim.tbl_map(function(line)
-        --     return { line .. "\n", "Normal" }
-        --   end, lines),
-        --   true,
-        --   {}
-        -- )
+        -- Display storage status with improved feedback
+        local status = LazyDo._instance:get_storage_status()
+        local mode_str
+        
+        if status.selected_storage == "custom" and status.custom_project_name then
+          mode_str = "Custom Project: " .. status.custom_project_name
+        else
+          mode_str = status.mode == "project" and 
+            "Project: " .. vim.fn.fnamemodify(status.project_root or "", ":t") or 
+            "Global"
+        end
+        
+        vim.notify("Storage: " .. mode_str .. " (" .. status.current_path .. ")", vim.log.levels.INFO)
       end,
       opts = {
         nargs = "?",
@@ -138,45 +132,45 @@ local function create_commands()
       },
       error_msg = "Failed to toggle storage mode",
     },
-    -- {
-    --   name = "LazyDoToggleView",
-    --   callback = function()
-    --     LazyDo._instance:toggle_view()
-    --     local current_view = LazyDo._instance:get_current_view()
-    --     vim.notify("Switched to " .. current_view .. " view", vim.log.levels.INFO)
-    --   end,
-    --   opts = {},
-    --   error_msg = "Failed to toggle view",
-    -- },
-    -- {
-    --   name = "LazyDoKanban",
-    --   callback = function()
-    --     -- Auto-initialize if not already initialized
-    --     if not LazyDo._initialized then
-    --       vim.notify("Initializing LazyDo for the first time", vim.log.levels.INFO)
-    --       local init_success, _ = pcall(LazyDo.setup, {})
-    --       if not init_success then
-    --         vim.notify("Failed to initialize LazyDo automatically", vim.log.levels.ERROR)
-    --         return
-    --       end
-    --
-    --       -- After initialization, activate the smart project detection
-    --       LazyDo._instance:toggle_storage_mode("auto")
-    --     end
-    --
-    --     -- Open kanban view directly
-    --     if LazyDo._instance:get_current_view() ~= "kanban" then
-    --       LazyDo._instance:toggle_view()
-    --     end
-    --
-    --     -- Ensure the panel is visible
-    --     if not LazyDo._instance:is_visible() then
-    --       LazyDo.open_panel("kanban")
-    --     end
-    --   end,
-    --   opts = {},
-    --   error_msg = "Failed to open Kanban view",
-    -- },
+    {
+      name = "LazyDoToggleView",
+      callback = function()
+        LazyDo._instance:toggle_view()
+        local current_view = LazyDo._instance:get_current_view()
+        vim.notify("Switched to " .. current_view .. " view", vim.log.levels.INFO)
+      end,
+      opts = {},
+      error_msg = "Failed to toggle view",
+    },
+    {
+      name = "LazyDoKanban",
+      callback = function()
+        -- Auto-initialize if not already initialized
+        if not LazyDo._initialized then
+          vim.notify("Initializing LazyDo for the first time", vim.log.levels.INFO)
+          local init_success, _ = pcall(LazyDo.setup, {})
+          if not init_success then
+            vim.notify("Failed to initialize LazyDo automatically", vim.log.levels.ERROR)
+            return
+          end
+
+          -- After initialization, activate the smart project detection
+          LazyDo._instance:toggle_storage_mode("auto")
+        end
+
+        -- Open kanban view directly
+        if LazyDo._instance:get_current_view() ~= "kanban" then
+          LazyDo._instance:toggle_view()
+        end
+
+        -- Ensure the panel is visible
+        if not LazyDo._instance:is_visible() then
+          LazyDo.open_panel("kanban")
+        end
+      end,
+      opts = {},
+      error_msg = "Failed to open Kanban view",
+    },
   }
 
   -- Register commands with error handling
@@ -327,20 +321,54 @@ function LazyDo.toggle_view()
 end
 
 ---Toggle storage mode between project and global
----@param mode? "project"|"global"|"auto" Optional mode to set directly
----@throws string when toggle operation fails
+---@param mode? "project"|"global"|"auto"|"custom" Optional mode to set directly
 function LazyDo.toggle_storage_mode(mode)
   if not LazyDo._initialized then
-    vim.notify("LazyDo is not initialized", vim.log.levels.ERROR)
+    vim.notify("LazyDo is not initialized. Call setup() first.", vim.log.levels.ERROR)
     return
   end
 
-  local success, err = pcall(function()
-    LazyDo._instance:toggle_storage_mode(mode)
+  -- Get current status before toggle
+  local prev_status = {}
+  pcall(function()
+    prev_status = LazyDo._instance:get_storage_status()
+  end)
+
+  local success, result = pcall(function()
+    return LazyDo._instance:toggle_storage_mode(mode)
   end)
 
   if not success then
-    vim.notify("Failed to toggle storage mode: " .. tostring(err), vim.log.levels.ERROR)
+    vim.notify("Failed to toggle storage mode: " .. tostring(result), vim.log.levels.ERROR)
+    return
+  end
+
+  -- If UI is visible, reload data and refresh
+  if LazyDo._instance:is_visible() then
+    pcall(function()
+      local tasks = LazyDo._instance:reload_tasks()
+      LazyDo._instance:refresh_ui(tasks)
+    end)
+  end
+  
+  -- Get new status after toggle for comparison
+  local new_status = {}
+  pcall(function()
+    new_status = LazyDo._instance:get_storage_status()
+  end)
+  
+  -- Only show additional notification if status changed and no other notification was shown
+  if new_status.current_path and new_status.current_path ~= prev_status.current_path then
+    local mode_str = ""
+    if new_status.selected_storage == "custom" and new_status.custom_project_name then
+      mode_str = "Custom Project: " .. new_status.custom_project_name
+    else
+      mode_str = new_status.mode == "project" and 
+        "Project: " .. vim.fn.fnamemodify(new_status.project_root or "", ":t") or 
+        "Global"
+    end
+    
+    vim.notify("Now using " .. mode_str .. " storage", vim.log.levels.INFO)
   end
 end
 
