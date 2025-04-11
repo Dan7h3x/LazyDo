@@ -285,12 +285,12 @@ function Storage.load(force_mode)
 
   -- Read file
   local lines, read_err = vim.fn.readfile(storage_path)
-  if not lines or #lines == 0 then
-    if read_err then
-      vim.notify("Error reading storage file: " .. read_err, vim.log.levels.ERROR)
-    end
-    return {}, false
-  end
+  -- if not lines or #lines == 0 then
+  --   if read_err then
+  --     vim.notify("Error reading storage file: " .. read_err, vim.log.levels.ERROR)
+  --   end
+  --   return {}, false
+  -- end
 
   local data = table.concat(lines)
 
