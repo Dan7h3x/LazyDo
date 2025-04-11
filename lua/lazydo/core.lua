@@ -4,6 +4,7 @@ local Storage = require("lazydo.storage")
 local Actions = require("lazydo.actions")
 local Utils = require("lazydo.utils")
 local UI = require("lazydo.ui")
+local Kanban = require("lazydo.kanban")
 
 ---@class LazyDoCore
 ---@field public config LazyDoConfig
@@ -104,7 +105,11 @@ function Core:toggle(view)
     end
 
     -- Close current view
-    UI.close()
+    if self._current_view == "kanban" then
+      Kanban.close()
+    else
+      UI.close()
+    end
 
     self._ui_visible = false
     Utils.Window.restore_state(prev_win_state)
@@ -139,25 +144,47 @@ function Core:toggle(view)
   end
 
   -- Open the appropriate view with task modification callbacks
-  local on_task_update = function(task)
-    if task and task.id then
-      self:update_task(task.id, task)
-      -- Save tasks immediately after any modification
-      Storage.save_immediate(self.tasks)
-      UI.refresh()
+  if self._current_view == "kanban" then
+    local on_task_update = function(task)
+      if task and task.id then
+        self:update_task(task.id, task)
+        -- Save tasks immediately after any modification
+        Storage.save_immediate(self.tasks)
+        Kanban.refresh(self.tasks)
+      end
     end
+
+    -- local on_task_delete = function(task_id)
+    --   if task_id then
+    --     self:delete_task(task_id)
+    --     -- Save tasks immediately after deletion
+    --     Storage.save_immediate(self.tasks)
+    --     Kanban.refresh(self.tasks)
+    --   end
+    -- end
+
+    Kanban.toggle(self.tasks, on_task_update)
+  else
+    local on_task_update = function(task)
+      if task and task.id then
+        self:update_task(task.id, task)
+        -- Save tasks immediately after any modification
+        Storage.save_immediate(self.tasks)
+        UI.refresh()
+      end
+    end
+
+    -- local on_task_delete = function(task_id)
+    --   if task_id then
+    --     self:delete_task(task_id)
+    --     -- Save tasks immediately after deletion
+    --     Storage.save_immediate(self.tasks)
+    --     UI.refresh()
+    --   end
+    -- end
+
+    UI.toggle(self.tasks, on_task_update, self.config, self._last_ui_state, self)
   end
-
-  -- local on_task_delete = function(task_id)
-  --   if task_id then
-  --     self:delete_task(task_id)
-  --     -- Save tasks immediately after deletion
-  --     Storage.save_immediate(self.tasks)
-  --     UI.refresh()
-  --   end
-  -- end
-
-  UI.toggle(self.tasks, on_task_update, self.config, self._last_ui_state, self)
 
   self._ui_visible = true
 
@@ -189,7 +216,11 @@ function Core:toggle_view()
   local current_tasks = Utils.deep_copy(self.tasks)
 
   -- Close current view
-  UI.close()
+  if self._current_view == "kanban" then
+    Kanban.close()
+  else
+    UI.close()
+  end
 
   -- Toggle view
   self._current_view = self._current_view == "list" and "kanban" or "list"
@@ -216,35 +247,35 @@ end
 
 function Core:is_visible()
   return self._ui_visible and (
-    self._current_view == "list" and UI.is_valid()
+    (self._current_view == "list" and UI.is_valid()) or
+    (self._current_view == "kanban" and Kanban.is_valid())
   )
 end
 
----Refresh UI display
--- function Core:refresh_ui()
---   if not self._ui_visible then
---     return
---   end
---
---   if self._current_view == "kanban" then
---     -- Use the new refresh method if available, otherwise toggle
---     if Kanban.refresh then
---       Kanban.refresh(self.tasks)
---     else
---       Kanban.toggle(self.tasks, function(task)
---         if task and task.id then
---           self:update_task(task.id, task)
---         end
---       end, self.config)
---     end
---   else
---     UI.toggle(self.tasks, function(task)
---       if task and task.id then
---         self:update_task(task.id, task)
---       end
---     end, self.config)
---   end
--- end
+---Refresh UI with tasks
+---@param tasks? table Optional tasks to use for refresh
+function Core:refresh_ui(tasks)
+  if tasks then
+    self.tasks = tasks
+  end
+
+  if not self._ui_visible then
+    return
+  end
+
+  -- Get latest storage status to ensure UI title is up-to-date
+  local status = Storage.get_status()
+  
+  if self._current_view == "kanban" then
+    Kanban.refresh(self.tasks)
+  else
+    UI.refresh()
+  end
+
+  if self._pin_window_state.visible then
+    self:update_pin_window()
+  end
+end
 
 ---Get all tasks
 ---@return Task[]
@@ -583,9 +614,35 @@ function Core:toggle_storage_mode(mode)
     -- Update tasks with new storage data
     self.tasks = loaded_tasks
 
+    -- Process task relations to ensure they're properly maintained
+    -- Loop through all tasks to fix any potential relation issues
+    for _, task in ipairs(self.tasks) do
+      if task.relations then
+        for i = #task.relations, 1, -1 do
+          local relation = task.relations[i]
+          -- Check if related task still exists
+          local target_exists = false
+          for _, potential_target in ipairs(self.tasks) do
+            if potential_target.id == relation.target_id then
+              target_exists = true
+              break
+            end
+          end
+          -- Remove relation if target doesn't exist in new storage
+          if not target_exists then
+            table.remove(task.relations, i)
+          end
+        end
+      end
+    end
+
     -- Refresh UI if visible
     if self._ui_visible then
-      UI.refresh()
+      if self._current_view == "kanban" then
+        Kanban.refresh(self.tasks)
+      else
+        UI.refresh()
+      end
 
       -- Get storage status for notification
       local status = Storage.get_status()
@@ -616,7 +673,13 @@ function Core:toggle_storage_mode(mode)
         pcall(Storage.save_immediate, self.tasks)
 
         -- Refresh UI if visible
-        UI.refresh()
+        if self._ui_visible then
+          if self._current_view == "kanban" then
+            Kanban.refresh(self.tasks)
+          else
+            UI.refresh()
+          end
+        end
       else
         -- Revert to previous storage mode
         local revert_mode = prev_status.mode == "project" and "global" or "project"
@@ -630,10 +693,19 @@ function Core:toggle_storage_mode(mode)
 
         -- Refresh UI if visible
         if self._ui_visible then
-          UI.refresh()
+          if self._current_view == "kanban" then
+            Kanban.refresh(self.tasks)
+          else
+            UI.refresh()
+          end
         end
       end
     end)
+  end
+
+  -- Update and refresh pin window if visible
+  if self._pin_visible then
+    self:update_pin_window()
   end
 
   return is_project
@@ -649,24 +721,6 @@ function Core:reload_tasks()
   end
 
   return self.tasks
-end
-
----Refresh UI with tasks
----@param tasks? table Optional tasks to use for refresh
-function Core:refresh_ui(tasks)
-  if tasks then
-    self.tasks = tasks
-  end
-
-  if not self._ui_visible then
-    return
-  end
-
-  UI.refresh()
-
-  if self._pin_window_state.visible then
-    self:update_pin_window()
-  end
 end
 
 ---Get storage status
@@ -719,15 +773,27 @@ function Core:open(view)
   end
 
   -- Open appropriate view
-  local on_task_update = function(task)
-    if task and task.id then
-      self:update_task(task.id, task)
-      Storage.save_immediate(self.tasks)
-      UI.refresh()
+  if self._current_view == "kanban" then
+    local on_task_update = function(task)
+      if task and task.id then
+        self:update_task(task.id, task)
+        Storage.save_immediate(self.tasks)
+        Kanban.refresh(self.tasks)
+      end
     end
-  end
 
-  UI.toggle(self.tasks, on_task_update, self.config, self._last_ui_state, self)
+    Kanban.toggle(self.tasks, on_task_update, self.config)
+  else
+    local on_task_update = function(task)
+      if task and task.id then
+        self:update_task(task.id, task)
+        Storage.save_immediate(self.tasks)
+        UI.refresh()
+      end
+    end
+
+    UI.toggle(self.tasks, on_task_update, self.config, self._last_ui_state, self)
+  end
 
   self._ui_visible = true
 
@@ -760,7 +826,11 @@ function Core:close()
   end
 
   -- Close current view
-  UI.close()
+  if self._current_view == "kanban" then
+    Kanban.close()
+  else
+    UI.close()
+  end
 
   self._ui_visible = false
 end

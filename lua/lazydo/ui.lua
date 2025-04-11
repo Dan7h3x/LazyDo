@@ -51,32 +51,34 @@ end
 ---@return string
 local function get_storage_mode_info()
   local storage_info = require("lazydo.storage").get_status()
-  if storage_info.mode == "project" then
+  local mode_icon = "" -- Default storage icon
+
+  if storage_info.selected_storage == "custom" and storage_info.custom_project_name then
+    -- Custom project storage
+    return string.format(" %s Custom Project: %s ", mode_icon, storage_info.custom_project_name)
+  elseif storage_info.mode == "project" then
+    -- Project storage
     local root = vim.fn.fnamemodify(storage_info.project_root, ":t")
-    return string.format(" Project: %s ", root)
+    return string.format(" %s Project: %s ", mode_icon, root)
+  else
+    -- Global storage
+    return string.format(" %s Global ", mode_icon)
   end
-  return " Global "
 end
 
-local function create_task_separator(level, has_subtasks, is_collapsed, width)
+local function create_task_separator(level, width)
   level = level or 0
   width = width or get_safe_window_width()
 
   local left_separator_char = config and config.theme.task_separator.left or "❮"
   local right_separator_char = config and config.theme.task_separator.right or "❯"
   local center_separator_char = config and config.theme.task_separator.center or "─"
-  local indent = string.rep("x", level)
+  local indent = string.rep(" ", level)
   local separator_char = level == 0 and center_separator_char or "─"
   local separator_width = math.max(0, width - #indent - 2) -- Ensure non-negative
   local separator = indent
 
-  -- Add folding indicator with better styling
-  -- if has_subtasks then
-  --   local fold_icon = is_collapsed and config.features.folding.icons.folded or config.features.folding.icons.unfolded
-  --   separator = separator .. fold_icon .. " "
-  -- else
-  --   separator = separator .. "  "
-  -- end
+
 
   -- Use different separator styles for top-level vs nested tasks
   if level == 0 then
@@ -593,14 +595,7 @@ local function render_task_header(task, level, is_last)
     return "", {}
   end
 
-  -- Get priority color
-  local priority_colors = {
-    urgent = "ErrorMsg",
-    high = "WarningMsg",
-    medium = "Normal",
-    low = "Comment",
-  }
-  local priority_color = priority_colors[task.priority] or "Normal"
+
 
   -- local base_indent = string.rep(" ", ensure_number(level, 0) * ensure_number(config.theme.indent.size, 2))
   local base_indent = string.rep(" ", ensure_number(level, 0) * 2)
@@ -635,12 +630,14 @@ local function render_task_header(task, level, is_last)
 
   -- Add connector for subtasks
   if level > 0 then
-    components.connector = is_last and config.theme.indent.last_connector or config.theme.indent.connector
+    components.connector = is_last and (config and config.theme.indent.last_connector) or
+        (config and config.theme.indent.connector)
     add_region(#components.connector, "LazyDoConnector")
   end
 
   -- Add status icon
-  local status_icon = task.status == "done" and config.icons.task_done or config.icons.task_pending
+  local status_icon = task.status == "done" and (config and config.icons.task_done) or
+      (config and config.icons.task_pending)
   local status_hl = task.status == "done" and "LazyDoTaskDone"
       or (
         Task.is_overdue(task) and "LazyDoTaskOverdue"
@@ -654,14 +651,14 @@ local function render_task_header(task, level, is_last)
   add_region(#status_icon, status_hl, 1)
 
   -- Add priority icon
-  if config.icons.priority and config.icons.priority[task.priority] then
+  if (config and config.icons.priority) and config.icons.priority[task.priority] then
     local priority_icon = config.icons.priority[task.priority]
     components.priority = priority_icon .. " "
     add_region(#priority_icon, "LazyDoPriority" .. task.priority:sub(1, 1):upper() .. task.priority:sub(2))
   end
 
   -- Add folding indicator
-  if config.features.folding.enabled and task.subtasks and #task.subtasks > 0 then
+  if (config and config.features.folding.enabled) and task.subtasks and #task.subtasks > 0 then
     components.fold = (
       task.collapsed and config.features.folding.icons.folded or config.features.folding.icons.unfolded
     ) .. " "
@@ -672,7 +669,7 @@ local function render_task_header(task, level, is_last)
   add_region(#components.content, status_hl, 1)
 
   -- Add tags
-  if config.features.tags.enabled and task.tags and #task.tags > 0 then
+  if (config and config.features.tags.enabled) and task.tags and #task.tags > 0 then
     local tags_str, tag_regions = render_tags(task)
     if tags_str then
       components.tags = tags_str
@@ -688,7 +685,7 @@ local function render_task_header(task, level, is_last)
     local is_overdue = Utils.Date.is_overdue(task.due_date)
     local is_today = Utils.Date.is_today(task.due_date)
 
-    local due_text = string.format(" %s %s", config.icons.due_date or "", relative_date)
+    local due_text = string.format(" %s %s", (config and config.icons.due_date) or "", relative_date)
     components.due = due_text
 
     -- Determine highlight based on due status
@@ -698,7 +695,7 @@ local function render_task_header(task, level, is_last)
   end
 
   -- Add progress bar
-  if config.theme.progress_bar and config.theme.progress_bar.enabled then
+  if (config and config.theme.progress_bar) and (config and config.theme.progress_bar.enabled) then
     local progress = Task.calculate_progress(task)
     local progress_bar = render_progress_bar(progress, config.theme.progress_bar.width)
     if progress_bar then
@@ -712,7 +709,7 @@ local function render_task_header(task, level, is_last)
       add_region(#progress_bar, progress_hl, #spacer)
     end
   end
-  if config.features.task_info and config.features.task_info.enabled then
+  if (config and config.features.task_info) and (config and config.features.task_info.enabled) then
     local info_lines = render_task_info(task, 0)
     if info_lines then
       components.info = info_lines
@@ -872,10 +869,57 @@ local function render_task(task, level, current_line, is_last)
     end
   end
 
+  if
+      (config and config.features.metadata)
+      and config.features.metadata.enabled
+      and task.metadata
+      and not vim.tbl_isempty(task.metadata)
+  then
+    local metadata_lines, metadata_regions = UI.render_metadata(task, level + 1)
+    if metadata_lines and #metadata_lines > 0 then
+      -- Add metadata lines
+      for _, line in ipairs(metadata_lines) do
+        table.insert(lines, line)
+      end
+
+      -- Add metadata highlights with proper line offsets
+      for _, region in ipairs(metadata_regions) do
+        table.insert(regions, {
+          line = current_line + region.line,
+          start = ensure_number(region.start, 0),
+          length = ensure_number(region.length, 0),
+          hl_group = region.hl_group,
+        })
+      end
+
+      current_line = current_line + #metadata_lines
+    end
+  end
+  if (config and config.features.relations.enabled) and task.relations and #task.relations > 0 then
+    local relation_lines, relation_regions = UI.render_relations_section(task, level + 1)
+    if relation_lines and #relation_lines > 0 then
+      -- Add relation lines
+      for _, line in ipairs(relation_lines) do
+        table.insert(lines, line)
+      end
+
+      -- Add relation highlights with proper line offsets
+      for _, region in ipairs(relation_regions) do
+        table.insert(regions, {
+          line = current_line + region.line,
+          start = region.start,
+          length = region.length,
+          hl_group = region.hl_group,
+        })
+      end
+
+      current_line = current_line + #relation_lines
+    end
+  end
+
   -- Add separator for top-level tasks
   if level == 0 then
-    local separator = create_task_separator(level, task.subtasks and #task.subtasks > 0, task.collapsed,
-      get_safe_window_width())
+    local separator = create_task_separator(level, get_safe_window_width())
     table.insert(lines, separator)
     table.insert(regions, {
       line = current_line,
@@ -1254,7 +1298,7 @@ function UI.setup_keymaps()
   end, "Set Date")
 
   -- Task Hierarchy
-  map("<leader>x", function()
+  map("x", function()
     local task = UI.get_task_under_cursor()
     if task then
       vim.ui.select(state.tasks, {
@@ -1270,7 +1314,7 @@ function UI.setup_keymaps()
       end)
     end
   end, "Convert To SubTask")
-  map("<leader>X", function()
+  map("X", function()
     local task = UI.get_task_under_cursor()
     if not task then
       UI.show_feedback("No task selected", "warn")
@@ -1455,10 +1499,10 @@ function UI.setup_keymaps()
       end
     end)
   end, "Delete Metadata")
-  map("<leader>l", function()
+  map("l", function()
     UI.show_relations()
   end, "Show Relations")
-  map("<leader>L", function()
+  map("L", function()
     local task = UI.get_task_under_cursor()
     if task then
       vim.ui.select(state.tasks, {
@@ -1542,16 +1586,11 @@ function UI.delete_task()
 
   -- Show task details in the confirmation
   local details = {
-    "",
-    "Task Details:",
-    "  • Status: " .. task.status,
-    "  • Priority: " .. task.priority,
-    task.due_date and ("  • Due: " .. Utils.Date.format(task.due_date)) or nil,
-    #(task.subtasks or {}) > 0 and ("  • Subtasks: " .. #task.subtasks) or nil,
-    task.notes and "  • Has notes" or nil,
-    "",
-    "Are you sure you want to delete this task?",
-    "This action cannot be undone.",
+    "• Status: " .. task.status,
+    "• Priority: " .. task.priority,
+    task.due_date and ("• Due: " .. Utils.Date.format(task.due_date)) or nil,
+    #(task.subtasks or {}) > 0 and ("• Subtasks: " .. #task.subtasks) or nil,
+    task.notes and "• Has notes" or nil,
   }
 
   -- Filter out nil entries and join with newlines
@@ -2014,14 +2053,30 @@ function UI.update_task_status(task_id, new_status)
   UI.refresh()
 end
 
+---Find a task by ID in the current task list
+---@param task_id string
+---@return Task|nil
 function UI.find_task_by_id(task_id)
-  local function search_tasks(tasks)
+  if not task_id or not state.tasks then
+    return nil
+  end
+
+  -- Check if we have the task in our line mapping
+  if state.task_to_line[task_id] then
+    local line = state.task_to_line[task_id]
+    if state.line_to_task[line] then
+      return state.line_to_task[line].task
+    end
+  end
+
+  -- Helper function to recursively search the task tree
+  local function search_in_tasks(tasks)
     for _, task in ipairs(tasks) do
       if task.id == task_id then
         return task
       end
-      if task.subtasks then
-        local found = search_tasks(task.subtasks)
+      if task.subtasks and #task.subtasks > 0 then
+        local found = search_in_tasks(task.subtasks)
         if found then
           return found
         end
@@ -2030,7 +2085,7 @@ function UI.find_task_by_id(task_id)
     return nil
   end
 
-  return search_tasks(state.tasks)
+  return search_in_tasks(state.tasks)
 end
 
 -- Add task folding support
@@ -2245,7 +2300,7 @@ function UI.render_metadata(task, indent)
 
   local lines = {}
   local regions = {}
-  local indent_str = string.rep(" ", indent + 2)
+  local indent_str = string.rep("  ", indent + 2)
 
   -- Sort metadata keys for consistent display
   local sorted_keys = vim.tbl_keys(task.metadata)
@@ -2258,13 +2313,13 @@ function UI.render_metadata(task, indent)
 
     -- Add highlights for key and value
     table.insert(regions, {
-      line = #lines - 1,
+      line = #lines,
       start = #indent_str,
       length = #key,
       hl_group = "LazyDoMetadataKey",
     })
     table.insert(regions, {
-      line = #lines - 1,
+      line = #lines,
       start = #indent_str + #key + 2,
       length = #tostring(value),
       hl_group = "LazyDoMetadataValue",
@@ -2273,8 +2328,8 @@ function UI.render_metadata(task, indent)
 
   -- Add separator lines
   if #lines > 0 then
-    table.insert(lines, 1, string.rep(" ", indent) .. "┌" .. string.rep("─", 40) .. "┐")
-    table.insert(lines, string.rep(" ", indent) .. "└" .. string.rep("─", 40) .. "┘")
+    table.insert(lines, 1, string.rep("  ", indent) .. "┌" .. string.rep("─", 40) .. "┐")
+    table.insert(lines, string.rep("  ", indent) .. "└" .. string.rep("─", 40) .. "┘")
   end
 
   return lines, regions
@@ -2504,24 +2559,19 @@ function UI.render_relations_section(task, indent_level)
 
   -- Add section header with icon
   local title = " Relations "
-  local header = indent .. "┌─" .. title .. string.rep("─", box_width - #title - 2) .. "┐"
+  local header = indent .. "┌─" .. title .. string.rep("─", box_width - #title - 1) .. "┐"
   table.insert(lines, header)
 
   -- Add title highlight
   table.insert(regions, {
     line = #lines - 1,
-    start = #indent + 2,
-    length = #title,
-    hl_group = "LazyDoSectionTitle",
+    start = #indent + 4,
+    length = #title + 1,
+    hl_group = "LazyDoTitle",
   })
 
   -- Add border highlight
-  table.insert(regions, {
-    line = #lines - 1,
-    start = #indent,
-    length = box_width + 2, -- +2 for left and right borders
-    hl_group = "LazyDoNoteBorder",
-  })
+
 
   -- Group relations by type
   local relations_by_type = {}
@@ -2550,25 +2600,25 @@ function UI.render_relations_section(task, indent_level)
     -- Add type highlight
     table.insert(regions, {
       line = #lines - 1,
-      start = #base_indent + 4, -- After border and icon
-      length = #type_header,
-      hl_group = "LazyDoRelationType",
+      start = #base_indent + 1, -- After border and icon
+      length = #type_header + 6,
+      hl_group = "LazyDoTaskRelationType",
     })
 
     -- Add relation targets
     for _, rel_info in ipairs(relations_by_type[type]) do
       local status_icon = rel_info.target.status == "done" and (config.icons and config.icons.task_done or "✓")
           or (config.icons and config.icons.task_pending or "·")
-      local target_line = indent .. "│   • [" .. status_icon .. "] " .. rel_info.target.content
+      local target_line = indent .. "│   • " .. status_icon .. " " .. rel_info.target.content
 
       table.insert(lines, target_line)
 
       -- Add target task highlight
       table.insert(regions, {
         line = #lines - 1,
-        start = #base_indent + 8, -- After border, bullet, and status
-        length = #rel_info.target.content,
-        hl_group = "LazyDoRelationTarget",
+        start = #base_indent + 6, -- After border, bullet, and status
+        length = #rel_info.target.content + 6,
+        hl_group = "LazyDoTaskRelationTarget",
       })
     end
 
@@ -2581,13 +2631,6 @@ function UI.render_relations_section(task, indent_level)
   -- Add section footer
   table.insert(lines, indent .. "└" .. string.rep("─", box_width) .. "┘")
 
-  -- Add footer border highlight
-  table.insert(regions, {
-    line = #lines - 1,
-    start = #indent,
-    length = box_width + 2,
-    hl_group = "LazyDoNoteBorder",
-  })
 
   return lines, regions
 end

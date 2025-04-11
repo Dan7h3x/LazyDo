@@ -1,6 +1,6 @@
 <div align="center">
   <h1> LazyDo</h1>
-  <p>A smart, feature-rich task/todo manager for neovim lovers</p>
+  <p>A smart, feature-rich task/todo manager</p>
 
   <p>
     <a href="#-screenshots">Screenshots</a> •
@@ -46,8 +46,8 @@ multi-line note editor
 - 🏷️ Task tagging and categorization
 - 🔍 Advanced sorting
 - 󱒖 Task relationships and dependencies
-- (\*) Smart Storage
-- 📊 Progress tracking and filtering (WIP)
+-  Smart Storage
+- 📊 Progress tracking and filtering
 - 󰁦 File attachments (WIP)
 
 ## 📦 Installation
@@ -113,12 +113,14 @@ and integration with `lualine.nvim`:
   - `i` - Toggle info
   - `m` - Add metadata
   - `M` - Edit metadata
+  - `L/l` - Set/Show relationships
   - `n` - Add/edit note
   - `p` - Toggle priority
   - `t` - Add tags
   - `T` - Edit tags
-  - `z` - Toggle fold
   - `q` - Close window
+  - `x/X` - Convert Task to Subtask and vice verse
+  - `z` - Toggle fold
     and more in help window using `?`.
 
 - :`LazyDoPin position`
@@ -126,7 +128,8 @@ and integration with `lualine.nvim`:
   - available positions are {default:`topright`,`topleft`,`bottomright`,`bottomleft`}.
 
 - :`LazyDoToggleStorage mode`
-  - available modes are `project` and `global`
+  - available modes are `project` and `global` and `custom`.
+    (the `auto` mode is under development)
 
 ### Valid dates
 
@@ -170,18 +173,21 @@ All available options:
     },
   },
   storage = {
-    global_path = nil, -- Custom storage path (nil means use default)
+    startup_detect = false, -- Enable auto-detection of projects on startup
+    silent = false,         -- Disable notifications when switching storage mode
+    global_path = nil,      -- Custom storage path (nil means use default)
     project = {
       enabled = false,
       use_git_root = true,
-      path_pattern = "s/.lazydo/tasks.json",
+      auto_detect = false,                                                     -- Auto-detect project and switch storage mode
+      markers = { ".git", ".lazydo", "package.json", "Cargo.toml", "go.mod" }, -- Project markers
     },
     auto_backup = true,
     backup_count = 1,
     compression = true,
     encryption = false,
   },
-  theme = {
+    theme = {
     border = "rounded",
     colors = {
       header = { fg = "#7aa2f7", bold = true },
