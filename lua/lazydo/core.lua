@@ -304,7 +304,7 @@ function Core:get_statistics()
       low = 0,
     },
   }
-
+  local storage = UI:get_storage_mode_info()
   local function count_task(task)
     stats.total = stats.total + 1
     if task.status == "done" then
@@ -328,7 +328,7 @@ function Core:get_statistics()
     count_task(task)
   end
 
-  return stats
+  return stats, storage
 end
 
 function Core:get_task_statistics()

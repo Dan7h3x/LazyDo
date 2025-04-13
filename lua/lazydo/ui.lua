@@ -49,7 +49,7 @@ local function get_safe_window_width()
 end
 
 ---@return string
-local function get_storage_mode_info()
+function UI:get_storage_mode_info()
   local storage_info = require("lazydo.storage").get_status()
   local mode_icon = "" -- Default storage icon
 
@@ -963,7 +963,7 @@ function UI.render()
   local width = get_safe_window_width()
 
   -- Render header section
-  local storage_mode = get_storage_mode_info()
+  local storage_mode = UI:get_storage_mode_info()
 
   local title = (config.title or " LazyDo Tasks ") .. storage_mode
   local centered_title = Utils.Str.center(title, width)

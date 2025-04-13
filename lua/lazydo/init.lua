@@ -369,7 +369,7 @@ function LazyDo.get_lualine_stats()
     return "LazyDo not initialized"
   end
 
-  local success, result = pcall(function()
+  local success, result, storage = pcall(function()
     return LazyDo._instance:get_statistics()
   end)
 
@@ -385,6 +385,8 @@ function LazyDo.get_lualine_stats()
   }
   if result.total ~= 0 then
     return string.format(
+      "%%#LazyDoStorageMode#" ..
+      storage ..
       "%%#LazyDoTitle#%s %%#Function#%d|%%#LazyDoDueDateNear#%s %%#Function#%d|%%#LazyDoTaskOverDue#%s %%#Function#%d|%%#String#%s %%#Function#%d",
       icons.total,
       result.total,
