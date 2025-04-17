@@ -94,11 +94,7 @@ local function load_metadata()
 
   -- Verify the custom project still exists
   if cache.selected_storage == "custom" and cache.custom_project_name then
-    local project_dir = string.format("%s/.lazydo/%s",
-      cache.project_root or vim.fn.getcwd(),
-      cache.custom_project_name)
-
-    local tasks_path = project_dir .. "/tasks.json"
+    local tasks_path = cache.project_root .. "/tasks.json"
     if not Utils.path_exists(tasks_path) then
       -- Custom project no longer exists
       cache.selected_storage = "global"
@@ -184,20 +180,8 @@ function Storage:get_storage_path(force_mode)
 
   -- Handle custom project storage path
   if (force_mode == "custom" or cache.selected_storage == "custom") and cache.custom_project_name then
-    local project_dir = string.format("%s/.lazydo/%s",
-      cache.project_root or vim.fn.getcwd(),
-      cache.custom_project_name)
-
-    -- Ensure the project directory exists
-    local dir_ok = pcall(Utils.ensure_dir, project_dir)
-    if not dir_ok then
-      vim.notify("Failed to create custom project directory: " .. project_dir, vim.log.levels.WARN)
-      -- Fallback to global storage
-      return Storage:get_storage_path("global")
-    end
-
-    -- Return path to tasks.json within the project directory
-    local project_path = project_dir .. "/tasks.json"
+    -- For custom projects, use tasks.json in the project root directly
+    local project_path = cache.project_root .. "/tasks.json"
     return vim.fn.expand(project_path), true
   end
 
@@ -285,12 +269,12 @@ function Storage.load(force_mode)
 
   -- Read file
   local lines, read_err = vim.fn.readfile(storage_path)
-  -- if not lines or #lines == 0 then
-  --   if read_err then
-  --     vim.notify("Error reading storage file: " .. read_err, vim.log.levels.ERROR)
-  --   end
-  --   return {}, false
-  -- end
+  if not lines or #lines == 0 then
+    if read_err then
+      vim.notify("Error reading storage file: " .. read_err, vim.log.levels.ERROR)
+    end
+    return {}, false
+  end
 
   local data = table.concat(lines)
 
@@ -404,8 +388,9 @@ Storage.save_debounced = Utils.debounce(Storage.save, 1000)
 
 ---Set custom project directly with improved validation
 ---@param project_name string The name of the custom project
+---@param base_dir? string Optional base directory (defaults to cwd)
 ---@return boolean success Whether the operation was successful
-function Storage.set_custom_project(project_name)
+function Storage.set_custom_project(project_name, base_dir)
   if not config then
     error("Storage not initialized. Call setup() first")
   end
@@ -420,24 +405,14 @@ function Storage.set_custom_project(project_name)
   cache.custom_project_name = project_name
   config.storage.project.enabled = true
 
-  -- Use current directory if project root not set
-  if not cache.project_root then
-    cache.project_root = vim.fn.getcwd()
-  end
+  -- Use provided base_dir or current directory if project root not set
+  base_dir = base_dir or vim.fn.getcwd()
+  cache.project_root = base_dir
 
-  -- Create project directory
-  local project_dir = string.format("%s/.lazydo/%s",
-    cache.project_root,
-    project_name)
-
-  local dir_ok = pcall(Utils.ensure_dir, project_dir)
-  if not dir_ok then
-    vim.notify("Failed to create custom project directory: " .. project_dir, vim.log.levels.WARN)
-    return false
-  end
-
+  -- Create tasks.json directly in the project directory
+  local tasks_path = string.format("%s/tasks.json", cache.project_root)
+  
   -- Create empty tasks.json if needed
-  local tasks_path = project_dir .. "/tasks.json"
   if not Utils.path_exists(tasks_path) then
     local write_ok = pcall(function()
       vim.fn.writefile({ "[]" }, tasks_path)
@@ -465,7 +440,161 @@ function Storage.toggle_mode(mode)
 
   -- Auto-detect mode if requested
   if mode == "auto" then
-    return Storage.auto_detect_project()
+    -- Collect all available storage options
+    local options = {}
+    local storage_info = {}
+
+    -- Add global option
+    table.insert(options, "Global Storage")
+    table.insert(storage_info, { type = "global" })
+
+    -- Add project options
+    local project_markers = Storage:find_project_markers()
+    for _, project in ipairs(project_markers) do
+      local display_name = "Project: " .. vim.fn.fnamemodify(project.path, ":~:.")
+      table.insert(options, display_name)
+      table.insert(storage_info, {
+        type = "project",
+        path = project.path,
+        name = project.name
+      })
+    end
+
+    -- Add custom project options
+    local custom_projects = Storage.get_custom_projects(true, true)
+    
+    -- Filter and prioritize projects in current directory
+    local filtered_projects = Storage:filter_and_sort_projects(custom_projects, true)
+    
+    -- Flag to highlight if we have custom projects in current directory
+    local has_cwd_projects = false
+    local cwd = vim.fn.getcwd()
+    
+    for _, project in ipairs(filtered_projects) do
+      -- Determine display format based on location
+      local location_prefix = ""
+      if project.base_dir == cwd then
+        location_prefix = "📍 " -- Use an emoji marker for current directory projects
+        has_cwd_projects = true
+      else
+        location_prefix = "   " -- Indent other projects for visual hierarchy
+      end
+      
+      local display_name = location_prefix .. "Custom Project: [" .. project.name .. "]"
+      if project.base_dir ~= cwd then
+        display_name = display_name .. " (" .. vim.fn.fnamemodify(project.base_dir, ":~:.") .. ")"
+      end
+      
+      table.insert(options, display_name)
+      table.insert(storage_info, {
+        type = "custom",
+        name = project.name,
+        path = project.base_dir
+      })
+    end
+
+    -- Add option to create new custom project
+    table.insert(options, "Create New Project in Current Directory")
+    table.insert(storage_info, { type = "new_custom_cwd" })
+
+    -- Add option for new project with custom location
+    table.insert(options, "Create New Project in Custom Location")
+    table.insert(storage_info, { type = "new_custom_location" })
+
+    -- Show selection UI
+    vim.ui.select(options, {
+      prompt = "Select storage mode:",
+      format_item = function(item)
+        return item
+      end,
+    }, function(choice, idx)
+      if not choice then return config.storage.project.enabled end
+
+      -- Process selection
+      local selected = storage_info[idx]
+
+      if selected.type == "global" then
+        -- Switch to global storage
+        cache.selected_storage = "global"
+        config.storage.project.enabled = false
+        cache.custom_project_name = nil
+        save_metadata()
+        vim.notify("Switched to global storage", vim.log.levels.INFO)
+        return false
+      elseif selected.type == "project" then
+        -- Switch to project storage
+        cache.selected_storage = "project"
+        config.storage.project.enabled = true
+        cache.project_root = selected.path
+        cache.custom_project_name = nil
+
+        -- Create .lazydo directory if needed
+        local lazydo_dir = selected.path .. "/.lazydo"
+        pcall(Utils.ensure_dir, lazydo_dir)
+
+        save_metadata()
+        vim.notify("Switched to project storage: " .. selected.path, vim.log.levels.INFO)
+        return true
+      elseif selected.type == "custom" then
+        -- Switch to custom project
+        cache.selected_storage = "custom"
+        cache.custom_project_name = selected.name
+        cache.project_root = selected.path
+        config.storage.project.enabled = true
+        save_metadata()
+        vim.notify("Switched to custom project: " .. selected.name, vim.log.levels.INFO)
+        -- Force reload of tasks
+        Storage.load("custom")
+        return true
+      elseif selected.type == "new_custom_cwd" then
+        -- Create new custom project in current directory
+        vim.ui.input({
+          prompt = "Enter new custom project name: ",
+        }, function(project_name)
+          if not project_name or project_name == "" then
+            vim.notify("Invalid project name", vim.log.levels.WARN)
+            return false
+          end
+
+          return Storage.set_custom_project(project_name)
+        end)
+        return true
+      elseif selected.type == "new_custom_location" then
+        -- Create project with custom location
+        vim.ui.input({
+          prompt = "Enter new custom project name: ",
+        }, function(project_name)
+          if not project_name or project_name == "" then
+            vim.notify("Invalid project name", vim.log.levels.WARN)
+            return false
+          end
+
+          -- Allow selecting a different base directory
+          vim.ui.input({
+            prompt = "Enter base directory (leave empty for current directory): ",
+            default = vim.fn.getcwd(),
+          }, function(base_dir)
+            if not base_dir or base_dir == "" then
+              base_dir = vim.fn.getcwd()
+            end
+
+            -- Expand the path to make sure it's valid
+            base_dir = vim.fn.expand(base_dir)
+
+            -- Verify directory exists
+            if vim.fn.isdirectory(base_dir) ~= 1 then
+              vim.notify("Invalid directory: " .. base_dir, vim.log.levels.WARN)
+              return false
+            end
+
+            return Storage.set_custom_project(project_name, base_dir)
+          end)
+        end)
+        return true
+      end
+    end)
+
+    return config.storage.project.enabled
   end
 
   -- Handle global mode
@@ -558,54 +687,62 @@ function Storage.toggle_mode(mode)
   -- Handle custom mode
   if mode == "custom" then
     -- Get available custom projects
-    local projects = Storage.get_custom_projects(true, true)
-
-    -- If no projects, prompt for new one
-    if #projects == 0 then
-      vim.ui.input({
-        prompt = "Enter new custom project name: ",
-      }, function(project_name)
-        if not project_name or project_name == "" then
-          vim.notify("Invalid project name", vim.log.levels.WARN)
-          return false
-        end
-
-        return Storage.set_custom_project(project_name)
-      end)
-      return true
-    end
+    local custom_projects = Storage.get_custom_projects(true, true)
 
     -- Prepare selection list
     local options = {}
     local projects_info = {}
 
-    -- Add existing projects
-    for _, project in ipairs(projects) do
-      if not project.is_standard then
-        local display_name = project.name
-        if project.base_dir ~= vim.fn.getcwd() then
-          display_name = display_name .. " (" .. vim.fn.fnamemodify(project.base_dir, ":~:.") .. ")"
-        end
+    -- Flag to highlight if we have custom projects in current directory
+    local has_cwd_projects = false
+    local cwd = vim.fn.getcwd()
 
-        table.insert(options, display_name)
-        table.insert(projects_info, {
-          name = project.name,
-          path = project.base_dir,
-          tasks_path = project.tasks_path
-        })
+    -- Filter and prioritize projects in current directory
+    local filtered_projects = Storage:filter_and_sort_projects(custom_projects, true)
+
+    -- First add a header if we have projects in current directory
+    for _, project in ipairs(filtered_projects) do
+      -- Determine display format based on location
+      local location_prefix = ""
+      if project.base_dir == cwd then
+        location_prefix = "📍 " -- Use an emoji marker for current directory projects
+        has_cwd_projects = true
+      else
+        location_prefix = "   " -- Indent other projects for visual hierarchy
       end
+
+      local display_name = location_prefix .. "Custom Project: [" .. project.name .. "]"
+      if project.base_dir ~= cwd then
+        display_name = display_name .. " (" .. vim.fn.fnamemodify(project.base_dir, ":~:.") .. ")"
+      end
+
+      table.insert(options, display_name)
+      table.insert(projects_info, {
+        name = project.name,
+        path = project.base_dir,
+        tasks_path = project.tasks_path
+      })
     end
 
-    -- Add option for new project
-    table.insert(options, "Create New Custom Project")
+    -- Add option for new project in current directory
+    table.insert(options, "Create New Project in Current Directory")
+    table.insert(projects_info, { is_create_cwd = true })
+
+    -- Add option for new project with custom location
+    table.insert(options, "Create New Project in Custom Location")
+    table.insert(projects_info, { is_create_custom = true })
 
     -- Show selection UI
     vim.ui.select(options, {
       prompt = "Select or create a custom project:",
+      format_item = function(item) return item end,
     }, function(choice, idx)
       if not choice then return config.storage.project.enabled end
 
-      if choice == "Create New Custom Project" then
+      local selected = projects_info[idx]
+
+      if selected.is_create_cwd then
+        -- Create new project in current directory
         vim.ui.input({
           prompt = "Enter new custom project name: ",
         }, function(project_name)
@@ -616,20 +753,52 @@ function Storage.toggle_mode(mode)
 
           return Storage.set_custom_project(project_name)
         end)
+      elseif selected.is_create_custom then
+        -- Create project with custom location
+        vim.ui.input({
+          prompt = "Enter new custom project name: ",
+        }, function(project_name)
+          if not project_name or project_name == "" then
+            vim.notify("Invalid project name", vim.log.levels.WARN)
+            return false
+          end
+
+          -- Allow selecting a different base directory
+          vim.ui.input({
+            prompt = "Enter base directory (leave empty for current directory): ",
+            default = vim.fn.getcwd(),
+          }, function(base_dir)
+            if not base_dir or base_dir == "" then
+              base_dir = vim.fn.getcwd()
+            end
+
+            -- Expand the path to make sure it's valid
+            base_dir = vim.fn.expand(base_dir)
+
+            -- Verify directory exists
+            if vim.fn.isdirectory(base_dir) ~= 1 then
+              vim.notify("Invalid directory: " .. base_dir, vim.log.levels.WARN)
+              return false
+            end
+
+            return Storage.set_custom_project(project_name, base_dir)
+          end)
+        end)
       else
         -- Selected existing project
-        local project = projects_info[idx]
         cache.selected_storage = "custom"
-        cache.custom_project_name = project.name
-        cache.project_root = project.path
+        cache.custom_project_name = selected.name
+        cache.project_root = selected.path
         config.storage.project.enabled = true
         save_metadata()
-        vim.notify("Switched to custom project: " .. project.name, vim.log.levels.INFO)
+        vim.notify("Switched to custom project: " .. selected.name, vim.log.levels.INFO)
         -- Force reload of tasks
         Storage.load("custom")
         return true
       end
     end)
+
+    return config.storage.project.enabled
   end
 
   -- Default toggle behavior
@@ -701,40 +870,18 @@ function Storage.get_custom_projects(force_scan, recursive)
     end
     scanned_paths[base_path] = true
 
-    local lazydo_dir = base_path .. "/.lazydo"
-
-    -- Only scan if .lazydo directory exists
-    if Utils.path_exists(lazydo_dir) then
-      -- Check for standard project storage
-      local standard_tasks_path = lazydo_dir .. "/tasks.json"
-      if Utils.path_exists(standard_tasks_path) then
-        table.insert(projects, {
-          name = "Standard",
-          path = lazydo_dir,
-          tasks_path = standard_tasks_path,
-          base_dir = base_path,
-          is_standard = true
-        })
-      end
-
-      -- Scan for custom projects
-      local ok, subdirs = pcall(vim.fn.glob, lazydo_dir .. "/*/", true, true)
-      if ok and subdirs and #subdirs > 0 then
-        for _, subdir in ipairs(subdirs) do
-          local project_name = vim.fn.fnamemodify(subdir, ":t")
-          local tasks_path = subdir .. "tasks.json"
-
-          -- Check for existing tasks.json or create one
-          if Utils.path_exists(tasks_path) then
-            table.insert(projects, {
-              name = project_name,
-              path = subdir,
-              tasks_path = tasks_path,
-              base_dir = base_path
-            })
-          end
-        end
-      end
+    -- Look for tasks.json files directly in directories
+    local tasks_path = base_path .. "/tasks.json"
+    if Utils.path_exists(tasks_path) then
+      -- Get the directory name as the project name
+      local dir_name = vim.fn.fnamemodify(base_path, ":t")
+      
+      table.insert(projects, {
+        name = dir_name,
+        path = base_path,
+        tasks_path = tasks_path,
+        base_dir = base_path,
+      })
     end
 
     -- Scan subdirectories if recursive
@@ -755,10 +902,8 @@ function Storage.get_custom_projects(force_scan, recursive)
   -- Start scan from current directory
   scan_dir(vim.fn.getcwd(), 1)
 
-  -- Sort projects (standard first, then alphabetically)
+  -- Sort projects alphabetically
   table.sort(projects, function(a, b)
-    if a.is_standard and not b.is_standard then return true end
-    if b.is_standard and not a.is_standard then return false end
     return a.name < b.name
   end)
 
@@ -1064,7 +1209,261 @@ function Storage:create_backup()
   local base = vim.fn.fnamemodify(current_file, ":t:r")
   local backup_file = string.format("%s/%s.backup.%s.json", dir, base, os.date("%Y%m%d%H%M%S"))
 
+  -- Create the backup
   pcall(vim.fn.writefile, vim.fn.readfile(current_file), backup_file)
+  
+  -- Check if backup_count is set and greater than 0
+  local backup_count = config.storage.backup_count or 0
+  if backup_count > 0 then
+    -- Get all backup files for this storage
+    local pattern = string.format("%s/%s.backup.*.json", dir, base) 
+    local ok, backup_files = pcall(vim.fn.glob, pattern, false, true)
+    
+    if ok and backup_files and #backup_files > backup_count then
+      -- Sort backup files by modification time (newest first)
+      table.sort(backup_files, function(a, b)
+        return vim.fn.getftime(a) > vim.fn.getftime(b)
+      end)
+      
+      -- Remove older backups beyond the backup_count limit
+      for i = backup_count + 1, #backup_files do
+        pcall(os.remove, backup_files[i])
+      end
+    end
+  end
+end
+
+---Filter and sort custom projects with improved prioritization
+---@param projects table List of custom projects
+---@param prioritize_cwd boolean Whether to prioritize projects in current directory
+---@return table Filtered and sorted projects
+function Storage:filter_and_sort_projects(projects, prioritize_cwd)
+  if #projects == 0 then
+    return {}
+  end
+
+  local cwd = vim.fn.getcwd()
+  local filtered = {}
+  local cwd_projects = {}
+  local other_projects = {}
+
+  -- Separate projects by location
+  for _, project in ipairs(projects) do
+    if project.base_dir == cwd then
+      table.insert(cwd_projects, project)
+    else
+      table.insert(other_projects, project)
+    end
+  end
+
+  -- Sort each group by name
+  table.sort(cwd_projects, function(a, b) return a.name < b.name end)
+  table.sort(other_projects, function(a, b) return a.name < b.name end)
+
+  -- Combine according to prioritization
+  if prioritize_cwd then
+    for _, project in ipairs(cwd_projects) do
+      table.insert(filtered, project)
+    end
+    
+    for _, project in ipairs(other_projects) do
+      table.insert(filtered, project)
+    end
+  else
+    -- Just sort all by name if not prioritizing
+    for _, project in ipairs(projects) do
+      table.insert(filtered, project)
+    end
+    table.sort(filtered, function(a, b) return a.name < b.name end)
+  end
+
+  return filtered
+end
+
+---Clear storage data with selection UI
+---@param mode? "auto"|"global"|"project"|"custom" Optional mode to target specific storage
+---@return boolean success Whether the operation was successful
+function Storage.clear_storage(mode)
+  if not config then
+    error("Storage not initialized. Call setup() first")
+  end
+
+  if mode == "global" then
+    -- Clear global storage
+    local global_path = Storage:get_storage_path("global")
+    if Utils.path_exists(global_path) then
+      local write_ok = pcall(function()
+        vim.fn.writefile({ "[]" }, global_path)
+      end)
+      if write_ok then
+        vim.notify("Global storage cleared", vim.log.levels.INFO)
+        cache.data = {}
+        cache.is_dirty = false
+        return true
+      else
+        vim.notify("Failed to clear global storage", vim.log.levels.ERROR)
+        return false
+      end
+    else
+      vim.notify("Global storage file doesn't exist", vim.log.levels.WARN)
+      return false
+    end
+  elseif mode == "project" then
+    -- Clear project storage
+    local project_path, is_project = Storage:get_storage_path("project")
+    if is_project and Utils.path_exists(project_path) then
+      local write_ok = pcall(function()
+        vim.fn.writefile({ "[]" }, project_path)
+      end)
+      if write_ok then
+        vim.notify("Project storage cleared", vim.log.levels.INFO)
+        cache.data = {}
+        cache.is_dirty = false
+        return true
+      else
+        vim.notify("Failed to clear project storage", vim.log.levels.ERROR)
+        return false
+      end
+    else
+      vim.notify("Project storage file doesn't exist", vim.log.levels.WARN)
+      return false
+    end
+  elseif mode == "custom" then
+    -- Get available custom projects
+    local custom_projects = Storage.get_custom_projects(true, true)
+    local filtered_projects = Storage:filter_and_sort_projects(custom_projects, true)
+    
+    if #filtered_projects == 0 then
+      vim.notify("No custom projects found", vim.log.levels.WARN)
+      return false
+    end
+    
+    -- Prepare selection list
+    local options = {}
+    local projects_info = {}
+    local cwd = vim.fn.getcwd()
+    
+    -- Add option to clear all custom projects
+    table.insert(options, "🔄 Clear ALL Custom Projects")
+    table.insert(projects_info, { clear_all = true })
+    
+    -- Add individual custom projects
+    for _, project in ipairs(filtered_projects) do
+      -- Determine display format based on location
+      local location_prefix = ""
+      if project.base_dir == cwd then
+        location_prefix = "📍 " -- Use an emoji marker for current directory projects
+      else
+        location_prefix = "   " -- Indent other projects for visual hierarchy
+      end
+      
+      local display_name = location_prefix .. "Clear: [" .. project.name .. "]"
+      if project.base_dir ~= cwd then
+        display_name = display_name .. " (" .. vim.fn.fnamemodify(project.base_dir, ":~:.") .. ")"
+      end
+      
+      table.insert(options, display_name)
+      table.insert(projects_info, {
+        name = project.name,
+        path = project.base_dir,
+        tasks_path = project.tasks_path
+      })
+    end
+    
+    -- Show selection UI
+    vim.ui.select(options, {
+      prompt = "Select custom project to clear:",
+      format_item = function(item) return item end,
+    }, function(choice, idx)
+      if not choice then return false end
+      
+      local selected = projects_info[idx]
+      
+      if selected.clear_all then
+        -- Clear all custom projects
+        local cleared_count = 0
+        for _, project in ipairs(filtered_projects) do
+          if Utils.path_exists(project.tasks_path) then
+            local write_ok = pcall(function()
+              vim.fn.writefile({ "[]" }, project.tasks_path)
+            end)
+            if write_ok then
+              cleared_count = cleared_count + 1
+            end
+          end
+        end
+        
+        -- Update cache if current project was cleared
+        if cache.selected_storage == "custom" then
+          cache.data = {}
+          cache.is_dirty = false
+        end
+        
+        vim.notify("Cleared " .. cleared_count .. " custom projects", vim.log.levels.INFO)
+        return cleared_count > 0
+      else
+        -- Clear individual project
+        if Utils.path_exists(selected.tasks_path) then
+          local write_ok = pcall(function()
+            vim.fn.writefile({ "[]" }, selected.tasks_path)
+          end)
+          
+          if write_ok then
+            vim.notify("Cleared custom project: " .. selected.name, vim.log.levels.INFO)
+            
+            -- Update cache if current project was cleared
+            if cache.selected_storage == "custom" and 
+               cache.custom_project_name == selected.name and
+               cache.project_root == selected.path then
+              cache.data = {}
+              cache.is_dirty = false
+            end
+            
+            return true
+          else
+            vim.notify("Failed to clear custom project", vim.log.levels.ERROR)
+            return false
+          end
+        else
+          vim.notify("Custom project file doesn't exist", vim.log.levels.WARN)
+          return false
+        end
+      end
+    end)
+    
+    return true
+  elseif mode == "auto" or not mode then
+    -- Show selection for all storage types
+    vim.ui.select({
+      "Global Storage",
+      "Project Storage",
+      "Custom Projects",
+      "ALL Storage Types"
+    }, {
+      prompt = "Select storage type to clear:",
+    }, function(choice)
+      if not choice then return false end
+      
+      if choice == "Global Storage" then
+        return Storage.clear_storage("global")
+      elseif choice == "Project Storage" then
+        return Storage.clear_storage("project")
+      elseif choice == "Custom Projects" then
+        return Storage.clear_storage("custom")
+      elseif choice == "ALL Storage Types" then
+        -- Clear all storage types
+        local global_ok = Storage.clear_storage("global")
+        local project_ok = Storage.clear_storage("project")
+        local custom_ok = Storage.clear_storage("custom")
+        
+        return global_ok or project_ok or custom_ok
+      end
+    end)
+    
+    return true
+  end
+  
+  return false
 end
 
 return Storage

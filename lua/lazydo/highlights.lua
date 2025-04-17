@@ -86,7 +86,7 @@ function M.setup(config)
       bold = true,
     },
 
-    -- In highlights.lua, add these highlight definitions:
+    -- Note highlights with improved visual hierarchy
     NotesIcon = {
       fg = colors.notes.header.fg or "#7dcfff",
       bold = true,
@@ -178,7 +178,6 @@ function M.setup(config)
 
     SubtaskIndicator = {
       fg = colors.indent.indicator.fg or colors.separator.fg,
-      -- bg = colors.indent.indicator.bg or colors.separator.bg,
       bold = true,
     },
 
@@ -200,13 +199,16 @@ function M.setup(config)
       fg = colors.indent.connector.fg,
     },
     IndentGuide = {
-      fg = colors.separator.fg,
+      fg = colors.indent.line.fg or "#3b4261",
+      nocombine = true,
     },
     IndentLine = {
-      fg = colors.indent.line.fg,
+      fg = colors.indent.line.fg or "#3b4261",
+      nocombine = true,
     },
     IndentConnector = {
-      fg = colors.indent.connector.fg,
+      fg = colors.indent.connector.fg or "#3bf2f1",
+      nocombine = true,
     },
 
     -- Selection and cursor
@@ -228,11 +230,65 @@ function M.setup(config)
       fg = "#c0caf5",
       bold = true,
     },
+
+    -- Improved kanban highlights
+    KanbanColumnHeaderIcon = {
+      fg = "#7dcfff",
+      bold = true,
+    },
+    KanbanColumnBorderVertical = {
+      fg = "#3b4261",
+    },
+    KanbanTaskUrgent = {
+      fg = "#ff0000",
+      bold = true,
+    },
+    KanbanTaskHigh = {
+      fg = "#ff7700",
+      bold = true,
+    },
+    KanbanTaskMedium = {
+      fg = "#ffff00",
+    },
+    KanbanTaskLow = {
+      fg = "#00ff00",
+    },
+    KanbanStatusPending = {
+      fg = "#c0caf5",
+    },
+    KanbanStatusInProgress = {
+      fg = "#7aa2f7",
+      bold = true,
+    },
+    KanbanStatusBlocked = {
+      fg = "#f7768e",
+      italic = true,
+    },
+    KanbanStatusDone = {
+      fg = "#9ece6a",
+      strikethrough = true,
+    },
+    KanbanDragIndicator = {
+      fg = "#7aa2f7",
+      bold = true,
+    },
+    KanbanInfoText = {
+      fg = "#565f89",
+      italic = true,
+    },
   }
 
   -- Create all highlight groups
   for name, opts in pairs(highlights) do
     create_highlight(name, opts)
+  end
+
+  -- Kanban view highlights
+  if config.views and config.views.kanban and config.views.kanban.enabled then
+    vim.api.nvim_set_hl(0, "LazyDoKanbanColumnHeader", config.views.kanban.colors.column_header)
+    vim.api.nvim_set_hl(0, "LazyDoKanbanCardBorder", config.views.kanban.colors.card_border)
+    vim.api.nvim_set_hl(0, "LazyDoKanbanCardTitle", config.views.kanban.colors.card_title)
+    vim.api.nvim_set_hl(0, "LazyDoKanbanDragActive", { fg = "#ffffff", bg = "#7aa2f7", bold = true })
   end
 end
 

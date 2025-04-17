@@ -270,7 +270,7 @@ local function create_window()
     style = "minimal",
     border = config.theme.border or "rounded",
     footer =
-    "  press [?] for keys and help ",
+    " [a/A]dd task/subtask, [d]elete, [D]ate, [e]dit task, [K/J]move, [i]nfo, [m/M]etadata, [n]ote, [t/T]ag, [z]fold, [p]riority, [?]help ",
     footer_pos = "center",
     zindex = 50, -- Ensure window stays on top
   }
@@ -763,15 +763,6 @@ local function render_task(task, level, current_line, is_last)
   local header_line, header_regions = render_task_header(task, level, is_last)
   table.insert(lines, header_line)
 
-  -- Add virtual text for indentation guide
-  -- if level > 0 then
-  --   vim.api.nvim_buf_set_extmark(state.buf, ns_id, current_line, 0, {
-  --     virt_text = { { string.rep("│ ", level - 1) .. connector, "LazyDoIndentConnector" } },
-  --     virt_text_pos = "overlay",
-  --     hl_mode = "combine",
-  --   })
-  -- end
-
   -- Add header highlights
   for _, region in ipairs(header_regions) do
     table.insert(regions, {
@@ -805,13 +796,6 @@ local function render_task(task, level, current_line, is_last)
         for i, line in ipairs(note_lines) do
           local note_line = connector_indent .. vertical_line .. "  " .. line
           table.insert(lines, note_line)
-
-          -- Add virtual text for indentation guide
-          -- vim.api.nvim_buf_set_extmark(state.buf, ns_id, current_line + i - 1, 0, {
-          --   virt_text = { { string.rep("│ ", level) .. "│ ", "LazyDoIndentGuide" } },
-          --   virt_text_pos = "overlay",
-          --   hl_mode = "combine",
-          -- })
         end
         for _, region in ipairs(note_regions) do
           table.insert(regions, {
@@ -848,15 +832,6 @@ local function render_task(task, level, current_line, is_last)
         current_line,
         i == #task.subtasks
       )
-
-      -- Add virtual text for subtask connectors
-      -- if level > 0 then
-      --   vim.api.nvim_buf_set_extmark(state.buf, ns_id, current_line, 0, {
-      --     virt_text = { { string.rep("│ ", level), "LazyDoIndentGuide" } },
-      --     virt_text_pos = "overlay",
-      --     hl_mode = "combine",
-      --   })
-      -- end
 
       vim.list_extend(lines, sub_lines)
       vim.list_extend(regions, sub_regions)
@@ -952,6 +927,10 @@ function UI.render()
   if not ensure_valid_window() then
     return
   end
+
+  -- Save the current window to restore focus after rendering if needed
+  local current_win = vim.api.nvim_get_current_win()
+  local was_focused = current_win == state.win
 
   vim.api.nvim_buf_clear_namespace(state.buf, ns_id, 0, -1)
 
@@ -1115,6 +1094,11 @@ function UI.render()
   if state.tasks and config and config.pin_window and config.pin_window.enabled then
     UI.sync_pin_window(state.tasks, config)
   end
+
+  -- Restore focus to the LazyDo window if it was focused before
+  if was_focused and state.win and vim.api.nvim_win_is_valid(state.win) then
+    pcall(vim.api.nvim_set_current_win, state.win)
+  end
 end
 
 local function show_help()
@@ -1147,19 +1131,15 @@ local function show_help()
     " z         Toggle fold",
     " x  Convert to subtask",
     " X  Convert to Task",
-    "",
     "Links and Relations",
     " l  Show relations",
     " L  Add relation",
-    "",
     "Filtering and Sorting:",
     " <leader>sp Sort by priority",
     " <leader>sd Sort by due date",
     " <leader>ss Sort by status",
-    "",
     "Export/Import:",
     " <leader>m  Save to markdown file",
-    "",
     "Other:",
     " ?         Show this help",
   }
@@ -1200,17 +1180,88 @@ end
 ---Refresh the UI display
 function UI.refresh()
   if is_valid_window() and is_valid_buffer() then
+    -- Save cursor position and window ID before rendering
+    local current_win = vim.api.nvim_get_current_win()
+    local is_lazypanel_focused = current_win == state.win
     local pos = vim.api.nvim_win_get_cursor(state.win)
+    local scroll_info = vim.api.nvim_win_call(state.win, vim.fn.winsaveview)
+
+    -- Render content
     UI.render()
+
+    -- Ensure cursor position is valid
+    local line_count = vim.api.nvim_buf_line_count(state.buf)
+    if pos[1] > line_count then
+      pos[1] = line_count
+    end
+
+    -- Restore cursor position safely
     pcall(vim.api.nvim_win_set_cursor, state.win, pos)
+    pcall(function() vim.api.nvim_win_call(state.win, function() vim.fn.winrestview(scroll_info) end) end)
+
+    -- Ensure focus returns to LazyDo window if it was focused before
+    if is_lazypanel_focused then
+      vim.api.nvim_set_current_win(state.win)
+    end
   end
 end
 
 -- Wrap action callback to ensure UI refresh
 local function wrap_action_callback(fn)
   return function(...)
+    -- Save current window and cursor state
+    local current_win = vim.api.nvim_get_current_win()
+    local is_on_lazypanel = current_win == state.win
+    local cursor_pos = is_on_lazypanel and vim.api.nvim_win_get_cursor(state.win) or nil
+    local scroll_info = is_on_lazypanel and vim.api.nvim_win_call(state.win, vim.fn.winsaveview) or nil
+
+    -- Track which task is under cursor before action
+    local current_task_id = nil
+    if is_on_lazypanel then
+      local task_under_cursor = UI.get_task_under_cursor()
+      if task_under_cursor then
+        current_task_id = task_under_cursor.id
+      end
+    end
+
+    -- Run the action function
     local result = fn(...)
+
+    -- Refresh UI
     UI.refresh()
+
+    -- If we were on the LazyDo panel, try to restore focus and position
+    if is_on_lazypanel and state.win and vim.api.nvim_win_is_valid(state.win) then
+      -- First ensure window is focused - use pcall to avoid errors
+      pcall(vim.api.nvim_set_current_win, state.win)
+
+      -- Try to find the same task if it still exists
+      if current_task_id then
+        local new_line = state.task_to_line[current_task_id]
+        if new_line then
+          pcall(vim.api.nvim_win_set_cursor, state.win, { new_line, cursor_pos and cursor_pos[2] or 0 })
+        else
+          -- Fall back to original position if task not found
+          if cursor_pos then
+            -- Ensure cursor position is valid
+            local line_count = vim.api.nvim_buf_line_count(state.buf)
+            cursor_pos[1] = math.min(cursor_pos[1], line_count)
+            pcall(vim.api.nvim_win_set_cursor, state.win, cursor_pos)
+          end
+        end
+      elseif cursor_pos then
+        -- Restore original cursor position if we didn't track a task
+        local line_count = vim.api.nvim_buf_line_count(state.buf)
+        cursor_pos[1] = math.min(cursor_pos[1], line_count)
+        pcall(vim.api.nvim_win_set_cursor, state.win, cursor_pos)
+      end
+
+      -- Restore scroll position
+      if scroll_info then
+        pcall(function() vim.api.nvim_win_call(state.win, function() vim.fn.winrestview(scroll_info) end) end)
+      end
+    end
+
     return result
   end
 end
@@ -2335,12 +2386,42 @@ end
 
 ---Close UI window
 function UI.close()
+  -- Save current state for potential restoration later
   if is_valid_window() then
+    -- Try to save position, but don't error if it fails
+    pcall(function()
+      state.last_position = {
+        cursor = vim.api.nvim_win_get_cursor(state.win),
+        scroll = vim.fn.winsaveview(),
+      }
+    end)
+
+    -- Before closing, check if we need to switch focus to another window
+    local current_win = vim.api.nvim_get_current_win()
+    local is_focused = current_win == state.win
+
+    -- Get all windows except our LazyDo window
+    local windows = vim.tbl_filter(function(win)
+      return win ~= state.win and vim.api.nvim_win_is_valid(win)
+    end, vim.api.nvim_list_wins())
+
+    -- Close the window with pcall to prevent errors
     pcall(vim.api.nvim_win_close, state.win, true)
+
+    -- If we were focused on the LazyDo window, switch to another window if available
+    if is_focused and #windows > 0 then
+      pcall(function()
+        vim.api.nvim_set_current_win(windows[1])
+      end)
+    end
   end
+
+  -- Clean up buffer with pcall to prevent errors
   if is_valid_buffer() then
     pcall(vim.api.nvim_buf_delete, state.buf, { force = true })
   end
+
+  -- Always reset state after close attempt
   clear_state()
 end
 
@@ -2390,6 +2471,13 @@ function UI.toggle(tasks, on_task_update, lazy_config, last_state, core_instance
   state.buf = buf_or_err
   state.win = win_or_err
 
+  -- Make sure window is focused
+  pcall(function()
+    if state.win and vim.api.nvim_win_is_valid(state.win) then
+      vim.api.nvim_set_current_win(state.win)
+    end
+  end)
+
   UI.setup_keymaps()
   UI.refresh()
 
@@ -2399,62 +2487,61 @@ function UI.toggle(tasks, on_task_update, lazy_config, last_state, core_instance
 
   -- Set up essential autocommands
   if state.buf then
+    -- Save state when leaving window
     vim.api.nvim_create_autocmd("WinLeave", {
       buffer = state.buf,
       callback = function()
-        if state.win then
-          state.last_position = {
-            cursor = vim.api.nvim_win_get_cursor(state.win),
-            scroll = vim.fn.winsaveview(),
-          }
-        end
+        pcall(function()
+          if state.win and vim.api.nvim_win_is_valid(state.win) then
+            state.last_position = {
+              cursor = vim.api.nvim_win_get_cursor(state.win),
+              scroll = vim.fn.winsaveview(),
+            }
+          end
+        end)
       end,
     })
 
+    -- Handle window resizing
     vim.api.nvim_create_autocmd("VimResized", {
       buffer = state.buf,
       callback = function()
-        if is_valid_window() then
-          local size = Utils.get_window_size(config)
-          vim.api.nvim_win_set_config(state.win, {
-            width = size.width,
-            height = size.height,
-            row = size.row,
-            col = size.col,
-          })
-          UI.refresh()
-        end
+        pcall(function()
+          if is_valid_window() then
+            local size = Utils.get_window_size(config)
+            vim.api.nvim_win_set_config(state.win, {
+              width = size.width,
+              height = size.height,
+              row = size.row,
+              col = size.col,
+            })
+            UI.refresh()
+          end
+        end)
+      end,
+    })
+
+    -- Prevent cursor from leaving the window
+    vim.api.nvim_create_autocmd("BufEnter", {
+      buffer = state.buf,
+      callback = function()
+        pcall(function()
+          if state.win and vim.api.nvim_win_is_valid(state.win) then
+            -- Ensure we're in the LazyDo window
+            vim.api.nvim_set_current_win(state.win)
+          end
+        end)
       end,
     })
   end
-end
 
--- Add new UI components for attachments
--- function UI.show_attachments()
--- 	local task = UI.get_task_under_cursor()
--- 	if not task or not task.attachments then
--- 		return
--- 	end
---
--- 	local items = {}
--- 	for _, att in ipairs(task.attachments) do
--- 		table.insert(items, string.format("%s (%s)", att.name, Utils.format_size(att.size)))
--- 	end
---
--- 	vim.ui.select(items, {
--- 		prompt = "Task Attachments:",
--- 		format_item = function(item)
--- 			return item
--- 		end,
--- 	}, function(choice)
--- 		if choice then
--- 			-- Handle attachment selection
--- 			local idx = vim.tbl_contains(items, choice)
--- 			local attachment = task.attachments[idx]
--- 			vim.fn.system(string.format("xdg-open %s", vim.fn.shellescape(attachment.path)))
--- 		end
--- 	end)
--- end
+  -- Ensure focus is on the LazyDo window
+  pcall(function()
+    if state.win and vim.api.nvim_win_is_valid(state.win) then
+      vim.api.nvim_set_current_win(state.win)
+    end
+  end)
+end
 
 -- Add new UI components for relations
 function UI.show_relations()
@@ -2568,9 +2655,6 @@ function UI.render_relations_section(task, indent_level)
     hl_group = "LazyDoTitle",
   })
 
-  -- Add border highlight
-
-
   -- Group relations by type
   local relations_by_type = {}
   for _, rel in ipairs(task.relations) do
@@ -2628,7 +2712,6 @@ function UI.render_relations_section(task, indent_level)
 
   -- Add section footer
   table.insert(lines, indent .. "└" .. string.rep("─", box_width) .. "┘")
-
 
   return lines, regions
 end
@@ -2713,8 +2796,6 @@ function UI.create_pin_window(tasks, position)
 
   -- Create buffer and window
   local buf = vim.api.nvim_create_buf(false, true)
-  local storage = UI:get_storage_mode_info()
-  local title = config and config.pin_window.title .. storage
   local win = vim.api.nvim_open_win(buf, false, {
     relative = "editor",
     width = width,
@@ -2723,7 +2804,7 @@ function UI.create_pin_window(tasks, position)
     col = col,
     style = "minimal",
     border = "rounded",
-    title = title or " LazyDo Tasks ",
+    title = (config.pin_window.title .. UI:get_storage_mode_info()) or " LazyDo Tasks ",
     title_pos = "center",
     zindex = 45,
   })

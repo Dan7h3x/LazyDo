@@ -133,6 +133,47 @@ local function create_commands()
       error_msg = "Failed to toggle storage mode",
     },
     {
+      name = "LazyDoClearStorage",
+      callback = function(opts)
+        -- Auto-initialize if not already initialized
+        if not LazyDo._initialized then
+          vim.notify("Initializing LazyDo for storage clearing", vim.log.levels.INFO)
+          local init_success, _ = pcall(LazyDo.setup, {})
+          if not init_success then
+            vim.notify("Failed to initialize LazyDo automatically", vim.log.levels.ERROR)
+            return
+          end
+        end
+        
+        local mode = opts.args ~= "" and opts.args or nil
+        
+        -- Call the clear_storage function
+        local success, result = pcall(function()
+          return LazyDo._instance:clear_storage(mode)
+        end)
+        
+        if not success then
+          vim.notify("Failed to clear storage: " .. tostring(result), vim.log.levels.ERROR)
+          return
+        end
+        
+        -- Refresh UI if it's open after clearing
+        if LazyDo._instance:is_visible() then
+          pcall(function()
+            local tasks = LazyDo._instance:reload_tasks()
+            LazyDo._instance:refresh_ui(tasks)
+          end)
+        end
+      end,
+      opts = {
+        nargs = "?",
+        complete = function()
+          return { "global", "project", "custom", "auto" }
+        end,
+      },
+      error_msg = "Failed to clear storage",
+    },
+    {
       name = "LazyDoToggleView",
       callback = function()
         LazyDo._instance:toggle_view()
@@ -141,6 +182,35 @@ local function create_commands()
       end,
       opts = {},
       error_msg = "Failed to toggle view",
+    },
+    {
+      name = "LazyDoKanban",
+      callback = function()
+        -- Auto-initialize if not already initialized
+        if not LazyDo._initialized then
+          vim.notify("Initializing LazyDo for the first time", vim.log.levels.INFO)
+          local init_success, _ = pcall(LazyDo.setup, {})
+          if not init_success then
+            vim.notify("Failed to initialize LazyDo automatically", vim.log.levels.ERROR)
+            return
+          end
+
+          -- After initialization, activate the smart project detection
+          LazyDo._instance:toggle_storage_mode("auto")
+        end
+
+        -- Open kanban view directly
+        if LazyDo._instance:get_current_view() ~= "kanban" then
+          LazyDo._instance:toggle_view()
+        end
+
+        -- Ensure the panel is visible
+        if not LazyDo._instance:is_visible() then
+          LazyDo.open_panel("kanban")
+        end
+      end,
+      opts = {},
+      error_msg = "Failed to open Kanban view",
     },
   }
 
@@ -369,13 +439,17 @@ function LazyDo.get_lualine_stats()
     return "LazyDo not initialized"
   end
 
-  local success, result = pcall(function()
+  local success, result, storage = pcall(function()
     return LazyDo._instance:get_statistics()
   end)
 
   if not success then
     return "Error retrieving stats"
   end
+
+
+
+
 
   local icons = {
     total = "",
@@ -385,6 +459,8 @@ function LazyDo.get_lualine_stats()
   }
   if result.total ~= 0 then
     return string.format(
+      "%%#LazyDoStorageMode#" ..
+      storage ..
       "%%#LazyDoTitle#%s %%#Function#%d|%%#LazyDoDueDateNear#%s %%#Function#%d|%%#LazyDoTaskOverDue#%s %%#Function#%d|%%#String#%s %%#Function#%d",
       icons.total,
       result.total,
@@ -430,6 +506,34 @@ function LazyDo.open_panel(view)
   if not toggle_success then
     vim.notify("Error opening LazyDo panel: " .. tostring(err), vim.log.levels.ERROR)
   end
+end
+
+---Clear storage data with selection UI
+---@param mode? "auto"|"global"|"project"|"custom" Optional mode to target specific storage
+function LazyDo.clear_storage(mode)
+  if not LazyDo._initialized then
+    vim.notify("LazyDo is not initialized. Call setup() first.", vim.log.levels.ERROR)
+    return false
+  end
+
+  local success, result = pcall(function()
+    return LazyDo._instance:clear_storage(mode)
+  end)
+
+  if not success then
+    vim.notify("Failed to clear storage: " .. tostring(result), vim.log.levels.ERROR)
+    return false
+  end
+
+  -- If UI is visible, reload data and refresh
+  if LazyDo._instance:is_visible() then
+    pcall(function()
+      local tasks = LazyDo._instance:reload_tasks()
+      LazyDo._instance:refresh_ui(tasks)
+    end)
+  end
+
+  return result
 end
 
 return LazyDo
