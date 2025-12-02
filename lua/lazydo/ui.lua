@@ -1229,7 +1229,11 @@ function UI.setup_keymaps()
 
   -- Add 'q' to close list view
   map("q", function()
-    UI.close()
+    if state.core and state.core.toggle then
+      state.core:toggle()
+    else
+      vim.notify("Cannot close: core not initialized. Use :LazyDoToggle to close safely.", vim.log.levels.ERROR)
+    end
   end, "Close list view")
 
   -- Task Movement
