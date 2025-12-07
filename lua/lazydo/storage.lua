@@ -362,8 +362,9 @@ function Storage.save_immediate(tasks, force_mode)
     if encrypt_ok then json_data = encrypted end
   end
 
-  -- Write to file directly with atomic file write pattern
-  local temp_file = storage_path .. ".tmp"
+  -- Write to file directly with atomic file write pattern (while preserving symlinks)
+  local real_storage_path = vim.fn.resolve(storage_path)
+  local temp_file = real_storage_path .. ".tmp"
   local write_ok, write_err = pcall(function()
     return vim.fn.writefile({ json_data }, temp_file)
   end)
@@ -375,7 +376,7 @@ function Storage.save_immediate(tasks, force_mode)
 
   -- Atomic rename for safer file writes
   local rename_ok = pcall(function()
-    os.rename(temp_file, storage_path)
+    os.rename(temp_file, real_storage_path)
   end)
 
   if not rename_ok then
