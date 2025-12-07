@@ -11,6 +11,9 @@ local config = nil
 
 local ns_id = vim.api.nvim_create_namespace("LazyDo")
 local buf_name = "LazyDo"
+local footer_text =
+  " [a/A]dd task/subtask, [d]elete, [D]ate, [e]dit task, [K/J]move, [i]nfo, [m/M]etadata, [n]ote, [t/T]ag, [z]fold, [p]riority, [?]help "
+local footer_min_width = vim.fn.strdisplaywidth(footer_text)
 
 ---@class UIState
 ---@field buf number Buffer handle
@@ -258,7 +261,7 @@ local function create_window()
     vim.api.nvim_buf_set_option(buf, opt, val)
   end
 
-  local size = Utils.get_window_size(config)
+  local size = Utils.get_window_size(config, footer_min_width)
 
   -- Enhanced window options
   local win_opts = {
@@ -269,8 +272,7 @@ local function create_window()
     col = size.col,
     style = "minimal",
     border = config.theme.border or "rounded",
-    footer =
-    " [a/A]dd task/subtask, [d]elete, [D]ate, [e]dit task, [K/J]move, [i]nfo, [m/M]etadata, [n]ote, [t/T]ag, [z]fold, [p]riority, [?]help ",
+    footer = footer_text,
     footer_pos = "center",
     zindex = 50, -- Ensure window stays on top
   }
@@ -2419,7 +2421,7 @@ function UI.toggle(tasks, on_task_update, lazy_config, last_state, core_instance
       buffer = state.buf,
       callback = function()
         if is_valid_window() then
-          local size = Utils.get_window_size(config)
+          local size = Utils.get_window_size(config, footer_min_width)
           vim.api.nvim_win_set_config(state.win, {
             width = size.width,
             height = size.height,

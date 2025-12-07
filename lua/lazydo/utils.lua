@@ -529,8 +529,17 @@ function Utils.is_floating_window(win_id)
   return config.relative ~= ""
 end
 
-function Utils.get_window_size(config)
+function Utils.get_window_size(config, min_content_width)
   local width = math.floor(vim.o.columns * (config.layout.width or 0.8))
+
+  if min_content_width then
+    -- Add 2 for border characters.
+    width = math.max(width, min_content_width + 2)
+  end
+
+  -- Don't exceed screen width.
+  width = math.min(width, vim.o.columns)
+
   local height = math.floor(vim.o.lines * (config.layout.height or 0.8))
   return {
     width = width,
