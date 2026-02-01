@@ -51,6 +51,7 @@ local defaults = {
     backup_count = 1,
     compression = true,
     encryption = false,
+    readable = false,
   },
   views = {
     default_view = "list", -- "list" or "kanban"

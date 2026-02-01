@@ -275,6 +275,29 @@ function Utils.json_decode(str)
   return nil
 end
 
+---Pretty-print JSON string with indentation and sorted keys
+---@param json_str string
+---@return string[]
+function Utils.json_pretty_print(json_str)
+  local formatters = {
+    "jq -S .",
+    "python3 -m json.tool --sort-keys",
+    "python -m json.tool --sort-keys",
+  }
+
+  for _, cmd in ipairs(formatters) do
+    local exe = cmd:match("^(%S+)")
+    if exe and vim.fn.executable(exe) == 1 then
+      local result = vim.fn.system(cmd, json_str)
+      if vim.v.shell_error == 0 then
+        return vim.split(result, "\n", { plain = true, trimempty = true })
+      end
+    end
+  end
+
+  return { json_str }
+end
+
 -- Add new utility functions for improved functionality
 
 ---Check if a path exists
